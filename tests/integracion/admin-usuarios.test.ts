@@ -70,7 +70,7 @@ describe('permisos: ningun rol salvo admin puede administrar personas', () => {
 
 describe('crear y restablecer cuentas', () => {
   it('crea la cuenta con contrasena temporal, audita quien la creo y queda como «sin ingresar»', async () => {
-    const nuevo = await crearCuenta(e.ctx(e.admin), { nombre: 'Marta Nueva', usuario: 'marta', email: 'marta@prueba.invalid', organizacionId: e.orgInterna, rol: 'solicitante' });
+    const nuevo = await crearCuenta(e.ctx(e.admin), { nombre: 'Marta Nueva', usuario: 'marta', email: 'marta@prueba.invalid', organizacionId: e.orgInterna, rol: 'solicitante', area: 'Consumibles' });
     expect(nuevo).toMatchObject({ usuario: 'marta', nombre: 'Marta Nueva', rol: 'solicitante' });
     expect(nuevo.claveTemporal.length).toBeGreaterThanOrEqual(12);
     const [u] = await e.db.select().from(usuario).where(eq(usuario.id, nuevo.id));

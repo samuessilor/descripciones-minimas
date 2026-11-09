@@ -5,10 +5,13 @@
  *   - UNA cuenta general por area (Consumibles, Mantenimiento, Instrumentos, Marketing), rol solicitante,
  *   - UNA cuenta general por empresa de aduana (su propia organizacion tipo agencia), rol aduana,
  *   - lectores (opcional).
- * Formato: ver `cuentas.ejemplo.json`.
+ * Formato: ver `cuentas.ejemplo.json`. Convencion de usuarios: `<cuenta>.essilorluxottica` (areas), `administrador.<nombre>`
+ * y `<empresa>.aduana`. La contrasena INICIAL es `clave` si el archivo la trae; si no, `<cuenta>12345` (la parte del usuario antes
+ * del primer punto). Es una clave de entrega: cada cuenta queda marcada para cambiarla en su primer ingreso y no puede usar
+ * nada mas hasta hacerlo.
  *
- * Las contrasenas se muestran UNA vez (en consola o en el archivo de `--salida`, que debe estar FUERA del repositorio):
- * en la base solo queda su hash. Con esa lista el implementador entrega usuario y contrasena a quien corresponda.
+ * La lista usuario/contrasena sale en consola o en el archivo de `--salida` (FUERA del repositorio); en la base solo queda el
+ * hash. Con esa lista el implementador entrega usuario y contrasena a quien corresponda.
  *
  * Idempotente: lo que ya existe (usuario u organizacion) no se toca ni recibe contrasena nueva. Cambios posteriores
  * (restablecer una contrasena, desactivar una agencia) se hacen en Administracion. Usa `DATABASE_URL_UNPOOLED` o
@@ -21,7 +24,7 @@ import { account, organizacion, usuario } from '../src/db/esquema/identidad';
 import { crearConexion } from '../src/db/conexion';
 import { esArea } from '../src/dominio/areas';
 import { correoSinCorreo, normalizarUsuario, validarUsuario } from '../src/dominio/credenciales';
-import { generarClave, hashearClave } from '../src/server/claves';
+import { hashearClave } from '../src/server/claves';
 import { cargarConfig } from '../src/server/config';
 
 const ORG_INTERNA = 'EssilorLuxottica';
@@ -29,6 +32,10 @@ const ORG_INTERNA = 'EssilorLuxottica';
 interface Cuenta {
   usuario: string;
   nombre: string;
+  /** Contrasena inicial; si falta, `<cuenta>12345`. */
+  clave?: string;
+  /** Solo en las cuentas de area: quien las lleva hoy. La cuenta sigue siendo del area. */
+  encargado?: string;
 }
 interface Archivo {
   administradores?: Cuenta[];
@@ -103,11 +110,11 @@ async function cuenta(cu: Cuenta, rol: 'admin' | 'solicitante' | 'aduana' | 'lec
     console.log(`  = ${username} ya existe; no se cambia`);
     return;
   }
-  const clave = generarClave();
+  const clave = cu.clave ?? `${username.split('.')[0]}12345`;
   const hash = await hashearClave(clave);
   const [u] = await db
     .insert(usuario)
-    .values({ nombre: cu.nombre.trim(), username, email: correoSinCorreo(username), organizacionId: o.id, organizacionTipo: o.tipo, rol, area })
+    .values({ nombre: cu.nombre.trim(), username, email: correoSinCorreo(username), organizacionId: o.id, organizacionTipo: o.tipo, rol, area, encargado: cu.encargado?.trim() || null, debeCambiarClave: true })
     .returning({ id: usuario.id });
   await db.insert(account).values({ accountId: u!.id, providerId: 'credential', userId: u!.id, password: hash });
   creadas++;
@@ -126,9 +133,9 @@ try {
     const cuerpo = ['USUARIO                CONTRASEÑA        CUENTA', ...entregables].join('\n');
     if (salida) {
       writeFileSync(salida, `${cuerpo}\n`, { encoding: 'utf8' });
-      console.log(`  Usuarios y contraseñas guardados en ${salida}. Entrégalos y bórralo después: la base solo guarda su hash.`);
+      console.log(`  Usuarios y contraseñas iniciales guardados en ${salida}. Entrégalos y bórralo después: la base solo guarda su hash.`);
     } else {
-      console.log(`\n${cuerpo}\n\nCópialas ahora: no se vuelven a mostrar. Quien entre puede cambiarla en «Mi cuenta».`);
+      console.log(`\n${cuerpo}\n\nCada cuenta debe cambiar su contraseña en el primer ingreso. Entrega la lista y bórrala.`);
     }
   }
 } finally {

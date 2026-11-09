@@ -5,6 +5,7 @@
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { session, usuario } from '@/db/esquema';
+import { exigeArea, MENSAJE_AREA_OBLIGATORIA } from '@/dominio/areas';
 import { puede } from '@/dominio/permisos';
 import { auditar } from '../auditoria';
 import { ahoraDe, type Contexto } from '../politicas/actor';
@@ -23,6 +24,7 @@ export const entradaEditarUsuario = z.object({
   usuarioId: z.uuid(),
   nombre: textoLimpio().pipe(z.string().trim().min(1, 'Escribe el nombre.').max(200)),
   area: areaUsuario(),
+  encargado: textoLimpio().pipe(z.string().trim().max(80)).nullish(),
 });
 
 export async function editarUsuario(ctx: Contexto, entrada: unknown): Promise<{ ok: true }> {
@@ -34,14 +36,18 @@ export async function editarUsuario(ctx: Contexto, entrada: unknown): Promise<{ 
     if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
     // Una cuenta de agencia no tiene area interna (C3).
     const area = u.organizacionTipo === 'agencia' ? null : e.area;
-    if (u.nombre === e.nombre && (u.area ?? null) === area) return;
-    await tx.update(usuario).set({ nombre: e.nombre, area, actualizadoEn: ahora }).where(eq(usuario.id, u.id));
+    if (exigeArea(u.rol, u.organizacionTipo) && !area) {
+      throw new ErrorAccion('VALIDACION', 'Revisa los datos marcados.', { problemas: [{ ruta: 'area', mensaje: MENSAJE_AREA_OBLIGATORIA }] });
+    }
+    const encargado = e.encargado || null;
+    if (u.nombre === e.nombre && (u.area ?? null) === area && (u.encargado ?? null) === encargado) return;
+    await tx.update(usuario).set({ nombre: e.nombre, area, encargado, actualizadoEn: ahora }).where(eq(usuario.id, u.id));
     await auditar(tx, {
       usuarioId: ctx.actor.usuarioId,
       accion: 'editar_usuario',
       entidad: 'usuario',
       entidadId: u.id,
-      detalle: { nombre: { de: u.nombre, a: e.nombre }, area: { de: u.area, a: area } },
+      detalle: { nombre: { de: u.nombre, a: e.nombre }, area: { de: u.area, a: area }, encargado: { de: u.encargado, a: encargado } },
       ip: ctx.ip,
       creadoEn: ahora,
     });

@@ -6,6 +6,7 @@ import { BotonAccion, FormularioAccion } from '@/componentes/admin/acciones';
 import { CampoAdmin } from '@/componentes/admin/campos';
 import { describirNavegador, fechaHora, formatearIp, hace } from '@/componentes/admin/formato';
 import { Dato, Datos, InsigniaRol, InsigniaTipoOrg, Seccion } from '@/componentes/admin/piezas';
+import { Aviso } from '@/componentes/ui/aviso';
 import { Avatar, nombreVisible } from '@/componentes/ui/avatar';
 import { Boton } from '@/componentes/ui/button';
 import { Interruptor } from '@/componentes/ui/casilla';
@@ -17,7 +18,7 @@ import { exigirContexto } from '@/server/sesion';
 export const metadata: Metadata = { title: 'Mi cuenta · Descripciones mínimas' };
 
 export default async function Cuenta() {
-  const { db, actor } = await exigirContexto();
+  const { db, actor } = await exigirContexto({ claveInicial: true });
   const [prefs, sesiones] = await Promise.all([misPreferencias(db, actor), misSesiones(db, actor)]);
   const ahora = new Date();
   const otras = sesiones.filter((s) => !s.esActual);
@@ -25,6 +26,15 @@ export default async function Cuenta() {
   return (
     <ContenedorLectura>
       <EncabezadoPagina titulo="Mi cuenta" descripcion="Tus datos, tu contraseña y dónde tienes abierta la plataforma." />
+
+      {actor.debeCambiarClave ? (
+        <div className="mb-6" data-testid="cambiar-clave-obligatorio">
+          <Aviso tipo="aviso" titulo="Cambia tu contraseña para empezar">
+            Entraste con la contraseña inicial que te entregaron. Elige una propia (mínimo 10 caracteres); hasta entonces no puedes usar el resto de la
+            plataforma.
+          </Aviso>
+        </div>
+      ) : null}
 
       <div className="space-y-6">
         <Seccion id="datos" titulo="Tus datos" descripcion="Si algo está mal, pídele el cambio a un administrador.">
@@ -46,6 +56,7 @@ export default async function Cuenta() {
               </span>
             </Dato>
             {actor.area ? <Dato etiqueta="Área">{actor.area}</Dato> : null}
+            {prefs.encargado ? <Dato etiqueta="Encargado">{prefs.encargado}</Dato> : null}
             <Dato etiqueta="Último ingreso">{prefs.ultimoIngreso ? `${hace(prefs.ultimoIngreso, ahora)} · ${fechaHora(prefs.ultimoIngreso)}` : 'Es tu primera vez'}</Dato>
           </Datos>
         </Seccion>

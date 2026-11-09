@@ -94,6 +94,7 @@ export async function crearCuentaAccion(_previo: EstadoAdmin, datos: FormData): 
       organizacionId: texto(datos, 'organizacionId'),
       rol: texto(datos, 'rol'),
       area: textoOpcional(datos, 'area'),
+      encargado: textoOpcional(datos, 'encargado'),
     }),
   );
   if (!r.ok) {
@@ -131,7 +132,7 @@ export async function restablecerClaveAccion(_previo: EstadoAdmin, datos: FormDa
 
 export async function editarUsuarioAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
   return correr(
-    (ctx) => editarUsuario(ctx, { usuarioId: texto(datos, 'usuarioId'), nombre: texto(datos, 'nombre'), area: textoOpcional(datos, 'area') }),
+    (ctx) => editarUsuario(ctx, { usuarioId: texto(datos, 'usuarioId'), nombre: texto(datos, 'nombre'), area: textoOpcional(datos, 'area'), encargado: textoOpcional(datos, 'encargado') }),
     () => ({ mensaje: 'Guardamos los datos.' }),
     ['/admin/usuarios'],
   );

@@ -9,7 +9,7 @@ import { botonVariantes } from '@/componentes/ui/button';
 import { CampoFormulario } from '@/componentes/ui/campo-formulario';
 import { GrupoRadios } from '@/componentes/ui/casilla';
 import { Campo, Seleccion } from '@/componentes/ui/input';
-import { AREAS, nombreDeArea } from '@/dominio/areas';
+import { AREAS, exigeArea, nombreDeArea } from '@/dominio/areas';
 import { normalizarUsuario } from '@/dominio/credenciales';
 import { ROLES, type Rol } from '@/dominio/permisos';
 import { FormularioAccion } from './acciones';
@@ -37,6 +37,7 @@ export function FormularioCrearCuenta({ organizaciones, organizacionInicial }: {
   const esAgencia = org?.tipo === 'agencia';
   const [rolElegido, setRolElegido] = useState<Rol>('solicitante');
   const rol: Rol = esAgencia ? 'aduana' : rolElegido;
+  const areaObligatoria = exigeArea(rol, org?.tipo ?? 'interna');
   const [creada, setCreada] = useState<SecretoEntrega | null>(null);
   const [usuario, setUsuario] = useState('');
 
@@ -100,10 +101,10 @@ export function FormularioCrearCuenta({ organizaciones, organizacionInicial }: {
       {(estado) => (
         <>
           <div className="grid gap-5 sm:grid-cols-2">
-            <CampoFormulario etiqueta={esAgencia ? 'Nombre de la cuenta (ej. Agencia X)' : 'Nombre (ej. Área Consumibles o Ana Pérez)'} error={estado.errores?.nombre}>
+            <CampoFormulario etiqueta={esAgencia ? 'Nombre de la cuenta (ej. Agencia X)' : 'Nombre de la cuenta (ej. Área Consumibles)'} error={estado.errores?.nombre}>
               {(p) => <Campo {...p} name="nombre" autoComplete="off" required maxLength={200} />}
             </CampoFormulario>
-            <CampoFormulario etiqueta="Usuario" ayuda="Con esto entra. Ej.: consumibles, aduana-a, ana.perez." error={estado.errores?.usuario}>
+            <CampoFormulario etiqueta="Usuario" ayuda="Con esto entra. Ej.: consumibles.essilorluxottica" error={estado.errores?.usuario}>
               {(p) => (
                 <Campo
                   {...p}
@@ -166,13 +167,17 @@ export function FormularioCrearCuenta({ organizaciones, organizacionInicial }: {
           {!esAgencia ? (
             <CampoFormulario
               etiqueta="Área"
-              ayuda="La cuenta de un área ve en «Para mí» las referencias de esa área y recibe lo que le envíen."
-              opcional
+              ayuda={
+                areaObligatoria
+                  ? 'Obligatoria: la cuenta es del área; ve en «Para mí» lo de esa área y recibe lo que le envíen.'
+                  : 'Opcional para este rol.'
+              }
+              opcional={!areaObligatoria}
               error={estado.errores?.area}
             >
               {(p) => (
-                <Seleccion {...p} name="area" defaultValue="" className="max-w-xs">
-                  <option value="">Sin área</option>
+                <Seleccion {...p} name="area" defaultValue="" className="max-w-xs" required={areaObligatoria}>
+                  <option value="">{areaObligatoria ? 'Elige el área…' : 'Sin área'}</option>
                   {AREAS.map((a) => (
                     <option key={a} value={a}>
                       {nombreDeArea(a)}
@@ -180,6 +185,12 @@ export function FormularioCrearCuenta({ organizaciones, organizacionInicial }: {
                   ))}
                 </Seleccion>
               )}
+            </CampoFormulario>
+          ) : null}
+
+          {!esAgencia ? (
+            <CampoFormulario etiqueta="Encargado del área" ayuda="Opcional. Quién lleva hoy la cuenta; la cuenta sigue siendo del área." opcional error={estado.errores?.encargado}>
+              {(p) => <Campo {...p} name="encargado" autoComplete="off" maxLength={80} />}
             </CampoFormulario>
           ) : null}
 

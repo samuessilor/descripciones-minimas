@@ -32,7 +32,7 @@ export const USUARIOS_DESARROLLO: ReadonlyArray<{
   org: string;
   area?: string;
 }> = [
-  { email: 'admin@desarrollo.invalid', nombre: 'Ana Admin [DESARROLLO]', rol: 'admin', org: ORG_INTERNA },
+  { email: 'admin@desarrollo.invalid', nombre: 'Samuel Galeano [DESARROLLO]', rol: 'admin', org: ORG_INTERNA },
   { email: 'solicitante@desarrollo.invalid', nombre: 'Edgar Solicitante [DESARROLLO]', rol: 'solicitante', org: ORG_INTERNA, area: 'Consumibles' },
   { email: 'solicitante2@desarrollo.invalid', nombre: 'Carla Solicitante [DESARROLLO]', rol: 'solicitante', org: ORG_INTERNA, area: 'Mantenimiento' },
   { email: 'lector@desarrollo.invalid', nombre: 'Lucía Lectora [DESARROLLO]', rol: 'lector', org: ORG_INTERNA },

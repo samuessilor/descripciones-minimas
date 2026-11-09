@@ -13,6 +13,8 @@ export interface Actor extends ActorLike {
   username?: string | null;
   email: string;
   area: string | null;
+  /** Tiene una contrasena inicial: debe cambiarla antes de usar la plataforma. */
+  debeCambiarClave?: boolean;
   organizacionNombre: string;
   /** Sesion con la que llega (nula en scripts y pruebas de nucleo). */
   sesionId?: string;
@@ -39,6 +41,7 @@ export async function cargarActorPorId(ej: Ejecutor, usuarioId: string): Promise
       email: usuario.email,
       rol: usuario.rol,
       area: usuario.area,
+      debeCambiarClave: usuario.debeCambiarClave,
       organizacionId: usuario.organizacionId,
       organizacionTipo: usuario.organizacionTipo,
       organizacionNombre: organizacion.nombre,
@@ -56,6 +59,7 @@ export async function cargarActorPorId(ej: Ejecutor, usuarioId: string): Promise
     email: f.email,
     rol: f.rol as Rol,
     area: f.area,
+    debeCambiarClave: f.debeCambiarClave,
     organizacionId: f.organizacionId,
     organizacionTipo: f.organizacionTipo as TipoOrganizacion,
     organizacionNombre: f.organizacionNombre,

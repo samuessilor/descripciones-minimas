@@ -114,7 +114,7 @@ test.describe('armazon', () => {
     await expect(nav.getByRole('link', { name: 'Notificaciones', exact: true })).toHaveAttribute('aria-current', 'page');
 
     // Menu de usuario
-    const boton = page.getByRole('button', { name: 'Ana Admin' });
+    const boton = page.getByRole('button', { name: /Samuel Galeano/ });
     await boton.focus();
     await page.keyboard.press('Enter');
     const menu = page.getByRole('dialog', { name: 'Cuenta' });

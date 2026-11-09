@@ -11,7 +11,7 @@ import { atajosDeTecladoActivos } from '@/server/politicas/preferencias-busqueda
 import { exigirContexto } from '@/server/sesion';
 
 export async function BuscadorLupa() {
-  const { db, actor } = await exigirContexto();
+  const { db, actor } = await exigirContexto({ claveInicial: true }); // se pinta tambien en «Mi cuenta» con la contrasena inicial; la busqueda en si la rechaza el servidor
   const atajos = await atajosDeTecladoActivos(db, actor.usuarioId);
   return <BuscadorLupaCliente atajos={atajos} puedeCrear={puede(actor, 'crear_referencia')} />;
 }

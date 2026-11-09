@@ -11,6 +11,8 @@ export interface EstadoCuenta {
   mensaje?: string;
   /** Errores por campo (clave = nombre del campo del formulario). */
   errores?: Record<string, string>;
+  /** Ruta a la que ir tras el exito (tras cambiar la contrasena inicial). */
+  irA?: string;
   marca?: number;
 }
 
@@ -47,7 +49,7 @@ export async function cerrarSesionPropiaAccion(_previo: EstadoCuenta, datos: For
 
 export async function cambiarMiClaveAccion(_previo: EstadoCuenta, datos: FormData): Promise<EstadoCuenta> {
   const r = await comoResultado(async () =>
-    cambiarMiClave(await contextoDeAccion(), {
+    cambiarMiClave(await contextoDeAccion({ claveInicial: true }), {
       actual: String(datos.get('actual') ?? ''),
       nueva: String(datos.get('nueva') ?? ''),
       repetir: String(datos.get('repetir') ?? ''),
@@ -62,13 +64,14 @@ export async function cambiarMiClaveAccion(_previo: EstadoCuenta, datos: FormDat
     }
     return falla(r.mensaje);
   }
-  revalidatePath('/cuenta');
+  revalidatePath('/', 'layout');
   return {
     estado: 'ok',
     mensaje:
       r.data.otrasSesionesCerradas > 0
         ? `Cambiamos tu contraseña y cerramos ${r.data.otrasSesionesCerradas} ${r.data.otrasSesionesCerradas === 1 ? 'otra sesión' : 'otras sesiones'}.`
         : 'Cambiamos tu contraseña.',
+    ...(r.data.eraInicial ? { irA: '/' } : {}),
     marca: Date.now(),
   };
 }

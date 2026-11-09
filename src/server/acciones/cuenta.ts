@@ -109,7 +109,7 @@ const entradaCambiarClave = z
  * Cambia MI contrasena (exige la actual). Cierra mis otras sesiones: si alguien mas la tenia, queda fuera. Limite de
  * intentos propio: una sesion robada no sirve para adivinar la contrasena actual.
  */
-export async function cambiarMiClave(ctx: Contexto, entrada: unknown): Promise<{ otrasSesionesCerradas: number }> {
+export async function cambiarMiClave(ctx: Contexto, entrada: unknown): Promise<{ otrasSesionesCerradas: number; eraInicial: boolean }> {
   const e = parsear(entradaCambiarClave, entrada);
   const ahora = ahoraDe(ctx);
   const r = await limitarTasa(ctx.db, `cambiar-clave:${ctx.actor.usuarioId}`, REGLAS_TASA.cambiarClave, ahora);
@@ -134,6 +134,8 @@ export async function cambiarMiClave(ctx: Contexto, entrada: unknown): Promise<{
       });
     }
     await tx.update(account).set({ password: nuevoHash, updatedAt: ahora }).where(eq(account.id, cred.id));
+    const [antes] = await tx.select({ inicial: usuario.debeCambiarClave }).from(usuario).where(eq(usuario.id, ctx.actor.usuarioId)).limit(1);
+    await tx.update(usuario).set({ debeCambiarClave: false, actualizadoEn: ahora }).where(eq(usuario.id, ctx.actor.usuarioId));
     const otras = ctx.actor.sesionId
       ? await tx.delete(session).where(and(eq(session.userId, ctx.actor.usuarioId), ne(session.id, ctx.actor.sesionId))).returning({ id: session.id })
       : [];
@@ -146,6 +148,6 @@ export async function cambiarMiClave(ctx: Contexto, entrada: unknown): Promise<{
       ip: ctx.ip,
       creadoEn: ahora,
     });
-    return { otrasSesionesCerradas: otras.length };
+    return { otrasSesionesCerradas: otras.length, eraInicial: antes?.inicial ?? false };
   });
 }

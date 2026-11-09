@@ -19,6 +19,7 @@ export interface Perfil {
   organizacionNombre: string;
   organizacionActiva: boolean;
   area: string | null;
+  encargado: string | null;
 }
 
 export async function cargarPerfiles(ej: Ejecutor, ids: readonly string[]): Promise<Map<string, Perfil>> {
@@ -36,6 +37,7 @@ export async function cargarPerfiles(ej: Ejecutor, ids: readonly string[]): Prom
       organizacionNombre: organizacion.nombre,
       organizacionActiva: organizacion.activa,
       area: usuario.area,
+      encargado: usuario.encargado,
     })
     .from(usuario)
     .innerJoin(organizacion, eq(organizacion.id, usuario.organizacionId))

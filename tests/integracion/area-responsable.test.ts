@@ -11,7 +11,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asignacion, campoHistorial, referencia, usuario } from '@/db/esquema';
 import { crearReferencia } from '@/server/acciones/crear-referencia';
-import { crearCuenta } from '@/server/acciones/usuarios';
+import { cambiarRol, crearCuenta } from '@/server/acciones/usuarios';
 import { editarUsuario } from '@/server/acciones/usuarios-admin';
 import { cargarActorPorId, type Actor } from '@/server/politicas/actor';
 import { pendientesDe, resumenInicioDe } from '@/server/politicas/colaboracion';
@@ -98,8 +98,18 @@ describe('C2: el area del usuario es del catalogo', () => {
     ).rejects.toMatchObject({ codigo: 'VALIDACION' });
     await editarUsuario(e.ctx(e.admin), { usuarioId: e.charles.usuarioId, nombre: 'Charles', area: 'Instrumentos' });
     expect((await cargarActorPorId(e.db, e.charles.usuarioId))?.area).toBe('Instrumentos');
-    await editarUsuario(e.ctx(e.admin), { usuarioId: e.charles.usuarioId, nombre: 'Charles', area: '' });
-    expect((await cargarActorPorId(e.db, e.charles.usuarioId))?.area).toBeNull();
+    // Un solicitante SIEMPRE es de un area: no se le puede dejar sin area (ni crearlo sin ella).
+    await expect(editarUsuario(e.ctx(e.admin), { usuarioId: e.charles.usuarioId, nombre: 'Charles', area: '' })).rejects.toMatchObject({ codigo: 'VALIDACION' });
+    expect((await cargarActorPorId(e.db, e.charles.usuarioId))?.area).toBe('Instrumentos');
+    await expect(
+      crearCuenta(e.ctx(e.admin), { nombre: 'Sin area', usuario: 'sin-area', organizacionId: e.orgInterna, rol: 'solicitante' }),
+    ).rejects.toMatchObject({ codigo: 'VALIDACION' });
+    // Los demas roles internos si pueden no tener area.
+    const lector = await crearCuenta(e.ctx(e.admin), { nombre: 'Lectora', usuario: 'lectora-sin-area', organizacionId: e.orgInterna, rol: 'lector' });
+    await editarUsuario(e.ctx(e.admin), { usuarioId: lector.id, nombre: 'Lectora', area: '' });
+    expect((await cargarActorPorId(e.db, lector.id))?.area).toBeNull();
+    // Y para pasar a alguien a solicitante primero hay que darle area.
+    await expect(cambiarRol(e.ctx(e.admin), { usuarioId: lector.id, rol: 'solicitante' })).rejects.toMatchObject({ codigo: 'VALIDACION' });
     await expect(editarUsuario(e.ctx(e.admin), { usuarioId: e.charles.usuarioId, nombre: 'Charles', area: 'Otra' })).rejects.toMatchObject({ codigo: 'VALIDACION' });
     // Una cuenta de agencia no tiene area interna.
     await editarUsuario(e.ctx(e.admin), { usuarioId: e.brian.usuarioId, nombre: 'Brian', area: 'Marketing' });

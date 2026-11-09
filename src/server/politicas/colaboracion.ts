@@ -619,6 +619,8 @@ export interface CandidatoDestino {
   esAgencia: boolean;
   rol: Rol;
   area: string | null;
+  /** Quien lleva hoy la cuenta de un area (dato informativo). */
+  encargado: string | null;
   pedidosPermitidos: Pedido[];
   pedidoPorDefecto: Pedido;
   /** Ya tiene esta ficha pendiente con este pedido. */
@@ -671,6 +673,7 @@ export async function candidatosDestinoDe(ej: Ejecutor, actor: Actor, referencia
         esAgencia: p.organizacionTipo === 'agencia',
         rol: p.rol,
         area: p.area,
+        encargado: p.encargado,
         pedidosPermitidos: cerrada ? pedidosPermitidos(p.rol).filter((x) => x === 'revisar') : pedidosPermitidos(p.rol),
         pedidoPorDefecto: cerrada ? 'revisar' : pedidoPorDefecto(p.rol),
         yaTiene: yaTienen.get(p.id) ?? null,
@@ -685,7 +688,7 @@ export function filtrarCandidatos(lista: readonly CandidatoDestino[], q: string)
   const tokens = normalizarTexto(q).split(' ').filter(Boolean);
   if (tokens.length === 0) return [...lista];
   return lista.filter((c) => {
-    const pajar = normalizarTexto(`${c.nombre} ${c.organizacion} ${c.area ?? ''}`);
+    const pajar = normalizarTexto(`${c.nombre} ${c.organizacion} ${c.area ?? ''} ${c.encargado ?? ''}`);
     return tokens.every((t) => pajar.includes(t));
   });
 }

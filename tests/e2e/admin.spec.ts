@@ -13,7 +13,7 @@
  */
 import AxeBuilder from '@axe-core/playwright';
 import { expect as expectBase, test, type Locator, type Page } from '@playwright/test';
-import { CLAVE_EJEMPLO, contextoAutenticado, entrarComo, vigilarErrores } from './ayudas';
+import { CLAVE_EJEMPLO, cambiarClaveInicial, contextoAutenticado, entrarComo, vigilarErrores } from './ayudas';
 
 test.describe.configure({ mode: 'serial' });
 test.beforeEach(() => {
@@ -122,12 +122,14 @@ test('admin crea una cuenta, quien la recibe entra con usuario y contrasena, se 
   await page.goto('/admin/usuarios/nueva');
   await page.getByLabel(/^Nombre/).fill('Otra Marta');
   await page.getByLabel('Usuario', { exact: true }).fill(MARTA.usuario.toUpperCase());
+  await page.getByLabel(/^Área/).selectOption('Consumibles');
   await pulsar(page.getByRole('button', { name: 'Crear la cuenta' }));
   await expect(page.getByText('Ya existe una cuenta con ese usuario.').first()).toBeVisible();
   await expect(page).toHaveURL(/\/admin\/usuarios\/nueva/);
 
   // Marta entra con lo que se le entrego; con otra contrasena, no.
   const marta = await contextoAutenticado(browser, request, MARTA.usuario, clave);
+  await cambiarClaveInicial(marta.page, clave); // con la clave de entrega solo ve «Mi cuenta» hasta cambiarla
   await expect(marta.page.getByRole('heading', { name: /Hola, Marta/ })).toBeVisible();
   await marta.page.goto('/admin/usuarios');
   await expect(marta.page.getByRole('heading', { name: 'No tienes permiso para ver esto' })).toBeVisible(); // solicitante: sin administracion
@@ -162,6 +164,7 @@ test('admin crea una cuenta, quien la recibe entra con usuario y contrasena, se 
   await expect(vieja.getByText('Usuario o contraseña incorrectos.')).toBeVisible();
   await vieja.context().close();
   const conNueva = await contextoAutenticado(browser, request, MARTA.usuario, nueva);
+  await cambiarClaveInicial(conNueva.page, nueva); // la restablecida tambien es de entrega
   await expect(conNueva.page.getByRole('heading', { name: /Hola, Marta/ })).toBeVisible();
   await conNueva.contexto.close();
 

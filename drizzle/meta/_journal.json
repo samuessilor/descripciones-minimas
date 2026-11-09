@@ -57,6 +57,20 @@
       "when": 1793905247881,
       "tag": "0007_sin_correo",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793914724067,
+      "tag": "0008_clave_inicial",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793916518646,
+      "tag": "0009_encargado",
+      "breakpoints": true
     }
   ]
 }

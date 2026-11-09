@@ -24,7 +24,7 @@ export function FormularioEntrada({ siguiente, contacto }: { siguiente: string; 
 
       <input type="hidden" name="siguiente" value={siguiente} />
 
-      <CampoFormulario etiqueta="Usuario" ayuda="Por ejemplo: consumibles o aduana-a.">
+      <CampoFormulario etiqueta="Usuario" ayuda="Por ejemplo: consumibles.essilorluxottica">
         {(p) => (
           <div className="relative">
             <UserRound aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 size-5 -translate-y-1/2 text-tinta-suave" />
@@ -73,7 +73,7 @@ export function FormularioEntrada({ siguiente, contacto }: { siguiente: string; 
         {pendiente ? 'Entrando…' : 'Entrar'}
       </Boton>
 
-      <p className="border-t border-borde-suave pt-4 text-sm text-tinta-suave">¿No tienes usuario o olvidaste la contraseña? Pídesela a {contacto}.</p>
+      <p className="border-t border-borde-suave pt-4 text-sm text-tinta-suave">¿No tienes usuario o olvidaste la contraseña? Consulta con {contacto}.</p>
     </form>
   );
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "usuario" ADD COLUMN "debe_cambiar_clave" boolean DEFAULT false NOT NULL;

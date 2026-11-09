@@ -27,7 +27,7 @@ const MAX_MENSAJE = 500;
 function coincide(c: CandidatoDestino, q: string): boolean {
   const tokens = normalizarTexto(q).split(' ').filter(Boolean);
   if (tokens.length === 0) return true;
-  const pajar = normalizarTexto(`${c.nombre} ${c.organizacion} ${c.area ?? ''}`);
+  const pajar = normalizarTexto(`${c.nombre} ${c.organizacion} ${c.area ?? ''} ${c.encargado ?? ''}`);
   return tokens.every((t) => pajar.includes(t));
 }
 
@@ -129,7 +129,7 @@ export function SelectorPersonas({
                     aria-label={`${c.nombre}, ${c.organizacion}`}
                     etiqueta={
                       <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <Persona nombre={c.nombre} organizacion={c.organizacion} detalle={c.area ?? undefined} tamano="sm" />
+                        <Persona nombre={c.nombre} organizacion={c.organizacion} detalle={c.area ? (c.encargado ? `${c.area} · encargado: ${c.encargado}` : c.area) : undefined} tamano="sm" />
                         {c.esAgencia ? <Insignia variante="contorno">Agencia de aduana</Insignia> : null}
                         {c.yaTiene ? <Insignia variante="azul">Ya la tiene pendiente</Insignia> : null}
                       </span>

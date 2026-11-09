@@ -332,7 +332,7 @@ test('accesibilidad: axe sin violaciones serias o criticas en inicio, notificaci
   };
 
   await a.goto('/');
-  await expect(a.getByRole('heading', { name: /Hola, Ana/ })).toBeVisible();
+  await expect(a.getByRole('heading', { name: /Hola, Samuel/ })).toBeVisible();
   await analizar('inicio');
   await a.getByRole('button', { name: /^Notificaciones/ }).click();
   await expect(a.getByRole('dialog', { name: 'Notificaciones' })).toBeVisible();

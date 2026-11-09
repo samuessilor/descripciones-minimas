@@ -16,7 +16,7 @@ import { RestablecerClave } from '@/componentes/admin/RestablecerClave';
 import { Aviso } from '@/componentes/ui/aviso';
 import { Avatar, nombreVisible } from '@/componentes/ui/avatar';
 import { EncabezadoPagina } from '@/componentes/ui/pagina';
-import { AREAS, esArea } from '@/dominio/areas';
+import { AREAS, esArea, exigeArea } from '@/dominio/areas';
 import { ROLES } from '@/dominio/permisos';
 import {
   candidatosReasignacion,
@@ -94,17 +94,27 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
                     nombre="area"
                     etiqueta="Área"
                     ayuda="Ve en «Para mí» las referencias de su área y recibe las solicitudes de la aduana sobre ellas."
-                    opcional
+                    opcional={!exigeArea(u.rol, u.organizacionTipo)}
                     control="seleccion"
                     defaultValue={esArea(u.area) ? u.area : ''}
                   >
-                    <option value="">Sin área</option>
+                    <option value="">{exigeArea(u.rol, u.organizacionTipo) ? 'Elige el área…' : 'Sin área'}</option>
                     {AREAS.map((a) => (
                       <option key={a} value={a}>
                         {a}
                       </option>
                     ))}
                   </CampoAdmin>
+                )}
+                {esAgencia ? null : (
+                  <CampoAdmin
+                    nombre="encargado"
+                    etiqueta="Encargado del área"
+                    ayuda="Opcional. Quién lleva hoy la cuenta; la cuenta sigue siendo del área."
+                    opcional
+                    defaultValue={u.encargado ?? ''}
+                    maxLength={80}
+                  />
                 )}
               </div>
               <Datos>

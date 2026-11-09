@@ -29,3 +29,13 @@ export function normalizarArea(texto: string | null | undefined): Area | null {
 export function nombreDeArea(area: string): string {
   return `Área ${area}`;
 }
+
+/**
+ * Toda cuenta interna con rol «solicitante» (la de un area o la de una persona del area) pertenece a UN area: de ahi salen
+ * «Para mi», lo que se le envia y a quien le toca cada referencia. Administrador, lector y aduana pueden no tener area.
+ */
+export function exigeArea(rol: string, tipoOrganizacion: string): boolean {
+  return rol === 'solicitante' && tipoOrganizacion === 'interna';
+}
+
+export const MENSAJE_AREA_OBLIGATORIA = 'Elige el área (Consumibles, Mantenimiento, Instrumentos o Marketing): una cuenta de solicitante siempre es de un área.';

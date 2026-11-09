@@ -50,7 +50,11 @@ export const usuario = pgTable(
     organizacionTipo: text('organizacion_tipo').notNull(),
     rol: text('rol').notNull(),
     area: text('area'),
+    /** Quien lleva hoy la cuenta de un area (ej. «Edgar»). Es solo un dato: la cuenta sigue siendo del area. */
+    encargado: text('encargado'),
     activo: boolean('activo').notNull().default(true),
+    /** Entrega con contrasena inicial (o restablecida): hasta que la cambie, solo puede entrar a «Mi cuenta». */
+    debeCambiarClave: boolean('debe_cambiar_clave').notNull().default(false),
     /** Permite desactivar el atajo "/" (WCAG 2.1.4, RV-42). */
     atajosTeclado: boolean('atajos_teclado').notNull().default(true),
     ultimoIngreso: timestamp('ultimo_ingreso', { withTimezone: true }),

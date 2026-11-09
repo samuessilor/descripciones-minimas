@@ -14,13 +14,13 @@ test('login con usuario y contrasena sin errores de consola ni de CSP, y navegac
   const errores = vigilarErrores(page);
   await entrarComo(page, request, 'admin@desarrollo.invalid');
 
-  await expect(page.getByRole('heading', { name: /Hola, Ana/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Hola, Samuel/ })).toBeVisible();
   const nav = page.getByRole('navigation', { name: 'Principal' }).first();
   for (const nombre of ['Inicio', 'Referencias', 'Notificaciones', 'Administración']) {
     await expect(nav.getByRole('link', { name: nombre, exact: true })).toBeVisible();
   }
   // El menu de usuario (avatar + nombre) es un boton que abre la cuenta.
-  await expect(page.getByRole('button', { name: 'Ana Admin' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Samuel Galeano/ })).toBeVisible();
 
   for (const ruta of ['/referencias', '/notificaciones', '/cuenta', '/admin', '/admin/usuarios', '/admin/organizaciones', '/admin/catalogos', '/admin/auditoria', '/admin/parametros']) {
     const r = await page.goto(ruta);
@@ -109,6 +109,10 @@ test('P-12: desactivar a un usuario con sesion abierta la cierra en su siguiente
     await admin.page.getByLabel(/^Nombre/).fill('Persona de prueba');
     await admin.page.getByLabel('Usuario', { exact: true }).fill(usuario);
     await admin.page.getByLabel('Organización').selectOption({ label: 'EssilorLuxottica [DESARROLLO]' });
+    // Sin area, una cuenta de solicitante se rechaza: el area es obligatoria.
+    await pulsarHidratado(admin.page.getByRole('button', { name: 'Crear la cuenta' }));
+    await expect(admin.page.getByText(/una cuenta de solicitante siempre es de un área/).first()).toBeVisible();
+    await admin.page.getByLabel(/^Área/).selectOption('Consumibles');
     await pulsarHidratado(admin.page.getByRole('button', { name: 'Crear la cuenta' }));
     await expect(admin.page.getByRole('heading', { name: 'Cuenta creada: Persona de prueba' })).toBeVisible();
     const clave = (await admin.page.getByTestId('credencial-contraseña').innerText()).trim();
@@ -119,6 +123,17 @@ test('P-12: desactivar a un usuario con sesion abierta la cierra en su siguiente
     // La persona entra con el usuario y la contrasena que se le entregaron.
     const persona = await contextoAutenticado(browser, request, usuario, clave);
     try {
+      // Con la contrasena de entrega, el servidor solo la deja en «Mi cuenta» hasta que la cambie.
+      await persona.page.goto('/referencias');
+      await expect(persona.page).toHaveURL(/\/cuenta$/);
+      await expect(persona.page.getByTestId('cambiar-clave-obligatorio')).toBeVisible();
+      const nueva = `Nueva-${Date.now().toString(36)}-clave`;
+      await persona.page.getByLabel('Contraseña actual').fill(clave);
+      await persona.page.getByLabel('Contraseña nueva', { exact: true }).fill(nueva);
+      await persona.page.getByLabel('Repite la contraseña nueva').fill(nueva);
+      await pulsarHidratado(persona.page.getByRole('button', { name: 'Cambiar contraseña' }));
+      await expect(persona.page).toHaveURL(/\/$/);
+
       await persona.page.goto('/referencias');
       await expect(persona.page.getByRole('heading', { name: 'Referencias' })).toBeVisible();
 

@@ -16,7 +16,7 @@ function Paso({ titulo, children }: { titulo: string; children: ReactNode }) {
 
 /** Manual básico: una pantalla, sin imágenes. Mismo contenido que `docs/MANUAL-BASICO.md`. */
 export default async function Ayuda() {
-  await exigirActor();
+  await exigirActor({ claveInicial: true });
   return (
     <ContenedorLectura>
       <EncabezadoPagina titulo="Ayuda" descripcion="Cómo se usa, paso a paso. Una referencia es una hoja de vida que se llena entre varias personas." />
@@ -24,12 +24,12 @@ export default async function Ayuda() {
         <Paso titulo="Cómo entro">
           <ul>
             <li>
-              Entras con un <b>usuario</b> y una <b>contraseña</b> que te entrega el administrador (por ejemplo, el usuario <b>consumibles</b>). No hay
-              registro ni correo: si no tienes cuenta o olvidaste la contraseña, pídesela a quien administra.
+              Entras con un <b>usuario</b> y una <b>contraseña</b> que te entrega el administrador (por ejemplo, el usuario <b>consumibles.essilorluxottica</b>). La cuenta es del área, no de una persona.
+              No hay registro ni correo: si no tienes cuenta o olvidaste la contraseña, consulta con quien administra.
             </li>
             <li>
-              Cambia tu contraseña cuando quieras en <b>Mi cuenta</b> (menú de arriba a la derecha). Si es una cuenta de área que usan varias personas,
-              avisen al cambiarla.
+              La primera vez te pedirá <b>cambiar la contraseña</b> de entrega en <b>Mi cuenta</b> (menú de arriba a la derecha); hasta hacerlo no
+              puedes usar el resto. Después puedes cambiarla cuando quieras. Si es una cuenta de área que usan varias personas, avisen al cambiarla.
             </li>
             <li>La sesión se cierra sola tras 8 horas sin usarla. «Cerrar sesión» está en el mismo menú.</li>
           </ul>

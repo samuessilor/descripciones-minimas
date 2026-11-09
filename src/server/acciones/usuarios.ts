@@ -7,6 +7,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { account, asignacion, organizacion, usuario } from '@/db/esquema';
 import type { Tx } from '@/db/tipos';
+import { exigeArea, MENSAJE_AREA_OBLIGATORIA } from '@/dominio/areas';
 import { correoSinCorreo, normalizarUsuario, USUARIO_AYUDA, validarUsuario } from '@/dominio/credenciales';
 import { ROLES, puede, validarRolOrganizacion, type Rol, type TipoOrganizacion } from '@/dominio/permisos';
 import { auditar } from '../auditoria';
@@ -124,6 +125,8 @@ export const entradaCrearCuenta = z.object({
   organizacionId: z.uuid(),
   rol: z.enum(ROLES),
   area: areaUsuario(),
+  /** Opcional: nombre de quien lleva la cuenta del area hoy. La cuenta sigue siendo del area. */
+  encargado: textoLimpio().pipe(z.string().trim().max(80)).nullish(),
 });
 
 export interface ResultadoCrearCuenta {
@@ -150,6 +153,9 @@ export async function crearCuenta(ctx: Contexto, entrada: unknown): Promise<Resu
 
   const regla = validarRolOrganizacion(e.rol, tipo);
   if (!regla.ok) throw new ErrorAccion('VALIDACION', regla.mensaje);
+  if (exigeArea(e.rol, tipo) && !e.area) {
+    throw new ErrorAccion('VALIDACION', 'Revisa los datos marcados.', { problemas: [{ ruta: 'area', mensaje: MENSAJE_AREA_OBLIGATORIA }] });
+  }
 
   const claveTemporal = generarClave();
   const hash = await hashearClave(claveTemporal);
@@ -173,6 +179,8 @@ export async function crearCuenta(ctx: Contexto, entrada: unknown): Promise<Resu
           rol: e.rol,
           // Una cuenta de agencia es de una empresa de aduana, no de un area interna (C3).
           area: tipo === 'agencia' ? null : e.area,
+          encargado: e.encargado || null,
+          debeCambiarClave: true,
           creadoPor: ctx.actor.usuarioId,
           creadoEn: ahora,
           actualizadoEn: ahora,
@@ -225,6 +233,7 @@ export async function restablecerClave(ctx: Contexto, entrada: unknown): Promise
     } else {
       await tx.insert(account).values({ accountId: u.id, providerId: 'credential', userId: u.id, password: hash, createdAt: ahora, updatedAt: ahora });
     }
+    await tx.update(usuario).set({ debeCambiarClave: true, actualizadoEn: ahora }).where(eq(usuario.id, u.id));
     const sesionesCerradas = await revocarSesionesDeUsuario(tx, u.id);
     await auditar(tx, {
       usuarioId: ctx.actor.usuarioId,
@@ -326,6 +335,9 @@ export async function cambiarRol(ctx: Contexto, entrada: unknown): Promise<{ ok:
     const regla = validarRolOrganizacion(e.rol, u.organizacionTipo as TipoOrganizacion);
     if (!regla.ok) throw new ErrorAccion('VALIDACION', regla.mensaje);
     if (u.rol === e.rol) return; // sin cambio: no se escribe ni se audita
+    if (exigeArea(e.rol, u.organizacionTipo) && !u.area) {
+      throw new ErrorAccion('VALIDACION', 'Para pasarla a solicitante, primero asígnale un área (en «Datos»).');
+    }
     if (u.rol === 'admin' && e.rol !== 'admin' && u.activo) {
       const otros = await tx
         .select({ n: sql<number>`count(*)::int` })

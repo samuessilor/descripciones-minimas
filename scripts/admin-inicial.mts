@@ -40,13 +40,13 @@ try {
     const hash = await hashearClave(clave);
     const [u] = await db
       .insert(usuario)
-      .values({ nombre, username, email: correoSinCorreo(username), organizacionId: org.id, organizacionTipo: org.tipo, rol: 'admin' })
+      .values({ nombre, username, email: correoSinCorreo(username), organizacionId: org.id, organizacionTipo: org.tipo, rol: 'admin', debeCambiarClave: true })
       .returning({ id: usuario.id });
     await db.insert(account).values({ accountId: u!.id, providerId: 'credential', userId: u!.id, password: hash });
     console.log(`✔ Administrador ${nombre} creado en ${ORG_INTERNA}.`);
     console.log(`  Usuario ........ ${username}`);
     console.log(`  Contraseña ..... ${clave}`);
-    console.log('  Cópiala ahora: no se vuelve a mostrar. Puede cambiarla en «Mi cuenta» después de entrar.');
+    console.log('  Cópiala ahora: no se vuelve a mostrar. Al entrar por primera vez te pedirá cambiarla.');
   }
 } finally {
   await conexion.cerrar();

@@ -46,6 +46,7 @@ export interface FilaUsuarioAdmin {
   email: string;
   rol: string;
   area: string | null;
+  encargado: string | null;
   activo: boolean;
   organizacion: string;
   organizacionId: string;
@@ -61,6 +62,7 @@ const COLUMNAS_USUARIO = {
   email: usuario.email,
   rol: usuario.rol,
   area: usuario.area,
+  encargado: usuario.encargado,
   activo: usuario.activo,
   organizacion: organizacion.nombre,
   organizacionId: usuario.organizacionId,

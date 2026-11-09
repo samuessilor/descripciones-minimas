@@ -42,6 +42,23 @@ export async function contextoAutenticado(browser: Browser, request: APIRequestC
   return { contexto, page };
 }
 
+/**
+ * Una cuenta recien creada (o restablecida) solo puede ver «Mi cuenta» hasta cambiar la contrasena de entrega.
+ * Comprueba ese bloqueo, hace el cambio y devuelve la contrasena nueva.
+ */
+export async function cambiarClaveInicial(page: Page, actual: string): Promise<string> {
+  await page.goto('/referencias');
+  await expect(page).toHaveURL(/\/cuenta$/);
+  await expect(page.getByTestId('cambiar-clave-obligatorio')).toBeVisible();
+  const nueva = `Nueva-${Date.now().toString(36)}-clave`;
+  await page.getByLabel('Contraseña actual').fill(actual);
+  await page.getByLabel('Contraseña nueva', { exact: true }).fill(nueva);
+  await page.getByLabel('Repite la contraseña nueva').fill(nueva);
+  await pulsarHidratado(page.getByRole('button', { name: 'Cambiar contraseña' }));
+  await expect(page).toHaveURL(/\/$/);
+  return nueva;
+}
+
 /** Recoge errores de consola y de pagina (incluye violaciones de CSP). */
 export function vigilarErrores(page: Page): string[] {
   const errores: string[] = [];

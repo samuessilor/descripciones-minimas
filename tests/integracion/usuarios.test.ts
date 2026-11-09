@@ -35,7 +35,7 @@ describe('invitar (D-28 en politicas)', () => {
       expect(await codigoDe(crearCuenta(e.ctx(e.admin), { nombre: 'X', usuario: `${rol}-ag`, email: `${rol}@agencia.invalid`, organizacionId: e.orgA, rol }))).toBe('VALIDACION');
     }
     for (const rol of ['admin', 'solicitante', 'aduana', 'lector'] as const) {
-      const r = await crearCuenta(e.ctx(e.admin), { nombre: `Interno ${rol}`, usuario: `interno-${rol}`, email: `${rol}@interna.invalid`, organizacionId: e.orgInterna, rol });
+      const r = await crearCuenta(e.ctx(e.admin), { nombre: `Interno ${rol}`, usuario: `interno-${rol}`, email: `${rol}@interna.invalid`, organizacionId: e.orgInterna, rol, ...(rol === 'solicitante' ? { area: 'Consumibles' } : {}) });
       expect(r.organizacionTipo).toBe('interna');
     }
   });
@@ -45,12 +45,12 @@ describe('invitar (D-28 en politicas)', () => {
     expect(r.usuario).toBe('nueva.interna');
     const [fila] = await e.db.select().from(usuario).where(eq(usuario.id, r.id));
     expect(fila).toMatchObject({ username: 'nueva.interna', email: 'nueva@interna.invalid' });
-    expect(await codigoDe(crearCuenta(e.ctx(e.admin), { nombre: 'Otra', usuario: 'NUEVA.interna', organizacionId: e.orgInterna, rol: 'solicitante' }))).toBe('DUPLICADO');
+    expect(await codigoDe(crearCuenta(e.ctx(e.admin), { nombre: 'Otra', usuario: 'NUEVA.interna', organizacionId: e.orgInterna, rol: 'solicitante', area: 'Consumibles' }))).toBe('DUPLICADO');
     // Sin correo propio, repetir el usuario dice «usuario» (no «correo»).
-    const sinCorreo = await crearCuenta(e.ctx(e.admin), { nombre: 'Area X', usuario: 'area-x', organizacionId: e.orgInterna, rol: 'solicitante' });
+    const sinCorreo = await crearCuenta(e.ctx(e.admin), { nombre: 'Area X', usuario: 'area-x', organizacionId: e.orgInterna, rol: 'solicitante', area: 'Consumibles' });
     expect(sinCorreo.usuario).toBe('area-x');
-    await expect(crearCuenta(e.ctx(e.admin), { nombre: 'Area X2', usuario: 'AREA-X', organizacionId: e.orgInterna, rol: 'solicitante' })).rejects.toThrow('Ya existe una cuenta con ese usuario.');
-    expect(await codigoDe(crearCuenta(e.ctx(e.admin), { nombre: 'Otra', usuario: 'otra.persona', email: 'NUEVA@interna.invalid', organizacionId: e.orgInterna, rol: 'solicitante' }))).toBe('DUPLICADO');
+    await expect(crearCuenta(e.ctx(e.admin), { nombre: 'Area X2', usuario: 'AREA-X', organizacionId: e.orgInterna, rol: 'solicitante', area: 'Consumibles' })).rejects.toThrow('Ya existe una cuenta con ese usuario.');
+    expect(await codigoDe(crearCuenta(e.ctx(e.admin), { nombre: 'Otra', usuario: 'otra.persona', email: 'NUEVA@interna.invalid', organizacionId: e.orgInterna, rol: 'solicitante', area: 'Consumibles' }))).toBe('DUPLICADO');
     const a = await e.db.select().from(auditoria).where(and(eq(auditoria.accion, 'crear_cuenta'), eq(auditoria.entidadId, r.id)));
     expect(a).toHaveLength(1);
     expect(a[0]!.usuarioId).toBe(e.admin.usuarioId);
