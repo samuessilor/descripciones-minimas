@@ -44,8 +44,19 @@ function puertoLibre(): Promise<number> {
 
 async function crearRolesYBase(admin: pg.Client, nombreBd: string): Promise<void> {
   const existe = async (rol: string) => (await admin.query('select 1 from pg_roles where rolname = $1', [rol])).rowCount! > 0;
-  if (!(await existe('migrador'))) await admin.query(`create role migrador login password '${CLAVE_MIGRADOR}'`);
-  if (!(await existe('app'))) await admin.query(`create role app login password '${CLAVE_APP}'`);
+  // Los roles son del cluster, no de la base: varios archivos de prueba corren a la vez y comprobar-y-crear tiene una carrera.
+  // Si otro archivo lo creo entre medias (23505 / 42710), el rol ya existe y esta bien.
+  const crear = async (rol: string, clave: string) => {
+    if (await existe(rol)) return;
+    try {
+      await admin.query(`create role ${rol} login password '${clave}'`);
+    } catch (e) {
+      const codigo = (e as { code?: string }).code;
+      if (codigo !== '23505' && codigo !== '42710') throw e;
+    }
+  };
+  await crear('migrador', CLAVE_MIGRADOR);
+  await crear('app', CLAVE_APP);
   await admin.query(`create database ${nombreBd} owner migrador`);
 }
 

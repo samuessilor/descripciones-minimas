@@ -1,6 +1,7 @@
 name: ci
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches: [main]
@@ -34,11 +35,15 @@ jobs:
         env:
           APP_URL: http://localhost:3000
       - name: Pruebas de navegador
+        # ~25 min: solo en la corrida semanal o a demanda (Actions > ci > Run workflow); el resto de pasos corre en cada push.
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: |
           npx playwright install --with-deps chromium
           E2E_CANAL=chromium npm run test:e2e -- --project=escritorio
         env:
           APP_URL: http://localhost:3010
+          # Solo para que el servidor de pruebas arranque en CI (no es un secreto real).
+          BETTER_AUTH_SECRET: secreto-solo-de-ci-para-pruebas-0123456789abcdef
       - name: Auditoria de dependencias de produccion
         # exceljs 4.4.0 arrastra uuid < 11.1.1 (aviso moderado): se resuelve con `overrides`.
         run: npm audit --omit=dev --audit-level=high
