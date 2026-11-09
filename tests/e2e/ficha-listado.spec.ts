@@ -98,11 +98,12 @@ test('ficha: llenar las tres secciones, ver amarillo y verde por seccion, y reca
   await entrarComo(page, request, 'solicitante@desarrollo.invalid', `/referencias/${idFicha}`);
   await esperarFicha(page);
 
-  // Recien creada: las tres secciones en amarillo (icono + texto), sello pendiente.
+  // Recien creada: Producto y Detalle en amarillo (icono + texto), sello pendiente.
   const barra = page.locator('[data-barra-ficha]');
   await expect(barra.getByRole('button', { name: /Producto.*Falta/i })).toBeVisible();
   await expect(barra.getByRole('button', { name: /Detalle.*Falta/i })).toBeVisible();
-  await expect(barra.getByRole('button', { name: /Especificaciones.*Falta/i })).toBeVisible();
+  // Especificaciones no tiene ningun campo obligatorio para el area (foto e informacion adicional son opcionales): nace completa.
+  await expect(barra.getByRole('button', { name: /Especificaciones.*Completa/i })).toBeVisible();
   await expect(page.getByRole('status', { name: /Estado de la referencia: pendiente/i })).toBeVisible();
 
   // Todo plegado por defecto, salvo Producto en un borrador recien creado sin nada lleno (reunion 2026-11).
@@ -139,8 +140,7 @@ test('ficha: llenar las tres secciones, ver amarillo y verde por seccion, y reca
   await llenar(page, 'fabricante', () => page.getByLabel(/^Fabricante/).fill('Fabricante de prueba'));
   await llenar(page, 'proveedor', () => page.getByLabel(/^Proveedor/).fill('Proveedor de prueba'));
   // Tipo de empaque: lista fija sin «No aplica». Con Bidón o Paquete aparece «Contenido por empaque».
-  await page.getByLabel(/^Tipo de empaque/).click();
-  await page.getByRole('option', { name: 'Bidón' }).click();
+  await page.getByLabel(/^Tipo de empaque/).selectOption('Bidón');
   await expect(bloque(page, 'tipo_empaque')).toHaveAttribute('data-fase', /^(guardado|limpio)$/);
   await llenar(page, 'cantidad_empaque', () => page.getByLabel(/^Contenido por empaque/).fill('20 litros'));
 
@@ -219,6 +219,7 @@ test('segunda sesion: editar un valor ajeno pide motivo y, si se guardo a la vez
     // Edgar lo ve al recargar y la ficha de Carla ya no tiene el choque.
     await a.page.reload();
     await esperarFicha(a.page);
+    await abrirTodo(a.page); // al recargar todo vuelve a plegado
     await expect(a.page.getByLabel(/^Información adicional/)).toHaveValue('Texto de Carla');
 
     // Presencia (D-17): quien enfoca un campo aparece como «esta escribiendo» en la otra sesion (sondeo de 15 s)...

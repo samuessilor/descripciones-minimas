@@ -113,7 +113,7 @@ test('RIM: la aduana responde Sí/No en su zona, el área lo ve en solo lectura 
   await p.getByLabel('Clasificación finalizada').selectOption('SI');
   const dialogo = p.getByRole('dialog', { name: 'Cerrar la clasificación' });
   await expect(dialogo.getByText(/Falta responder «¿Requiere registro de importación \(RIM\)\?»/)).toBeVisible();
-  await expect(dialogo.getByRole('button', { name: /Cerrar/ })).toHaveCount(0);
+  await expect(dialogo.getByRole('button', { name: /^Cerrar (clasificación|de todos modos)/ })).toHaveCount(0); // la X del dialogo se llama «Cerrar»
   await dialogo.getByRole('button', { name: 'Entendido' }).click();
 
   await rim.selectOption('NO');
@@ -252,7 +252,7 @@ test('Excel: se descarga, se abre y trae la referencia clasificada con su color 
 
   const libro = new ExcelJS.Workbook();
   await libro.xlsx.load(readFileSync(ruta) as unknown as ArrayBuffer);
-  expect(libro.worksheets.map((h) => h.name)).toEqual(['Base', 'Leyenda']);
+  expect(libro.worksheets.map((h) => h.name)).toEqual(['Base', 'Resumen de estado', 'Historial', 'Leyenda']);
   const base = libro.getWorksheet('Base')!;
   let fila: ExcelJS.Row | undefined;
   base.eachRow((r) => {

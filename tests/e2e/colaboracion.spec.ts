@@ -214,6 +214,7 @@ test('restaurar un valor anterior desde el campo: siempre pide motivo y deja una
 
   // B abre el historial DE ESE campo y restaura la version 1, con motivo.
   await b.reload();
+  await abrirSeccion(b, 'producto'); // tras recargar todo vuelve a plegado
   const bloque = b.locator('[data-campo="descripcion_factura"]');
   await bloque.getByRole('button', { name: /Ver el historial de este campo/ }).click();
   const versiones = b.getByRole('dialog', { name: 'Versiones de este campo' });

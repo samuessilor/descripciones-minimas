@@ -26,6 +26,7 @@ export function posicionar(ancla: HTMLElement, panel: HTMLElement, o: OpcionesPo
   const a = ancla.getBoundingClientRect();
   if (igualarAncho) panel.style.width = `${a.width}px`;
   panel.style.maxHeight = '';
+  panel.style.overflowY = '';
   const p = panel.getBoundingClientRect();
   const anchoVentana = document.documentElement.clientWidth;
   const altoVentana = window.innerHeight;
@@ -37,7 +38,11 @@ export function posicionar(ancla: HTMLElement, panel: HTMLElement, o: OpcionesPo
   else if (lado === 'arriba' && p.height > espacioArriba && espacioAbajo > espacioArriba) efectivo = 'abajo';
 
   const disponible = Math.max(efectivo === 'abajo' ? espacioAbajo : espacioArriba, 120);
-  if (p.height > disponible) panel.style.maxHeight = `${disponible}px`;
+  if (p.height > disponible) {
+    // Con la altura recortada, el panel se desplaza por dentro (el borde del CSS es `overflow: visible`).
+    panel.style.maxHeight = `${disponible}px`;
+    panel.style.overflowY = 'auto';
+  }
   const alto = Math.min(p.height, disponible);
 
   const top = efectivo === 'abajo' ? a.bottom + separacion : a.top - separacion - alto;
@@ -65,9 +70,14 @@ export function useReposicionar(
     recolocar();
     window.addEventListener('resize', recolocar);
     window.addEventListener('scroll', recolocar, true);
+    // Si el contenido llega o cambia con el panel abierto (la lista de versiones se carga despues de abrirlo), vuelve a
+    // medir: sin esto el panel crece hacia abajo y se sale de la pantalla sin poder alcanzar sus botones.
+    const observador = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(recolocar);
+    if (observador && panel.current) observador.observe(panel.current);
     return () => {
       window.removeEventListener('resize', recolocar);
       window.removeEventListener('scroll', recolocar, true);
+      observador?.disconnect();
     };
   }, [activo, ancla, panel, lado, alinear, separacion, igualarAncho]);
 }
