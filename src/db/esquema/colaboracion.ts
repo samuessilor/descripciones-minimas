@@ -44,6 +44,7 @@ export const asignacion = pgTable(
       'asignacion_estado_valido',
       sql`${t.estado} in ('pendiente','en_curso','hecha','reasignada','cancelada')`,
     ),
+    check('asignacion_completada_coherente', sql`(${t.estado} in ('hecha','reasignada','cancelada')) = (${t.completadaEn} is not null)`),
   ],
 );
 

@@ -17,22 +17,20 @@ const VALOR_DE_EJEMPLO: Record<string, unknown> = {
   pais_origen: 'FR',
   fabricante: 'Fabrica SA',
   proveedor: 'Proveedor SA',
-  tipo_empaque: 'Bidón de 20 kg',
+  tipo_empaque: 'Unidad',
   maquina_destino: 'Biseladora X',
-  requiere_rim: 'NO',
-  cantidad_rim: { valor: '156', expresion: '13x12' },
-  fecha_fabricacion: { fecha: '2026-01-01' },
 };
 
 function llenar(tipo: TipoProducto, sobre: Record<string, unknown> = {}): Record<string, unknown> {
   const v: Record<string, unknown> = {};
-  for (const c of camposObligatoriosCliente(tipo)) v[c.clave] = VALOR_DE_EJEMPLO[c.clave];
+  // Con «Unidad» no se pide el contenido por empaque (solo aplica con Bidón o Paquete).
+  for (const c of camposObligatoriosCliente(tipo, undefined, VALOR_DE_EJEMPLO)) v[c.clave] = VALOR_DE_EJEMPLO[c.clave];
   v.tipo_producto = tipo;
-  delete v.cantidad_rim;
   return { ...v, ...sobre };
 }
 
 const aduanaCompleta = {
+  requiere_rim: 'NO',
   partida_arancelaria: '8501.31.20.00',
   descripciones_minimas: { no_aplica: true },
   restricciones: 'Sin restricciones',
@@ -54,9 +52,9 @@ describe('semaforo por seccion (D-13, D-26, 8.2)', () => {
   it('los obligatorios de la aduana se cuentan aparte y no tiñen la seccion', () => {
     const c = calcularCompletitud({ tipo: 'INSUMO', valores: llenar('INSUMO') });
     expect(c.aduana.faltantes.sort()).toEqual(
-      ['clasificacion_finalizada', 'descripciones_minimas', 'observaciones_aduana', 'partida_arancelaria', 'restricciones'].sort(),
+      ['clasificacion_finalizada', 'descripciones_minimas', 'observaciones_aduana', 'partida_arancelaria', 'requiere_rim', 'restricciones'].sort(),
     );
-    expect(c.aduana).toMatchObject({ faltan: 5, total: 5, completo: false });
+    expect(c.aduana).toMatchObject({ faltan: 6, total: 6, completo: false });
   });
 
   it('cuenta lo que falta por seccion con el texto "Faltan N"', () => {
@@ -80,7 +78,6 @@ describe('semaforo por seccion (D-13, D-26, 8.2)', () => {
         pais_origen: 'NO_SE_CONOCE',
         fecha_fabricacion: { por_confirmar: true, nota: 'pendiente' },
         aspecto_fisico: { no_aplica: true },
-        tipo_empaque: { no_aplica: true },
         proveedor: { mismo_fabricante: true },
       }),
     });
@@ -97,14 +94,15 @@ describe('semaforo por seccion (D-13, D-26, 8.2)', () => {
     expect(c.secciones.detalle.faltantes).toContain('marca');
   });
 
-  it('la fecha de fabricacion solo se exige en equipos', () => {
-    const insumo = calcularCompletitud({ tipo: 'INSUMO', valores: llenar('INSUMO') });
-    expect(insumo.secciones.especificaciones.faltantes).not.toContain('fecha_fabricacion');
-    const v = llenar('EQUIPO');
-    delete v.fecha_fabricacion;
-    const equipo = calcularCompletitud({ tipo: 'EQUIPO', valores: v });
-    expect(equipo.secciones.especificaciones.faltantes).toContain('fecha_fabricacion');
-    expect(equipo.secciones.especificaciones.estado).toBe('amarillo');
+  it('la fecha de fabricacion es opcional («si aplica»): nunca falta, ni en equipos (reunion 2026-11)', () => {
+    for (const tipo of TIPOS_PRODUCTO) {
+      const v = llenar(tipo);
+      expect(v.fecha_fabricacion, tipo).toBeUndefined();
+      const c = calcularCompletitud({ tipo, valores: v });
+      expect(c.secciones.detalle.faltantes, tipo).not.toContain('fecha_fabricacion');
+      expect(c.secciones.detalle.estado, tipo).toBe('verde');
+      expect(c.secciones.especificaciones.faltantes, tipo).not.toContain('fecha_fabricacion');
+    }
   });
 
   it('la maquina donde se instala se exige al repuesto y al accesorio, no a la montura (D5, P1)', () => {
@@ -141,8 +139,8 @@ describe('R1: diligenciar y luego borrar, desmarcar o cambiar vuelve a pendiente
     }
   });
 
-  it('desmarcar «No aplica» (aspecto fisico, tipo de empaque) vuelve a pendiente', () => {
-    const conNoAplica = llenar('REPUESTO', { aspecto_fisico: { no_aplica: true }, tipo_empaque: { no_aplica: true } });
+  it('desmarcar «No aplica» (aspecto fisico) vuelve a pendiente; el tipo de empaque siempre se elige', () => {
+    const conNoAplica = llenar('REPUESTO', { aspecto_fisico: { no_aplica: true } });
     expect(calcularCompletitud({ tipo: 'REPUESTO', valores: conNoAplica }).secciones.detalle.estado).toBe('verde');
     const sin = calcularCompletitud({ tipo: 'REPUESTO', valores: { ...conNoAplica, aspecto_fisico: null, tipo_empaque: null } });
     expect(sin.secciones.detalle.faltantes.sort()).toEqual(['aspecto_fisico', 'tipo_empaque']);
@@ -154,25 +152,67 @@ describe('R1: diligenciar y luego borrar, desmarcar o cambiar vuelve a pendiente
     expect(calcularCompletitud({ tipo: 'INSUMO', valores: { ...vinculado, proveedor: null } }).secciones.detalle.faltantes).toEqual(['proveedor']);
   });
 
-  it('RIM: sin elegir falta; «No» basta; «Sí» exige la cantidad; volver a «No» deja de exigirla (E2)', () => {
+  it('RIM: lo responde la aduana; sin elegir falta, «No» o «Sí» bastan y no tiñen las secciones del area', () => {
     const base = llenar('INSUMO');
     const sinElegir = calcularCompletitud({ tipo: 'INSUMO', valores: { ...base, requiere_rim: null } });
-    expect(sinElegir.secciones.especificaciones.faltantes).toEqual(['requiere_rim']);
+    expect(sinElegir.aduana.faltantes).toContain('requiere_rim');
+    expect(sinElegir.secciones.especificaciones.faltantes).not.toContain('requiere_rim');
+    expect(sinElegir.area.completo).toBe(true);
 
-    const no = calcularCompletitud({ tipo: 'INSUMO', valores: { ...base, requiere_rim: 'NO' } });
-    expect(no.secciones.especificaciones).toMatchObject({ estado: 'verde', faltan: 0 });
+    for (const rim of ['NO', 'SI']) {
+      const c = calcularCompletitud({ tipo: 'INSUMO', valores: { ...base, requiere_rim: rim } });
+      expect(c.aduana.faltantes, rim).not.toContain('requiere_rim');
+      expect(c.secciones.especificaciones, rim).toMatchObject({ estado: 'verde', faltan: 0 });
+      expect(c.area.total, rim).toBe(sinElegir.area.total);
+    }
+    // La cantidad del RIM se retiro: un valor viejo guardado no se pide ni cuenta.
+    const viejo = calcularCompletitud({ tipo: 'INSUMO', valores: { ...base, requiere_rim: 'SI', cantidad_rim: { valor: '5', expresion: '5' } } });
+    expect(viejo.secciones.especificaciones.estado).toBe('verde');
+    expect(viejo.area.total).toBe(sinElegir.area.total);
+  });
 
-    const si = calcularCompletitud({ tipo: 'INSUMO', valores: { ...base, requiere_rim: 'SI' } });
-    expect(si.secciones.especificaciones).toMatchObject({ estado: 'amarillo', faltan: 1, faltantes: ['cantidad_rim'] });
+  it('requiere_rim cuenta en los faltantes de la aduana y no en los del cliente, en los cinco tipos', () => {
+    for (const tipo of TIPOS_PRODUCTO) {
+      const c = calcularCompletitud({ tipo, valores: llenar(tipo) });
+      expect(c.aduana.faltantes, tipo).toContain('requiere_rim');
+      expect(c.aduana.total, tipo).toBe(6);
+      for (const seccion of ['producto', 'detalle', 'especificaciones'] as const) {
+        expect(c.secciones[seccion].faltantes, `${tipo}/${seccion}`).not.toContain('requiere_rim');
+      }
+      expect(c.area.completo, tipo).toBe(true);
+      const respondida = calcularCompletitud({ tipo, valores: llenar(tipo, { requiere_rim: 'NO' }) });
+      expect(respondida.aduana.faltantes, tipo).not.toContain('requiere_rim');
+      expect(respondida.aduana.total, tipo).toBe(6);
+    }
+  });
 
-    const siConCantidad = calcularCompletitud({ tipo: 'INSUMO', valores: { ...base, requiere_rim: 'SI', cantidad_rim: { valor: '5', expresion: '5' } } });
-    expect(siConCantidad.secciones.especificaciones.estado).toBe('verde');
-    expect(siConCantidad.area.total).toBe(no.area.total + 1);
+  it('empaque: el tipo siempre se pide; Bidón y Paquete exigen ademas el contenido, Unidad no', () => {
+    for (const tipo of TIPOS_PRODUCTO) {
+      const base = llenar(tipo);
+      const sinTipo = calcularCompletitud({ tipo, valores: { ...base, tipo_empaque: null } });
+      expect(sinTipo.secciones.detalle.faltantes, tipo).toEqual(['tipo_empaque']);
 
-    // La cantidad sigue guardada, pero con «No» ya no se pide.
-    const otraVezNo = calcularCompletitud({ tipo: 'INSUMO', valores: { ...base, requiere_rim: 'NO', cantidad_rim: { valor: '5', expresion: '5' } } });
-    expect(otraVezNo.secciones.especificaciones.estado).toBe('verde');
-    expect(otraVezNo.area.total).toBe(no.area.total);
+      const unidad = calcularCompletitud({ tipo, valores: { ...base, tipo_empaque: 'Unidad' } });
+      expect(unidad.secciones.detalle.estado, tipo).toBe('verde');
+      expect(unidad.secciones.detalle.faltantes, tipo).not.toContain('cantidad_empaque');
+
+      for (const empaque of ['Bidón', 'Paquete']) {
+        const sinContenido = calcularCompletitud({ tipo, valores: { ...base, tipo_empaque: empaque } });
+        expect(sinContenido.secciones.detalle, `${tipo}/${empaque}`).toMatchObject({ estado: 'amarillo', faltan: 1, faltantes: ['cantidad_empaque'] });
+        expect(sinContenido.area.total, `${tipo}/${empaque}`).toBe(unidad.area.total + 1);
+
+        const conContenido = calcularCompletitud({ tipo, valores: { ...base, tipo_empaque: empaque, cantidad_empaque: '20 litros' } });
+        expect(conContenido.secciones.detalle.estado, `${tipo}/${empaque}`).toBe('verde');
+
+        const enBlanco = calcularCompletitud({ tipo, valores: { ...base, tipo_empaque: empaque, cantidad_empaque: '   ' } });
+        expect(enBlanco.secciones.detalle.faltantes, `${tipo}/${empaque}`).toEqual(['cantidad_empaque']);
+      }
+
+      // Volver a «Unidad» con un contenido ya guardado: deja de pedirse y no cuenta.
+      const regreso = calcularCompletitud({ tipo, valores: { ...base, tipo_empaque: 'Unidad', cantidad_empaque: '20 litros' } });
+      expect(regreso.secciones.detalle.estado, tipo).toBe('verde');
+      expect(regreso.area.total, tipo).toBe(unidad.area.total);
+    }
   });
 
   it('desmarcar «No aplica» en la aduana (restricciones, observaciones) vuelve a pendiente', () => {
@@ -241,7 +281,7 @@ describe('A2: solicitud de la aduana y respuesta del area', () => {
   it('una solicitud sin respuesta deja pendiente la parte de la aduana (sin teñir las secciones del area)', () => {
     const c = calcularCompletitud({ tipo: 'REPUESTO', valores: conSolicitud() });
     expect(c.aduana.faltantes).toEqual(['respuesta_area', 'clasificacion_finalizada']);
-    expect(c.aduana.total).toBe(6);
+    expect(c.aduana.total).toBe(7);
     expect(c.area.completo).toBe(true);
     expect(solicitudSinRespuesta(conSolicitud())).toBe(true);
   });
@@ -261,6 +301,6 @@ describe('A2: solicitud de la aduana y respuesta del area', () => {
     const noAplica = { ...conSolicitud({ texto: 'x', sobre: 'otra' }), descripciones_minimas: { no_aplica: true } };
     const c = calcularCompletitud({ tipo: 'REPUESTO', valores: noAplica });
     expect(c.aduana.faltantes).toEqual(['clasificacion_finalizada']);
-    expect(c.aduana.total).toBe(5);
+    expect(c.aduana.total).toBe(6);
   });
 });

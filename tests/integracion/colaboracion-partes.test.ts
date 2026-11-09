@@ -103,9 +103,9 @@ describe('tablero: quien falta', () => {
     // Un borrador que nadie ha enviado dice lo mismo que el listado, no «Sin responsable».
     expect(filaSolo?.bloqueo).toMatchObject({ clase: 'sin_enviar', texto: 'Aún sin enviar' });
     expect(filaRep?.partes.detalle.responsables.map((r) => r.nombre)).toEqual(['Edward']);
-    // Producto y Especificaciones siguen sin dueno: la razon inmediata es esa, no Edward.
+    // Producto sigue sin dueno (Especificaciones ya no tiene campos del cliente): la razon inmediata es esa, no Edward.
     expect(filaRep?.bloqueo.clase).toBe('sin_responsable');
-    expect(filaRep?.bloqueo.texto).toBe('Sin responsable en Producto y Especificaciones');
+    expect(filaRep?.bloqueo.texto).toBe('Sin responsable en Producto');
     expect(t.porPersona.find((p) => p.nombre === 'Edward')?.masAntiguaDias).toBeGreaterThanOrEqual(6);
     expect(t.resumen.abiertas).toBe(t.abiertas.length);
   });
@@ -115,9 +115,9 @@ describe('tablero: quien falta', () => {
     await nuevaFicha(e, { codigo: 'TAB-0005' }); // borrador: no cuenta
     const enviada = await nuevaFicha(e, { codigo: 'TAB-0006' });
     await enviarA(e.ctx(e.admin, T0), { referenciaId: enviada, destinatarios: [{ usuarioId: e.edward.usuarioId, secciones: ['detalle'] }] });
-    // Con una asignacion activa no cuenta, aunque Producto y Especificaciones no tengan dueno.
+    // Con una asignacion activa no cuenta, aunque Producto no tenga dueno.
     expect((await tableroDe(e.db, e.admin, T0)).resumen.sinResponsable).toBe(antes);
-    await e.db.update(asignacion).set({ estado: 'hecha' }).where(eq(asignacion.referenciaId, enviada));
+    await e.db.update(asignacion).set({ estado: 'hecha', completadaEn: new Date() }).where(eq(asignacion.referenciaId, enviada));
     expect((await tableroDe(e.db, e.admin, T0)).resumen.sinResponsable).toBe(antes + 1);
   });
 

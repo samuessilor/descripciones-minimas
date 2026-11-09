@@ -35,8 +35,9 @@ export function TarjetaCuerpo({ className, children }: { className?: string; chi
 
 /**
  * Seccion de la ficha con semaforo propio (8.2, 10.2): numero grande, titulo, sello de estado y contador
- * («Faltan 3 de 8»). El encabezado es un boton que pliega/despliega; en movil la ficha puede abrir
- * plegadas las secciones completas (`defaultAbierta={false}`) y en escritorio abiertas.
+ * («Faltan 3 de 8»). El encabezado es un boton que pliega/despliega. Por defecto arranca PLEGADA (reunion 2026-11:
+ * «todos los desplegables contraidos para que se vea limpio»): el encabezado ya dice si esta completa (verde) o
+ * cuanto falta (amarillo); quien llena abre la que tiene pendiente.
  *
  *   <SeccionFicha id="producto" numero={1} titulo="Producto" color="verde" estadoTexto="Completa">…</SeccionFicha>
  *   <SeccionFicha id="detalle"  numero={2} titulo="Detalle"  color="amarillo" estadoTexto="Faltan 3 de 8">…</SeccionFicha>
@@ -53,7 +54,7 @@ export function SeccionFicha({
   etiquetaEstadoAria,
   resumen,
   abierta,
-  defaultAbierta = true,
+  defaultAbierta = false,
   onAlternar,
   plegable = true,
   pulso = false,
@@ -80,7 +81,8 @@ export function SeccionFicha({
   const generado = useId().replace(/:/g, '');
   const [interna, setInterna] = useState(defaultAbierta);
   const esControlada = abierta !== undefined;
-  const visible = esControlada ? abierta : interna;
+  // Una seccion que no se pliega siempre muestra su contenido.
+  const visible = !plegable || (esControlada ? abierta : interna);
   const idTitulo = `${id}-titulo`;
   const idCuerpo = `${id}-cuerpo-${generado}`;
 
@@ -147,7 +149,7 @@ export function SeccionFicha({
       ) : (
         <h2 className="m-0 flex min-h-16 flex-wrap items-center gap-x-3.5 gap-y-2.5 px-4 py-3 sm:px-5">{cabecera}</h2>
       )}
-      <div id={idCuerpo} hidden={!visible} className="border-t border-borde-suave px-4 py-5 sm:px-5">
+      <div id={idCuerpo} hidden={!visible} role="region" aria-labelledby={idTitulo} className="border-t border-borde-suave px-4 py-5 sm:px-5">
         {children}
       </div>
     </section>

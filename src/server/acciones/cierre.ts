@@ -15,9 +15,10 @@ import {
   evaluarCierre,
   transicionar,
   TransicionInvalida,
+  type Aviso,
   type EntradaCierre,
   type ModoCierre,
-  type ResultadoCierre,
+  type ReglaCierre,
 } from '@/dominio/estado';
 import { motivoVisible } from '@/dominio/normalizacion';
 import { puede } from '@/dominio/permisos';
@@ -47,8 +48,15 @@ function etiquetaCampo(clave: string): string {
   return getCampo(clave)?.etiqueta ?? clave;
 }
 
+/** G7 (reunion 2026-11): la aduana debe responder el RIM antes de cerrar; es una guarda dura, en cualquier modo. */
+export type ReglaCierreAduana = ReglaCierre | 'G7';
+export type AvisoCierreAduana = Omit<Aviso, 'regla'> & { regla: ReglaCierreAduana };
+export type ResultadoCierreAduana =
+  | { ok: true; advertencias: AvisoCierreAduana[]; requiereMotivo: boolean }
+  | { ok: false; bloqueos: AvisoCierreAduana[] };
+
 export interface PanoramaCierre {
-  resultado: ResultadoCierre;
+  resultado: ResultadoCierreAduana;
   modo: ModoCierre;
 }
 
@@ -77,10 +85,21 @@ export function evaluarCierreDeFicha(actor: Actor, ficha: FilaReferencia, modo: 
     observacionesVacias: estaVacio(valores.observaciones_aduana),
     modo,
   };
-  return { resultado: evaluarCierre(entrada), modo };
+  const base = evaluarCierre(entrada);
+
+  // G7: «¿Requiere registro de importacion (RIM)?» lo responde la aduana (grupo A); sin respuesta no se cierra.
+  if (estaVacio(valores.requiere_rim)) {
+    const g7: AvisoCierreAduana = {
+      regla: 'G7',
+      mensaje: `Falta responder «${etiquetaCampo('requiere_rim')}» (Sí o No) antes de cerrar la clasificación.`,
+      detalle: [],
+    };
+    return { resultado: { ok: false, bloqueos: [...(base.ok ? [] : base.bloqueos), g7] }, modo };
+  }
+  return { resultado: base, modo };
 }
 
-function textoAdvertencias(r: Extract<ResultadoCierre, { ok: true }>): string {
+function textoAdvertencias(r: Extract<ResultadoCierreAduana, { ok: true }>): string {
   return r.advertencias.map((a) => (a.detalle.length > 0 ? `${a.mensaje} (${a.detalle.join(', ')})` : a.mensaje)).join('; ');
 }
 

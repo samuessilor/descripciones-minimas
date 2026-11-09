@@ -8,7 +8,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect as expectBase, test, type Page } from '@playwright/test';
 import sharp from 'sharp';
-import { contextoAutenticado, entrarComo, vigilarErrores } from './ayudas';
+import { abrirSeccion, abrirTodo, botonDeSeccion, contextoAutenticado, entrarComo, vigilarErrores } from './ayudas';
 
 // El servidor de desarrollo compila cada ruta la primera vez y la maquina comparte CPU: margen amplio.
 const expect = expectBase.configure({ timeout: 150_000 });
@@ -105,6 +105,15 @@ test('ficha: llenar las tres secciones, ver amarillo y verde por seccion, y reca
   await expect(barra.getByRole('button', { name: /Especificaciones.*Falta/i })).toBeVisible();
   await expect(page.getByRole('status', { name: /Estado de la referencia: pendiente/i })).toBeVisible();
 
+  // Todo plegado por defecto, salvo Producto en un borrador recien creado sin nada lleno (reunion 2026-11).
+  await expect(botonDeSeccion(page, 'producto')).toHaveAttribute('aria-expanded', 'true');
+  await expect(botonDeSeccion(page, 'detalle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(botonDeSeccion(page, 'especificaciones')).toHaveAttribute('aria-expanded', 'false');
+  // El encabezado ya dice cuanto falta, sin abrir: amarillo «Faltan N» y «x de N campos».
+  await expect(botonDeSeccion(page, 'detalle')).toContainText(/Faltan \d+/);
+  await expect(botonDeSeccion(page, 'detalle')).toContainText(/0 de \d+ campos/);
+  await abrirTodo(page);
+
   // Producto
   await llenar(page, 'descripcion_factura', () => page.getByLabel(/^Descripción según factura/).fill('LIMPIADOR ALCALINO (prueba)'));
   await llenar(page, 'uso', () => page.getByLabel(/^Uso$/).fill('Preparar la superficie del lente antes del recubrimiento.'));
@@ -129,15 +138,14 @@ test('ficha: llenar las tres secciones, ver amarillo y verde por seccion, y reca
   await expect(bloque(page, 'pais_origen')).toHaveAttribute('data-fase', /^(guardado|limpio)$/);
   await llenar(page, 'fabricante', () => page.getByLabel(/^Fabricante/).fill('Fabricante de prueba'));
   await llenar(page, 'proveedor', () => page.getByLabel(/^Proveedor/).fill('Proveedor de prueba'));
-  await llenar(page, 'tipo_empaque', () => page.getByLabel(/^Tipo de empaque/).fill('Bidón de 20 kg'));
+  // Tipo de empaque: lista fija sin «No aplica». Con Bidón o Paquete aparece «Contenido por empaque».
+  await page.getByLabel(/^Tipo de empaque/).click();
+  await page.getByRole('option', { name: 'Bidón' }).click();
+  await expect(bloque(page, 'tipo_empaque')).toHaveAttribute('data-fase', /^(guardado|limpio)$/);
+  await llenar(page, 'cantidad_empaque', () => page.getByLabel(/^Contenido por empaque/).fill('20 litros'));
 
-  // Especificaciones: con RIM «Sí» aparece la cantidad, y la operacion se interpreta.
-  await page.getByLabel(/^¿Requiere registro de importación/).selectOption('SI');
-  await expect(bloque(page, 'requiere_rim')).toHaveAttribute('data-fase', /^(guardado|limpio)$/);
-  await page.getByLabel(/^Cantidad$/).fill('13x12');
-  await expect(page.getByText('= 156', { exact: true })).toBeVisible();
-  await page.keyboard.press('Tab');
-  await expect(bloque(page, 'cantidad_rim')).toHaveAttribute('data-fase', /^(guardado|limpio)$/);
+  // Especificaciones: el RIM lo responde la aduana, asi que el area no lo ve como campo suyo.
+  await expect(page.getByLabel(/^¿Requiere registro de importación/)).toHaveCount(0);
 
   // Las tres secciones en verde, pero el sello sigue amarillo (solo la aduana cierra).
   for (const s of ['Producto', 'Detalle', 'Especificaciones']) {
@@ -145,14 +153,21 @@ test('ficha: llenar las tres secciones, ver amarillo y verde por seccion, y reca
   }
   await expect(page.getByRole('status', { name: /Estado de la referencia: pendiente/i })).toBeVisible();
   await expect(page.getByText('Guardado', { exact: true }).first()).toBeVisible();
+  // Lo que la persona abrio sigue abierto aunque la ficha se refresque por detras (los guardados la refrescan).
+  for (const s of ['producto', 'detalle', 'especificaciones']) await expect(botonDeSeccion(page, s)).toHaveAttribute('aria-expanded', 'true');
 
-  // Recargar conserva todo, con autor y fecha.
+  // Recargar conserva todo, con autor y fecha. Al recargar, todo vuelve a arrancar plegado: el encabezado dice «Completa».
   await page.reload();
   await esperarFicha(page);
+  for (const s of ['producto', 'detalle', 'especificaciones']) {
+    await expect(botonDeSeccion(page, s)).toHaveAttribute('aria-expanded', 'false');
+    await expect(botonDeSeccion(page, s)).toContainText('Completa');
+  }
+  await abrirTodo(page);
   await expect(page.getByLabel(/^Uso$/)).toHaveValue('Preparar la superficie del lente antes del recubrimiento.');
   await expect(page.getByLabel('Componente 1', { exact: true })).toHaveValue('1-metoxi-2-propanol');
   await expect(page.getByLabel(/^Marca/)).toHaveValue('NAGA');
-  await expect(page.getByLabel(/^Cantidad$/)).toHaveValue('13x12');
+  await expect(page.getByLabel(/^Contenido por empaque/)).toHaveValue('20 litros');
   await expect(bloque(page, 'uso')).toContainText('Tú');
   expect(errores, errores.join('\n')).toEqual([]);
 });
@@ -165,6 +180,7 @@ test('segunda sesion: editar un valor ajeno pide motivo y, si se guardo a la vez
     for (const p of [a.page, b.page]) {
       await p.goto(`/referencias/${idFicha}`);
       await esperarFicha(p);
+      await abrirTodo(p);
     }
 
     // Valor ajeno: Carla edita el «Uso» de Edgar -> franja de motivo; sin motivo no se guarda.
@@ -328,6 +344,7 @@ test('foto: sube con el clip, reprocesa, no se sirve sin permiso, rechaza un arc
   const errores = vigilarErrores(page);
   await entrarComo(page, request, 'solicitante@desarrollo.invalid', `/referencias/${idFicha}`);
   await esperarFicha(page);
+  await abrirSeccion(page, 'especificaciones'); // las fotos viven en Especificaciones, plegada por defecto
 
   const png = await sharp({ create: { width: 2400, height: 1600, channels: 3, background: { r: 20, g: 80, b: 160 } } }).png().toBuffer();
   await page.locator('input[data-adjuntar]').setInputFiles({ name: 'foto-prueba.png', mimeType: 'image/png', buffer: png });
@@ -372,23 +389,56 @@ test('foto: sube con el clip, reprocesa, no se sirve sin permiso, rechaza un arc
   expect(errores.filter((e) => !/400|422/.test(e)), errores.join('\n')).toEqual([]);
 });
 
-test('ficha: sin desborde horizontal en 360 px, secciones completas plegadas en movil y axe sin violaciones serias', async ({ page, request }) => {
+test('ficha: sin desborde horizontal en 360 px, todas las secciones plegadas y axe sin violaciones serias', async ({ page, request }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await entrarComo(page, request, 'solicitante@desarrollo.invalid', `/referencias/${idFicha}`);
   await esperarFicha(page);
-  expect(await graves(page), 'axe en la ficha').toEqual([]);
+  // En escritorio tambien arrancan plegadas (esta ficha ya tiene datos, asi que ni Producto se abre solo).
+  for (const s of ['producto', 'detalle', 'especificaciones']) await expect(botonDeSeccion(page, s)).toHaveAttribute('aria-expanded', 'false');
+  expect(await graves(page), 'axe en la ficha plegada').toEqual([]);
+  await abrirTodo(page);
+  expect(await graves(page), 'axe en la ficha desplegada').toEqual([]);
 
   await page.setViewportSize({ width: 360, height: 740 });
   await page.reload();
   await esperarFicha(page);
   const { ancho, visible } = await page.evaluate(() => ({ ancho: document.documentElement.scrollWidth, visible: document.documentElement.clientWidth }));
   expect(ancho).toBeLessThanOrEqual(visible);
-  // En movil las secciones completas arrancan plegadas.
-  await expect(page.locator('#producto h2 button')).toHaveAttribute('aria-expanded', 'false');
+  // En movil tambien: todo plegado.
+  await expect(botonDeSeccion(page, 'producto')).toHaveAttribute('aria-expanded', 'false');
   expect(await graves(page), 'axe en la ficha a 360 px').toEqual([]);
 
   await page.goto('/referencias');
   const m = await page.evaluate(() => ({ ancho: document.documentElement.scrollWidth, visible: document.documentElement.clientWidth }));
   expect(m.ancho).toBeLessThanOrEqual(m.visible);
   expect(await graves(page), 'axe en el listado a 360 px').toEqual([]);
+});
+
+test('ficha: el encabezado se opera con teclado y un enlace con ancla abre solo su seccion', async ({ page, request }) => {
+  await entrarComo(page, request, 'solicitante@desarrollo.invalid', '/referencias');
+  await page.goto(`/referencias/${idFicha}#detalle`);
+  await esperarFicha(page);
+  // El ancla abre Detalle y deja las demas plegadas.
+  await expect(botonDeSeccion(page, 'detalle')).toHaveAttribute('aria-expanded', 'true');
+  await expect(botonDeSeccion(page, 'producto')).toHaveAttribute('aria-expanded', 'false');
+  await expect(botonDeSeccion(page, 'especificaciones')).toHaveAttribute('aria-expanded', 'false');
+
+  // Con teclado: el boton recibe foco y Enter abre y cierra; el contenido plegado no es alcanzable.
+  const producto = botonDeSeccion(page, 'producto');
+  await producto.focus();
+  await expect(producto).toBeFocused();
+  await expect(page.getByLabel(/^Uso$/)).toBeHidden();
+  await page.keyboard.press('Enter');
+  await expect(producto).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByLabel(/^Uso$/)).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(producto).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByLabel(/^Uso$/)).toBeHidden();
+
+  // La zona de la aduana: bloques plegados, con su estado en el encabezado, y el atajo de arriba abre el bloque.
+  const partida = botonDeSeccion(page, 'aduana-partida');
+  await expect(partida).toHaveAttribute('aria-expanded', 'false');
+  await expect(partida).toContainText(/Falta 1|Completa/);
+  await page.getByRole('navigation', { name: 'Pasos de la zona de la aduana' }).getByRole('link', { name: /Partida/ }).click();
+  await expect(partida).toHaveAttribute('aria-expanded', 'true');
 });

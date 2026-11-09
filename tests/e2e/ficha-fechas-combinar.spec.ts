@@ -3,7 +3,7 @@
  * no pega dos textos de una linea. Parte de una ficha propia.
  */
 import { expect as expectBase, test, type Locator, type Page } from '@playwright/test';
-import { contextoAutenticado, entrarComo } from './ayudas';
+import { abrirSeccion, contextoAutenticado, entrarComo } from './ayudas';
 
 const expect = expectBase.configure({ timeout: 90_000 });
 
@@ -36,6 +36,7 @@ async function versionesDe(page: Page, id: string, campo: string): Promise<unkno
 test('una fecha tecleada rapido no guarda valores intermedios: guarda una sola vez y completa al salir del campo', async ({ page, request }) => {
   await entrarComo(page, request, 'solicitante@desarrollo.invalid');
   const id = (await crearFicha(page)).split('/').pop() as string;
+  await abrirSeccion(page, 'producto'); // arranca abierta en un borrador nuevo, pero no dependemos de eso
 
   const antes = (await versionesDe(page, id, 'fecha_solicitud')).length;
   const fecha = page.getByLabel(/^Fecha de solicitud/);
@@ -61,6 +62,9 @@ test('«Combinar» en un campo de una linea separa los dos textos', async ({ bro
     const url = await crearFicha(a.page);
     await b.page.goto(url);
     await expect(b.page.locator('[data-barra-ficha]')).toBeVisible({ timeout: 120_000 });
+    // El Fabricante vive en Detalle, que arranca plegada.
+    await abrirSeccion(a.page, 'detalle');
+    await abrirSeccion(b.page, 'detalle');
 
     const fabB = b.page.getByLabel(/^Fabricante/);
     await fabB.click();

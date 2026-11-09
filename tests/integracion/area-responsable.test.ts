@@ -122,7 +122,7 @@ describe('C1: responsabilidad derivada del area', () => {
     const id = await crear(consumibles, 'Mantenimiento');
     const fila = (await delArea(mant)).find((p) => p.referenciaId === id);
     expect(fila).toMatchObject({ asignacionId: null, delArea: 'Mantenimiento', pedido: 'completar' });
-    expect(fila?.falta).toMatch(/^Falta: Producto, Detalle y Especificaciones/);
+    expect(fila?.falta).toMatch(/^Falta: Producto y Detalle/);
     const resumen = await resumenInicioDe(e.db, mant, new Date());
     expect(resumen.pendientesParaMi).toBe((await pendientesDe(e.db, mant, new Date())).length);
     expect((await delArea(consumibles)).some((p) => p.referenciaId === id)).toBe(false);
@@ -132,10 +132,10 @@ describe('C1: responsabilidad derivada del area', () => {
 
   it('deja de ser del area cuando una persona tiene en la mano lo que falta, o cuando el area ya lo lleno', async () => {
     const id = await crear(consumibles, 'Mantenimiento');
-    // Solo Detalle para Charles: Producto y Especificaciones siguen siendo del area.
+    // Solo Detalle para Charles: Producto sigue siendo del area (Especificaciones ya no tiene nada del cliente).
     await e.db.insert(asignacion).values({ referenciaId: id, deUsuarioId: consumibles.usuarioId, aUsuarioId: e.charles.usuarioId, pedido: 'completar', secciones: 'detalle', estado: 'pendiente' });
     const parcial = (await delArea(mant)).find((p) => p.referenciaId === id);
-    expect(parcial?.falta).toMatch(/^Falta: Producto y Especificaciones/);
+    expect(parcial?.falta).toMatch(/^Falta: Producto/);
     // Todo para Charles: ya no es del area.
     await e.db.update(asignacion).set({ secciones: null }).where(eq(asignacion.referenciaId, id));
     expect((await delArea(mant)).some((p) => p.referenciaId === id)).toBe(false);
@@ -158,7 +158,7 @@ describe('C1: responsabilidad derivada del area', () => {
     const fMant = tablero.abiertas.find((f) => f.id === deMant)!;
     expect(fMant.area).toBe('Mantenimiento');
     expect(fMant.bloqueo).toMatchObject({ clase: 'persona' });
-    expect(fMant.bloqueo.texto).toContain('Área Mantenimiento (Producto, Detalle y Especificaciones)');
+    expect(fMant.bloqueo.texto).toContain('Área Mantenimiento (Producto y Detalle)');
     expect(tablero.abiertas.find((f) => f.id === deMarketing)?.bloqueo.clase).toBe('sin_responsable');
 
     const sin = await listarPagina(e.db, e.admin, { ...FILTROS_VACIOS, sinResponsable: true }, ahora);

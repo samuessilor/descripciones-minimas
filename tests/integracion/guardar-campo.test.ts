@@ -139,22 +139,31 @@ describe('escritura basica', () => {
 });
 
 describe('normalizacion de numeros y listas', () => {
-  it('la cantidad del RIM guarda resultado y expresion', async () => {
+  it('el tipo de empaque es una lista fija (Bidón, Paquete, Unidad) y el contenido por empaque es texto libre', async () => {
     const f = await nuevaFicha(e);
-    expect((await guardar(f, 'requiere_rim', 'Sí')).valor).toBe('SI');
-    const c = await guardar(f, 'cantidad_rim', '13x12');
-    expect(c.valor).toEqual({ valor: '156', expresion: '13x12' });
-    const h = await historial(f, 'cantidad_rim');
-    expect(h[0]!.valor).toEqual({ valor: '156', expresion: '13x12' });
+    expect((await guardar(f, 'tipo_empaque', 'Bidón')).valor).toBe('Bidón');
+    expect((await guardar(f, 'cantidad_empaque', '20 litros')).valor).toBe('20 litros');
+    expect((await historial(f, 'cantidad_empaque'))[0]!.valor).toBe('20 litros');
+    // Cualquier cosa fuera de la lista se rechaza (ya no es texto libre ni admite «No aplica»).
+    await fallaCon(guardar(f, 'tipo_empaque', 'Tonel'), 'VALIDACION');
+    await fallaCon(guardar(f, 'tipo_empaque', { no_aplica: true }), 'VALIDACION');
+    expect((await historial(f, 'tipo_empaque')).map((h) => h.valor)).toEqual(['Bidón']);
+    expect((await guardar(f, 'tipo_empaque', 'Unidad', e.edward, { motivo: 'No viene en bidón' })).escrito).toBe(true);
   });
 
-  it('una cantidad ambigua no se guarda y devuelve las opciones; el usuario elige', async () => {
+  it('requiere_rim lo escribe la aduana (o el admin), no el solicitante', async () => {
     const f = await nuevaFicha(e);
-    const err = await fallaCon(guardar(f, 'cantidad_rim', '1.374'), 'VALIDACION');
-    expect(JSON.stringify(err.detalle)).toContain('AMBIGUO');
+    await asignarAAduana(e, f, e.brian);
+    await fallaCon(guardar(f, 'requiere_rim', 'Sí', e.edward), 'SIN_PERMISO');
+    expect((await guardar(f, 'requiere_rim', 'Sí', e.brian)).valor).toBe('SI');
+  });
+
+  it('la cantidad del RIM fue retirada: su historial se conserva pero ya no se escribe', async () => {
+    const f = await nuevaFicha(e);
+    await asignarAAduana(e, f, e.brian);
+    await fallaCon(guardar(f, 'cantidad_rim', '13x12', e.brian), 'VALIDACION');
+    await fallaCon(guardar(f, 'cantidad_rim', '13x12', e.admin), 'VALIDACION');
     expect(await historial(f, 'cantidad_rim')).toHaveLength(0);
-    const ok = await guardar(f, 'cantidad_rim', { texto: '1.374', desambiguar: 'entero' });
-    expect((ok.valor as { valor: string }).valor).toBe('1374');
   });
 
   it('los campos retirados (valor unitario, cantidad a radicar, clasificadores) ya no se escriben', async () => {
@@ -231,13 +240,13 @@ describe('permisos por grupo de campo y rol (3.3, 9.2, D-02)', () => {
 
   it('una ficha CLASIFICADA es solo lectura: FICHA_CERRADA', async () => {
     const f = await nuevaFicha(e);
-    await e.db.update(referencia).set({ estado: 'CLASIFICADA', clasificadaEn: new Date() }).where(eq(referencia.id, f));
+    await e.db.update(referencia).set({ estado: 'CLASIFICADA', clasificadaEn: new Date(), clasificadaPor: e.admin.usuarioId }).where(eq(referencia.id, f));
     await fallaCon(guardar(f, 'uso', 'x'), 'FICHA_CERRADA');
   });
 
   it('una ficha archivada es solo lectura', async () => {
     const f = await nuevaFicha(e);
-    await e.db.update(referencia).set({ archivadaEn: new Date(), archivadaPor: e.admin.usuarioId, motivoArchivo: 'prueba' }).where(eq(referencia.id, f));
+    await e.db.update(referencia).set({ archivadaEn: new Date(), archivadaPor: e.admin.usuarioId, motivoArchivo: 'prueba', estadoPrevioArchivo: 'BORRADOR' }).where(eq(referencia.id, f));
     await fallaCon(guardar(f, 'uso', 'x'), 'FICHA_CERRADA');
   });
 

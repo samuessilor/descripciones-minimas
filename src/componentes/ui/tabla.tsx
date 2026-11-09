@@ -108,6 +108,7 @@ export function TablaDatos<T>({
                         {esEnlace ? (
                           <Link
                             href={href}
+                            prefetch={false}
                             aria-label={etiquetaEnlace?.(f)}
                             className="whitespace-nowrap font-semibold text-tinta after:absolute after:inset-0 after:content-[''] hover:text-azul-700 focus-visible:outline-offset-[-2px]"
                           >
@@ -154,7 +155,7 @@ export function TablaDatos<T>({
             <li key={clave(f)} className="relative rounded-xl border border-borde-suave bg-superficie p-4 shadow-suave active:bg-azul-50">
               {cuerpo}
               {href ? (
-                <Link href={href} aria-label={etiquetaEnlace?.(f) ?? 'Abrir'} className="absolute inset-0 rounded-xl" />
+                <Link href={href} prefetch={false} aria-label={etiquetaEnlace?.(f) ?? 'Abrir'} className="absolute inset-0 rounded-xl" />
               ) : null}
             </li>
           );

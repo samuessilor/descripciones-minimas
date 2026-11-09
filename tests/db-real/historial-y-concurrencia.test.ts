@@ -226,7 +226,7 @@ describe('P-02 en Postgres real: concurrencia por campo (CA-14, 9.5)', () => {
       ['funciones', 'F'],
       ['proveedor', 'P'],
       ['fabricante', 'Fab'],
-      ['tipo_empaque', 'E'],
+      ['tipo_empaque', 'Unidad'],
       ['informacion_adicional', 'I'],
       ['materia_constitutiva', 'M'],
       ['descripcion_factura', 'D'],

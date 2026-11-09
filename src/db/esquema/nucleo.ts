@@ -93,10 +93,7 @@ export const referencia = pgTable(
   (t) => [
     // TOTAL, no parcial: archivar NO libera el codigo (C-14, RV-10).
     uniqueIndex('referencia_codigo_norm_unico').on(t.codigoNorm),
-    index('referencia_estado_idx').on(t.estado),
-    index('referencia_tipo_idx').on(t.tipoProducto),
     index('referencia_creada_idx').on(sql`${t.creadaEn} desc`, t.id),
-    index('referencia_partida_idx').on(t.partida),
     check('referencia_tipo_valido', sql`${t.tipoProducto} in ('INSUMO','REPUESTO','EQUIPO','ACCESORIO','MONTURA')`),
     check('referencia_estado_valido', sql`${t.estado} in ('BORRADOR','EN_GESTION','CLASIFICADA')`),
     check(
@@ -104,6 +101,15 @@ export const referencia = pgTable(
       sql`${t.estadoPrevioArchivo} is null or ${t.estadoPrevioArchivo} in ('BORRADOR','EN_GESTION','CLASIFICADA')`,
     ),
     check('referencia_dias_pausa_no_negativo', sql`${t.diasPausa} >= 0`),
+    check(
+      'referencia_clasificada_coherente',
+      sql`(${t.estado} = 'CLASIFICADA') = (${t.clasificadaEn} is not null and ${t.clasificadaPor} is not null)`,
+    ),
+    check(
+      'referencia_archivo_coherente',
+      sql`(${t.archivadaEn} is null) = (${t.estadoPrevioArchivo} is null) and (${t.archivadaEn} is null or (${t.archivadaPor} is not null and ${t.motivoArchivo} is not null))`,
+    ),
+    check('referencia_datos_objeto', sql`jsonb_typeof(${t.datos}) = 'object'`),
   ],
 );
 

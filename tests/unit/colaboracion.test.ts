@@ -138,8 +138,8 @@ describe('texto legible de un valor (historial)', () => {
 });
 
 describe('describirFalta: la frase de «Para mí» para la aduana', () => {
-  it('con partida, descripciones, restricciones y observaciones solo falta cerrar; una solicitud sin respuesta espera al area', () => {
-    const completa = { partida_arancelaria: '8501.31.20.00', descripciones_minimas: { no_aplica: true }, restricciones: 'Ninguna', observaciones_aduana: { no_aplica: true } };
+  it('con RIM, partida, descripciones, restricciones y observaciones solo falta cerrar; una solicitud sin respuesta espera al area', () => {
+    const completa = { requiere_rim: 'NO', partida_arancelaria: '8501.31.20.00', descripciones_minimas: { no_aplica: true }, restricciones: 'Ninguna', observaciones_aduana: { no_aplica: true } };
     const c = calcularCompletitud({ tipo: 'INSUMO', valores: completa });
     expect(describirFalta(c, 'clasificar', 'EN_GESTION')).toBe('Falta cerrar la clasificación');
     const sinPartida = calcularCompletitud({ tipo: 'INSUMO', valores: { ...completa, partida_arancelaria: null } });

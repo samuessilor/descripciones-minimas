@@ -314,7 +314,7 @@ export function Demos({ paises }: { paises: { codigo: string; nombre: string }[]
             </Tarjeta>
           </Bloque>
 
-          <Bloque id="ficha" titulo="Sección de la ficha con semáforo" descripcion="Número, título, sello y contador. El encabezado pliega y despliega; en móvil las completas pueden abrir plegadas.">
+          <Bloque id="ficha" titulo="Sección de la ficha con semáforo" descripcion="Número, título, sello y contador. El encabezado pliega y despliega; todas arrancan plegadas.">
             <div className="mx-auto max-w-[45rem] space-y-4">
               <SeccionFicha id="demo-producto" numero={1} titulo="Producto" color="verde" estadoTexto="Completa" resumen="7 de 7 campos" defaultAbierta={false}>
                 <p className="text-tinta-suave">Contenido de la sección Producto.</p>

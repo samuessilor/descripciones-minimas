@@ -26,6 +26,7 @@ function muestra(c: CampoDef, tipo: TipoProducto): unknown {
     case 'area':
       return 'Instrumentos';
     case 'lista':
+      if (c.opciones) return c.opciones[0]; // lista fija (tipo de empaque): Bidón, que ademas activa cantidad_empaque
       return c.catalogo === 'unidad_medida' ? 'Litros' : 'Líquido';
     case 'marca':
       return { texto: 'ACME' };

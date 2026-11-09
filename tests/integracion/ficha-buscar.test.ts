@@ -27,7 +27,7 @@ beforeAll(async () => {
   ids.agencia = await nuevaFicha(e, { codigo: 'AGENCIA-77', nombre: 'Para la agencia A' });
   await asignarAAduana(e, ids.agencia!, e.brian);
   ids.archivada = await nuevaFicha(e, { codigo: 'ARCH-9', nombre: 'Vieja' });
-  await e.db.update(referencia).set({ archivadaEn: new Date() }).where(eq(referencia.id, ids.archivada!));
+  await e.db.update(referencia).set({ archivadaEn: new Date(), archivadaPor: e.admin.usuarioId, motivoArchivo: 'prueba', estadoPrevioArchivo: 'BORRADOR' }).where(eq(referencia.id, ids.archivada!));
   // Marca y proveedor tambien se buscan.
   await guardarCampo(e.ctx(e.edward), { referenciaId: ids.exacta!, campo: 'marca', valor: { texto: 'NAGA Chemicals' }, versionEsperada: 0 });
 });

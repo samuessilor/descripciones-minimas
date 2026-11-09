@@ -21,7 +21,7 @@ import { useAvisos } from '@/componentes/ui/toast';
 import type { AvisoCierreVista, VistaAduana } from '@/server/politicas/aduana';
 import { EncabezadoPaso, fechaCorta, fechaLarga, sinTexto } from './comun';
 
-type Destino = 'partida' | 'descripciones' | 'restricciones';
+type Destino = 'partida' | 'rim' | 'descripciones' | 'restricciones';
 
 export function BloqueCierre({
   vista,
@@ -82,8 +82,8 @@ export function BloqueCierre({
           cerrada
             ? 'La clasificación está cerrada. Todo lo que se escribió sigue guardado en el historial.'
             : vista.permisos.cerrar
-              ? 'Cuando la partida, las descripciones mínimas adicionales, las restricciones y las observaciones estén listas, cierra la clasificación. La referencia pasa a verde.'
-              : 'La aduana cierra la clasificación cuando la partida, las descripciones mínimas adicionales, las restricciones y las observaciones están listas. La referencia pasa a verde.'
+              ? 'Cuando la partida, el RIM, las descripciones mínimas adicionales, las restricciones y las observaciones estén listas, cierra la clasificación. La referencia pasa a verde.'
+              : 'La aduana cierra la clasificación cuando la partida, el RIM, las descripciones mínimas adicionales, las restricciones y las observaciones están listas. La referencia pasa a verde.'
         }
       />
 
@@ -301,7 +301,7 @@ export function BloqueCierre({
 function ResumenPrevio({ cierre, irA }: { cierre: VistaAduana['cierre']; irA: (d: Destino) => void }) {
   const faltas: AvisoCierreVista[] = cierre.ok ? cierre.advertencias : cierre.bloqueos;
   if (faltas.length === 0) {
-    return <Aviso tipo="exito" titulo="Todo está listo para cerrar">La partida está escrita y no hay pendientes.</Aviso>;
+    return <Aviso tipo="exito" titulo="Todo está listo para cerrar">La partida y el RIM están respondidos y no hay pendientes.</Aviso>;
   }
   return (
     <Aviso tipo="aviso" titulo={cierre.ok ? 'Esto sigue pendiente (puedes cerrar igual, con un motivo)' : 'Antes de cerrar'}>
@@ -324,6 +324,7 @@ function ResumenPrevio({ cierre, irA }: { cierre: VistaAduana['cierre']; irA: (d
 
 function destinoDe(regla: string): Destino | null {
   if (regla === 'G1') return 'partida';
+  if (regla === 'G7') return 'rim';
   if (regla === 'A2') return 'descripciones';
   if (regla === 'A3') return 'restricciones';
   return null;
@@ -437,7 +438,7 @@ function DialogoCierre({
             </CampoFormulario>
           </>
         ) : (
-          <p className="text-base text-tinta">No hay nada pendiente: la partida, las descripciones mínimas adicionales, las restricciones y las observaciones están listas.</p>
+          <p className="text-base text-tinta">No hay nada pendiente: la partida, el RIM, las descripciones mínimas adicionales, las restricciones y las observaciones están listas.</p>
         )}
         {error ? (
           <p role="alert" className="rounded-md border border-error/60 bg-error-fondo px-3 py-2 text-sm font-medium text-error">

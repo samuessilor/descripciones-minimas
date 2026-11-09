@@ -121,12 +121,13 @@ export async function sembrarDesarrollo(db: Db): Promise<void> {
     ['pais_origen', 'FR'],
     ['fabricante', 'Fabricante Demo SA'],
     ['proveedor', 'Proveedor Demo SA'],
-    ['tipo_empaque', 'Bidón de 20 kg'],
-    ['requiere_rim', 'SI'],
-    ['cantidad_rim', '13x12'],
+    ['tipo_empaque', 'Bidón'],
+    ['cantidad_empaque', '20 kg'],
     ['informacion_adicional', 'PRUEBA: datos de ejemplo, no representan una mercancía real.'],
   ];
   for (const [campo, valor] of datosInsumo) await escribir(db, solicitante, insumo.id, campo, valor);
+  // El RIM lo responde la aduana al clasificar (reunion 2026-11): el solicitante no lo escribe; la semilla lo pone con el admin.
+  await escribir(db, await actorPorEmail(db, 'admin@desarrollo.invalid'), insumo.id, 'requiere_rim', 'SI');
 
   // 2) Repuesto de ejemplo (estilo "motor serie E 400 W") enviado a la Agencia A: la agencia B no lo ve.
   const repuesto = await crearReferencia(

@@ -11,7 +11,7 @@ import ExcelJS from 'exceljs';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { contextoAutenticado, vigilarErrores } from './ayudas';
+import { abrirSeccion, BLOQUES_ADUANA, contextoAutenticado, vigilarErrores } from './ayudas';
 
 // Varias areas comparten la maquina y el servidor de desarrollo compila al vuelo: margen amplio.
 const expect = esperar.configure({ timeout: 60_000 });
@@ -34,6 +34,8 @@ async function abrirZona(page: Page, id: string): Promise<void> {
   await expect(page.getByRole('heading', { name: 'Zona de la aduana' })).toBeVisible({ timeout: 60_000 });
   // Espera a que la carga termine (el esqueleto desaparece y aparece el primer bloque).
   await expect(page.getByRole('heading', { name: 'Partida arancelaria' })).toBeVisible();
+  // Los bloques de la zona arrancan PLEGADOS (reunion 2026-11): las pruebas los abren para trabajar.
+  for (const bloque of BLOQUES_ADUANA) await abrirSeccion(page, bloque);
 }
 
 const zona = (page: Page) => page.locator('[data-zona="aduana"]');
@@ -95,6 +97,34 @@ test('una partida incompleta dice cuántos dígitos faltan y no se guarda', asyn
   await campo.pressSequentially('8501312000', { delay: 20 });
   await campo.blur();
   await expect(p.getByText(/La partida lleva 10 dígitos/)).toHaveCount(0);
+});
+
+test('RIM: la aduana responde Sí/No en su zona, el área lo ve en solo lectura y sin responderlo no se cierra', async () => {
+  const p = aduana.page;
+  const etiqueta = '¿Requiere registro de importación (RIM)?';
+  const ayuda = 'Si es Sí, Comercio Exterior gestiona el registro por fuera de la plataforma.';
+  await abrirZona(p, idFicha);
+  const rim = zona(p).getByLabel(etiqueta);
+  await expect(rim).toBeVisible();
+  await expect(rim).toHaveValue('');
+  await expect(zona(p).getByText(ayuda)).toBeVisible();
+
+  // Sin responder el RIM no se puede cerrar: el cierre lo dice y lleva al bloque.
+  await p.getByLabel('Clasificación finalizada').selectOption('SI');
+  const dialogo = p.getByRole('dialog', { name: 'Cerrar la clasificación' });
+  await expect(dialogo.getByText(/Falta responder «¿Requiere registro de importación \(RIM\)\?»/)).toBeVisible();
+  await expect(dialogo.getByRole('button', { name: /Cerrar/ })).toHaveCount(0);
+  await dialogo.getByRole('button', { name: 'Entendido' }).click();
+
+  await rim.selectOption('NO');
+  await expect(zona(p).getByText('Guardado').first()).toBeVisible();
+  await abrirZona(p, idFicha);
+  await expect(zona(p).getByLabel(etiqueta)).toHaveValue('NO');
+
+  // El área no lo escribe: lo ve como texto.
+  await abrirZona(area.page, idFicha);
+  await expect(zona(area.page).getByLabel(etiqueta)).toHaveCount(0);
+  await expect(zona(area.page).getByText(ayuda)).toBeVisible();
 });
 
 test('el área ve la zona de la aduana en solo lectura', async () => {

@@ -3,7 +3,8 @@
  * exporta solo lo que ve), los filtros de la lista, registra una fila en `auditoria` y entrega el libro en streaming.
  *
  * Dos pasos para que la memoria sea constante: (1) una consulta de ids ordenados (la visibilidad y los filtros se
- * resuelven en SQL), (2) el libro se escribe por lotes de LOTE ids. El formato F-ADI-30 es V1 (15.2): el punto de
+ * resuelven en SQL), (2) el libro se escribe por lotes de LOTE ids. Despues de `Base` y `Resumen de estado` va la hoja
+ * `Historial`: una sola consulta con la MISMA condicion (visibilidad + filtros), con tope de filas (ver `historial.ts`). El formato F-ADI-30 es V1 (15.2): el punto de
  * extension es `escribirLibro`; otro formato seria otro escritor sobre los mismos `filasDeLote`.
  */
 import { Writable } from 'node:stream';
@@ -22,6 +23,7 @@ import { prefijoPartida } from '@/dominio/busqueda';
 import { condicionPartida, condicionTexto } from '../acciones/buscar';
 import { ErrorAccion } from '../acciones/resultado';
 import { filasDeLote, NombresUsuarios } from './filas';
+import { cargarHistorial } from './historial';
 import { escribirLibro, type ResumenLeyenda } from './libro';
 
 export const LOTE = 200;
@@ -161,7 +163,7 @@ export async function exportarBase(ctx: Contexto, entrada: EntradaExportar): Pro
     accion: 'exportar',
     entidad: 'exportacion',
     entidadId: nombreArchivo,
-    detalle: { alcance: entrada.alcance, filas: ids.length, filtros, incluirArchivadas },
+    detalle: { alcance: entrada.alcance, filas: ids.length, filtros, incluirArchivadas, hojas: ['Base', 'Resumen de estado', 'Historial', 'Leyenda'] },
     ip: ctx.ip,
     creadoEn: ahora,
   });
@@ -185,7 +187,7 @@ export async function exportarBase(ctx: Contexto, entrada: EntradaExportar): Pro
   };
 
   const { salida, flujo, cancelada } = flujoDeDescarga();
-  escribirLibro(salida, { lotes, leyenda }).catch((err: unknown) => {
+  escribirLibro(salida, { lotes, leyenda, historial: () => cargarHistorial({ ej: ctx.db as Ejecutor, actor, nombres }, donde) }).catch((err: unknown) => {
     // Si la persona cerro la descarga, escribir falla a proposito: no es un error del servidor.
     if (cancelada()) return;
     console.error('[exportar] fallo al escribir el libro', err);

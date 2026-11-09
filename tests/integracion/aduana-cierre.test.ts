@@ -12,6 +12,7 @@ import { ErrorAccion } from '@/server/acciones/resultado';
 import { restaurarCampo } from '@/server/acciones/restaurar-campo';
 import { reiniciarConfig } from '@/server/config';
 import { historialDeFichaDe } from '@/server/politicas/colaboracion';
+import { vistaAduana } from '@/server/politicas/aduana';
 import { vistaFicha } from '@/server/politicas/referencias';
 import { asignarAAduana, nuevoEscenario, versionDe, type Escenario } from './ayudas';
 import { asignacionesDe, avisosDe, escribir, estadoDe, fichaEnAduana, historialDe } from './ayudas-aduana';
@@ -86,14 +87,15 @@ describe('finalizar: guardas duras (G1, G6)', () => {
 
 describe('finalizar: advertencias A1-A3 y "cerrar de todos modos"', () => {
   it('lista exactamente lo que falta y exige motivo; con motivo cierra y lo deja en el historial', async () => {
-    const id = await fichaEnAduana(e); // sin llenar: faltan campos del area; sin restricciones
+    const id = await fichaEnAduana(e, { rim: 'NO' }); // sin llenar: faltan campos del area; sin restricciones
     await ponerPartida(id, '8479.90.00.00'); // restricciones se prellena desde el catalogo; descripciones minimas vacias
     const err = await fallo(finalizar(e.ctx(e.brian), { referenciaId: id }));
     expect(err.codigo).toBe('FALTA_MOTIVO');
     const adv = (err.detalle as { advertencias: Array<{ regla: string; detalle: string[] }> }).advertencias;
     const a1 = adv.find((a) => a.regla === 'A1');
     expect(a1?.detalle).toContain('Descripción según factura');
-    expect(a1?.detalle).toContain('¿Requiere registro de importación (RIM)?');
+    // El RIM ya no es del area: lo responde la aduana y su falta es una guarda dura (G7), no un campo del area.
+    expect(a1?.detalle).not.toContain('¿Requiere registro de importación (RIM)?');
     expect(adv.find((a) => a.regla === 'A2')).toMatchObject({ mensaje: 'Las descripciones mínimas adicionales están vacías' });
     // La restriccion se prellenó; las observaciones siguen vacias.
     expect(adv.filter((a) => a.regla === 'A3').map((a) => (a as { mensaje?: string }).mensaje)).toEqual(['Las observaciones de la aduana están vacías']);
@@ -131,7 +133,7 @@ describe('finalizar: advertencias A1-A3 y "cerrar de todos modos"', () => {
   });
 
   it('un motivo hecho solo de caracteres invisibles no cuenta', async () => {
-    const id = await fichaEnAduana(e);
+    const id = await fichaEnAduana(e, { rim: 'NO' });
     await ponerPartida(id);
     const err = await fallo(finalizar(e.ctx(e.brian), { referenciaId: id, motivoCerrarDeTodosModos: '​  ​' }));
     expect(err.codigo).toBe('FALTA_MOTIVO');
@@ -150,13 +152,86 @@ describe('finalizar: advertencias A1-A3 y "cerrar de todos modos"', () => {
   it('CIERRE_MODO=bloquear: las advertencias vuelven a ser guardas duras (aun con motivo)', async () => {
     process.env.CIERRE_MODO = 'bloquear';
     reiniciarConfig();
-    const id = await fichaEnAduana(e);
+    const id = await fichaEnAduana(e, { rim: 'NO' });
     await ponerPartida(id);
     const err = await fallo(finalizar(e.ctx(e.brian), { referenciaId: id, motivoCerrarDeTodosModos: 'insisto' }));
     expect(err.codigo).toBe('VALIDACION');
     const bloqueos = (err.detalle as { bloqueos: Array<{ regla: string }> }).bloqueos.map((b) => b.regla);
     expect(bloqueos).toEqual(expect.arrayContaining(['A1']));
     expect((await estadoDe(e, id)).estado).toBe('EN_GESTION');
+  });
+});
+
+describe('RIM: lo responde la aduana y es obligatorio para cerrar (reunion 2026-11)', () => {
+  it('la aduana y el admin pueden escribir el RIM; el solicitante no', async () => {
+    const id = await fichaEnAduana(e, { llena: true, rim: false });
+    const v = await vistaAduana(e.db, e.brian, id, new Date());
+    expect(v.requiereRim).toBeNull();
+    expect(v.permisos.editar).toBe(true);
+    expect((await vistaAduana(e.db, e.edward, id, new Date())).permisos.editar).toBe(false);
+
+    expect((await fallo(escribir(e, e.edward, id, 'requiere_rim', 'SI'))).codigo).toBe('SIN_PERMISO');
+    expect((await estadoDe(e, id)).datos.requiere_rim).toBeUndefined();
+
+    await escribir(e, e.brian, id, 'requiere_rim', 'Sí'); // se normaliza a SI
+    const despues = await vistaAduana(e.db, e.brian, id, new Date());
+    expect(despues.requiereRim).toMatchObject({ valor: 'SI', propio: true, version: 1 });
+
+    // El admin corrige lo de la aduana: valor ajeno, exige motivo.
+    expect((await fallo(escribir(e, e.admin, id, 'requiere_rim', 'NO'))).codigo).toBe('FALTA_MOTIVO');
+    await escribir(e, e.admin, id, 'requiere_rim', 'NO', 'Comercio Exterior confirmó que no lo requiere.');
+    expect((await vistaAduana(e.db, e.brian, id, new Date())).requiereRim?.valor).toBe('NO');
+    expect((await historialDe(e, id, 'requiere_rim')).map((h) => h.valor)).toEqual(['NO', 'SI']);
+  });
+
+  it('cerrar sin responder el RIM falla con un mensaje claro, aunque haya motivo, y la ficha no cambia', async () => {
+    const id = await fichaEnAduana(e, { llena: true, rim: false });
+    await ponerPartida(id);
+    await describir(id);
+    const antes = await estadoDe(e, id);
+
+    // La vista previa ya lo dice y lo manda a completar.
+    const previa = await vistaAduana(e.db, e.brian, id, new Date());
+    expect(previa.cierre.ok).toBe(false);
+    expect(previa.cierre.bloqueos.map((b) => b.regla)).toEqual(['G7']);
+
+    for (const motivo of [undefined, 'La agencia ya despachó.']) {
+      const err = await fallo(finalizar(e.ctx(e.brian), { referenciaId: id, ...(motivo ? { motivoCerrarDeTodosModos: motivo } : {}) }));
+      expect(err.codigo).toBe('VALIDACION');
+      expect(err.message).toMatch(/RIM/);
+      expect(err.message).toMatch(/Requiere registro de importación/);
+      expect((err.detalle as { bloqueos: Array<{ regla: string }> }).bloqueos.map((b) => b.regla)).toEqual(['G7']);
+    }
+    const despues = await estadoDe(e, id);
+    expect(despues.estado).toBe('EN_GESTION');
+    expect(despues.version).toBe(antes.version);
+
+    // Tambien el admin: no es un permiso, es un dato que falta.
+    expect((await fallo(finalizar(e.ctx(e.admin), { referenciaId: id }))).codigo).toBe('VALIDACION');
+
+    // Con el RIM respondido cierra limpia.
+    await escribir(e, e.brian, id, 'requiere_rim', 'SI');
+    expect((await vistaAduana(e.db, e.brian, id, new Date())).cierre.ok).toBe(true);
+    const r = await finalizar(e.ctx(e.brian), { referenciaId: id });
+    expect(r.estado).toBe('CLASIFICADA');
+    expect(r.advertencias).toEqual([]);
+  });
+
+  it('sin RIM y sin partida, el mensaje nombra las dos faltas', async () => {
+    const id = await fichaEnAduana(e, { llena: true, rim: false });
+    const err = await fallo(finalizar(e.ctx(e.brian), { referenciaId: id }));
+    expect(err.message).toMatch(/partida/i);
+    expect(err.message).toMatch(/RIM/);
+    expect((err.detalle as { bloqueos: Array<{ regla: string }> }).bloqueos.map((b) => b.regla)).toEqual(['G1', 'G7']);
+  });
+
+  it('el RIM sin responder cuenta como pendiente de la aduana en la ficha, no del area', async () => {
+    const id = await fichaEnAduana(e, { llena: true, rim: false });
+    const c = (await vistaFicha(e.db, e.edward, id, new Date())).completitud;
+    expect(c.aduana.faltantes).toContain('requiere_rim');
+    expect(c.area.completo).toBe(true);
+    await escribir(e, e.brian, id, 'requiere_rim', 'NO');
+    expect((await vistaFicha(e.db, e.edward, id, new Date())).completitud.aduana.faltantes).not.toContain('requiere_rim');
   });
 });
 
@@ -231,6 +306,7 @@ describe('dias en gestion (P-13 / CA-33)', () => {
     const r = await crearReferencia(e.ctx(e.edward, t0), { codigo: 'TEST-DIAS-1', nombreProducto: 'Dias', tipoProducto: 'INSUMO', fechaSolicitud: '2026-01-01' });
     await asignarAAduana(e, r.id, e.brian);
     await ponerPartida(r.id);
+    await escribir(e, e.brian, r.id, 'requiere_rim', 'NO');
 
     await finalizar(e.ctx(e.brian, new Date('2026-01-06T15:00:00Z')), { referenciaId: r.id, motivoCerrarDeTodosModos: 'ok' });
     const cerrada = await vistaFicha(e.db, e.admin, r.id, new Date('2026-07-05T15:00:00Z'));

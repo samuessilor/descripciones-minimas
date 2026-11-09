@@ -135,6 +135,7 @@ export async function actorDesdeCabeceras(d: DepsAcceso, headers: Headers): Prom
     await revocarSesion(d.db, s.id);
     return null;
   }
-  await registrarActividad(d.db, s.id, ahora);
+  // La fila ya se leyo: solo se escribe cuando pasaron mas de 60 s desde la ultima marca (ahorra una sentencia por peticion).
+  if (ahora.getTime() - s.ultima.getTime() > 60_000) await registrarActividad(d.db, s.id, ahora);
   return { ...actor, sesionId: s.id, sesionCreadaEn: s.creada };
 }

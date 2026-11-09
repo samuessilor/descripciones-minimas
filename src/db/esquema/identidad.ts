@@ -73,6 +73,7 @@ export const usuario = pgTable(
     }),
     check('usuario_rol_valido', sql`${t.rol} in ('admin','solicitante','aduana','lector')`),
     check('usuario_email_minusculas', sql`${t.email} = lower(${t.email})`),
+    check('usuario_area_valida', sql`${t.area} is null or ${t.area} in ('Consumibles','Mantenimiento','Instrumentos','Marketing')`),
     // D-28: una agencia solo admite el rol `aduana`.
     check('usuario_agencia_solo_aduana', sql`${t.organizacionTipo} <> 'agencia' or ${t.rol} = 'aduana'`),
     index('usuario_organizacion_idx').on(t.organizacionId),

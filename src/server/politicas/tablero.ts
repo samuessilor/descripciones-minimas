@@ -203,13 +203,38 @@ export async function tableroDe(ej: Ejecutor, actor: Actor, ahora: Date): Promis
     .from(referencia)
     .where(and(visible, sinArchivar));
 
+  // Solo las columnas que usa `construir`: `texto_busqueda` (todo el texto de la ficha repetido) no viaja (CPU y datos de Neon).
   const abiertasFilas = await ej
-    .select()
+    .select({
+      id: referencia.id,
+      codigo: referencia.codigo,
+      nombreProducto: referencia.nombreProducto,
+      tipoProducto: referencia.tipoProducto,
+      estado: referencia.estado,
+      partida: referencia.partida,
+      fechaSolicitud: referencia.fechaSolicitud,
+      clasificadaEn: referencia.clasificadaEn,
+      diasPausa: referencia.diasPausa,
+      actualizadaEn: referencia.actualizadaEn,
+      datos: referencia.datos,
+    })
     .from(referencia)
     .where(and(visible, sinArchivar, sql`${referencia.estado} <> 'CLASIFICADA'`))
     .orderBy(referencia.fechaSolicitud, referencia.id);
   const cerradasFilas = await ej
-    .select()
+    .select({
+      id: referencia.id,
+      codigo: referencia.codigo,
+      nombreProducto: referencia.nombreProducto,
+      tipoProducto: referencia.tipoProducto,
+      estado: referencia.estado,
+      partida: referencia.partida,
+      fechaSolicitud: referencia.fechaSolicitud,
+      clasificadaEn: referencia.clasificadaEn,
+      diasPausa: referencia.diasPausa,
+      actualizadaEn: referencia.actualizadaEn,
+      datos: referencia.datos,
+    })
     .from(referencia)
     .where(and(visible, sinArchivar, eq(referencia.estado, 'CLASIFICADA')))
     .orderBy(desc(referencia.clasificadaEn))

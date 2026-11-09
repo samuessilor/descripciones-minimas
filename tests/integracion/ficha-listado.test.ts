@@ -21,8 +21,8 @@ beforeAll(async () => {
     const n = String(i).padStart(2, '0');
     ids[n] = await nuevaFicha(e, { codigo: `LST-${n}`, nombre: `Producto ${n} ${i % 2 === 0 ? 'azul' : 'rojo'}`, tipo: i % 5 === 0 ? 'REPUESTO' : 'INSUMO' });
   }
-  await e.db.update(referencia).set({ estado: 'CLASIFICADA', clasificadaEn: new Date() }).where(eq(referencia.id, ids['01']!));
-  await e.db.update(referencia).set({ archivadaEn: new Date() }).where(eq(referencia.id, ids['02']!));
+  await e.db.update(referencia).set({ estado: 'CLASIFICADA', clasificadaEn: new Date(), clasificadaPor: e.admin.usuarioId }).where(eq(referencia.id, ids['01']!));
+  await e.db.update(referencia).set({ archivadaEn: new Date(), archivadaPor: e.admin.usuarioId, motivoArchivo: 'prueba', estadoPrevioArchivo: 'BORRADOR' }).where(eq(referencia.id, ids['02']!));
   await asignarAAduana(e, ids['03']!, e.brian);
   await asignarAAduana(e, ids['04']!, e.brianB);
   await e.db.update(referencia).set({ estado: 'EN_GESTION' }).where(eq(referencia.id, ids['06']!)); // en gestion sin responsable
@@ -83,9 +83,9 @@ describe('listarPagina', () => {
     expect(codigos(mias)).toEqual(['LST-03']);
     expect((await listarPagina(e.db, e.edward, filtros({ mias: true }), new Date())).total).toBe(0);
     // Si la asignacion se cierra deja de ser pendiente.
-    await e.db.update(asignacion).set({ estado: 'hecha' }).where(eq(asignacion.referenciaId, ids['03']!));
+    await e.db.update(asignacion).set({ estado: 'hecha', completadaEn: new Date() }).where(eq(asignacion.referenciaId, ids['03']!));
     expect((await listarPagina(e.db, e.admin, filtros({ mias: true }), new Date())).total).toBe(0);
-    await e.db.update(asignacion).set({ estado: 'pendiente' }).where(eq(asignacion.referenciaId, ids['03']!));
+    await e.db.update(asignacion).set({ estado: 'pendiente', completadaEn: null }).where(eq(asignacion.referenciaId, ids['03']!));
   });
 
   it('sin responsable: en gestion y sin asignacion abierta; y filtro por agencia (solo internos)', async () => {
@@ -173,9 +173,9 @@ describe('listarPagina', () => {
     const cerrada = await nuevaFicha(e, { codigo: 'PAR-1' });
     const abierta = await nuevaFicha(e, { codigo: 'PAR-2' });
     const otra = await nuevaFicha(e, { codigo: 'PAR-3' });
-    await e.db.update(referencia).set({ partida: '8421.39.90.00', estado: 'CLASIFICADA', clasificadaEn: new Date() }).where(eq(referencia.id, cerrada));
+    await e.db.update(referencia).set({ partida: '8421.39.90.00', estado: 'CLASIFICADA', clasificadaEn: new Date(), clasificadaPor: e.admin.usuarioId }).where(eq(referencia.id, cerrada));
     await e.db.update(referencia).set({ partida: '8421.21.00.00' }).where(eq(referencia.id, abierta));
-    await e.db.update(referencia).set({ partida: '3824.99.99.00', estado: 'CLASIFICADA', clasificadaEn: new Date() }).where(eq(referencia.id, otra));
+    await e.db.update(referencia).set({ partida: '3824.99.99.00', estado: 'CLASIFICADA', clasificadaEn: new Date(), clasificadaPor: e.admin.usuarioId }).where(eq(referencia.id, otra));
     const por = async (partida: string) => (await listarPagina(e.db, e.edward, filtros({ partida, orden: 'codigo' }), new Date())).filas;
     const r = await por('8421');
     expect(r.map((x) => x.codigo)).toEqual(['PAR-1', 'PAR-2']);
@@ -195,7 +195,7 @@ describe('listarPagina', () => {
     const dias = async (ahora: string) => (await listarPagina(e.db, e.edward, filtros({ q: 'DIA-1' }), new Date(ahora))).filas[0]?.diasEnGestion;
     expect(await dias('2026-10-11T15:00:00Z')).toBe(10);
     expect(await dias('2026-10-21T15:00:00Z')).toBe(20);
-    await e.db.update(referencia).set({ estado: 'CLASIFICADA', clasificadaEn: new Date('2026-10-15T15:00:00Z') }).where(eq(referencia.id, f));
+    await e.db.update(referencia).set({ estado: 'CLASIFICADA', clasificadaEn: new Date('2026-10-15T15:00:00Z'), clasificadaPor: e.admin.usuarioId }).where(eq(referencia.id, f));
     expect(await dias('2026-10-21T15:00:00Z')).toBe(14);
     expect(await dias('2026-12-31T15:00:00Z')).toBe(14);
   });

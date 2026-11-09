@@ -60,6 +60,7 @@ export const CAMPOS_SIMILAR: readonly string[] = [
   'unidad_medida',
   'aspecto_fisico',
   'tipo_empaque',
+  'cantidad_empaque',
 ];
 
 const ETIQUETA_ESTADO: Record<string, string> = {

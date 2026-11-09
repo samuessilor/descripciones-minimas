@@ -60,6 +60,8 @@ export interface VistaAduana {
   /** Por que no se puede editar, si es el caso (para decirlo en pantalla). */
   bloqueo: 'clasificada' | 'archivada' | 'borrador' | 'sin_permiso' | null;
   partida: CampoAduanaVista | null;
+  /** ¿Requiere registro de importacion (RIM)? La responde la aduana: `valor` = 'SI' | 'NO'. */
+  requiereRim: CampoAduanaVista | null;
   infoPartida: InfoPartida | null;
   /** Descripciones minimas adicionales: lo que la aduana pide saber (texto) o «No es necesario por ahora / no aplica». */
   descripcionesMinimas: CampoAduanaVista | null;
@@ -200,6 +202,7 @@ export async function vistaAduana(ej: Ejecutor, actor: Actor, referenciaId: stri
     },
     bloqueo,
     partida: campo('partida_arancelaria'),
+    requiereRim: campo('requiere_rim'),
     infoPartida,
     descripcionesMinimas: campo('descripciones_minimas'),
     respuestaArea: campo('respuesta_area'),

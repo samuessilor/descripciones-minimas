@@ -117,8 +117,9 @@ describe('prueba de deriva (9.4): reconstruir referencia.datos desde campo_histo
     await g('uso', 'A');
     await g('uso', 'B', e.charles, 'Lo corrijo');
     await g('marca', { texto: 'ACME' });
-    await g('requiere_rim', 'SI');
-    await g('cantidad_rim', '13x12');
+    await g('tipo_empaque', 'Bidón');
+    await g('cantidad_empaque', '20 litros');
+    await g('requiere_rim', 'SI', e.admin); // lo responde la aduana (o el admin)
     await g('pais_origen', 'FR');
     await g('uso', '', e.admin, 'Lo dejo para revisar');
     const hist = await e.db.select().from(campoHistorial).where(eq(campoHistorial.referenciaId, f));

@@ -3,8 +3,8 @@
  *  - la solicitud de la aduana (descripciones minimas adicionales) abre un pendiente «Responder» para el area, con aviso
  *    en la campana; la respuesta lo cierra y avisa a la aduana; si la aduana cambia la solicitud, vuelve a quedar
  *    pendiente; con «No aplica» deja de pedirse;
- *  - llenar y luego borrar, desmarcar «No aplica» o pasar el RIM a «Sí» sin cantidad devuelve el campo a pendiente en
- *    la ficha, la zona de la aduana y «Para mí».
+ *  - llenar y luego borrar, o desmarcar «No aplica», devuelve el campo a pendiente en la ficha, la zona de la aduana y
+ *    «Para mí»; el RIM lo responde la aduana (reunion 2026-11) y borrarlo lo deja pendiente de ella.
  */
 import { and, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -101,28 +101,41 @@ describe('A2: solicitud de la aduana -> pendiente del area -> respuesta', () => 
 });
 
 describe('R1 en el servidor: diligenciar y deshacer vuelve a pendiente', () => {
-  it('aspecto fisico y tipo de empaque: «No aplica» cuenta; desmarcarlo vuelve a pendiente', async () => {
+  it('aspecto fisico y marca: «No aplica» / «No tiene marca» cuentan; desmarcarlos vuelve a pendiente', async () => {
     const id = await fichaEnAduana(e, { llena: true });
     await escribir(e, e.edward, id, 'aspecto_fisico', { no_aplica: true });
-    await escribir(e, e.edward, id, 'tipo_empaque', { no_aplica: true });
+    await escribir(e, e.edward, id, 'marca', { sin_marca: true });
     expect((await vistaFicha(e.db, e.edward, id, new Date())).completitud.secciones.detalle.estado).toBe('verde');
     await escribir(e, e.edward, id, 'aspecto_fisico', null);
-    await escribir(e, e.edward, id, 'tipo_empaque', null);
+    await escribir(e, e.edward, id, 'marca', null);
     const detalle = (await vistaFicha(e.db, e.edward, id, new Date())).completitud.secciones.detalle;
     expect(detalle).toMatchObject({ estado: 'amarillo', faltan: 2 });
-    expect(detalle.faltantes.sort()).toEqual(['aspecto_fisico', 'tipo_empaque']);
+    expect(detalle.faltantes.sort()).toEqual(['aspecto_fisico', 'marca']);
+  });
+
+  it('tipo de empaque es una lista fija sin «No aplica»; Bidón y Paquete piden el contenido', async () => {
+    const id = await fichaEnAduana(e, { llena: true });
+    await expect(escribir(e, e.edward, id, 'tipo_empaque', { no_aplica: true })).rejects.toMatchObject({ codigo: 'VALIDACION' });
+    const falta = async () => (await vistaFicha(e.db, e.edward, id, new Date())).completitud.secciones.detalle.faltantes;
+    expect(await falta()).toEqual([]); // «Unidad» no pide contenido
+    await escribir(e, e.edward, id, 'tipo_empaque', 'Bidón');
+    expect(await falta()).toEqual(['cantidad_empaque']);
+    await escribir(e, e.edward, id, 'cantidad_empaque', '20 litros');
+    expect(await falta()).toEqual([]);
+    await escribir(e, e.edward, id, 'tipo_empaque', null);
+    expect(await falta()).toEqual(['tipo_empaque']);
   });
 
   it('otra persona desmarca un «No aplica» ajeno: pide motivo, vuelve a pendiente y avisa al autor', async () => {
     const id = await fichaEnAduana(e, { llena: true });
-    await escribir(e, e.edward, id, 'tipo_empaque', { no_aplica: true });
-    await expect(escribir(e, e.charles, id, 'tipo_empaque', null)).rejects.toMatchObject({ codigo: 'FALTA_MOTIVO' });
-    await escribir(e, e.charles, id, 'tipo_empaque', null, 'Sí trae empaque: caja');
-    expect((await vistaFicha(e.db, e.edward, id, new Date())).completitud.secciones.detalle.faltantes).toEqual(['tipo_empaque']);
+    await escribir(e, e.edward, id, 'aspecto_fisico', { no_aplica: true });
+    await expect(escribir(e, e.charles, id, 'aspecto_fisico', null)).rejects.toMatchObject({ codigo: 'FALTA_MOTIVO' });
+    await escribir(e, e.charles, id, 'aspecto_fisico', null, 'Sí tiene aspecto: líquido');
+    expect((await vistaFicha(e.db, e.edward, id, new Date())).completitud.secciones.detalle.faltantes).toEqual(['aspecto_fisico']);
     expect(await avisos(id, e.edward.usuarioId, 'cambio_en_mi_campo')).toHaveLength(1);
     // Un valor real ajeno sigue sin poder vaciarse (D-05).
-    await escribir(e, e.edward, id, 'tipo_empaque', 'Caja');
-    await expect(escribir(e, e.charles, id, 'tipo_empaque', null, 'lo borro')).rejects.toMatchObject({ codigo: 'SIN_PERMISO' });
+    await escribir(e, e.edward, id, 'aspecto_fisico', 'Líquido');
+    await expect(escribir(e, e.charles, id, 'aspecto_fisico', null, 'lo borro')).rejects.toMatchObject({ codigo: 'SIN_PERMISO' });
   });
 
   it('proveedor «el mismo fabricante»: cuenta como diligenciado; quitarlo vuelve a pendiente', async () => {
@@ -133,18 +146,16 @@ describe('R1 en el servidor: diligenciar y deshacer vuelve a pendiente', () => {
     expect((await vistaFicha(e.db, e.edward, id, new Date())).completitud.secciones.detalle.faltantes).toEqual(['proveedor']);
   });
 
-  it('RIM: «Sí» sin cantidad queda pendiente; con cantidad se completa; volver a «No» deja de exigirla', async () => {
-    const id = await fichaEnAduana(e, { llena: true });
-    const esp = async () => (await vistaFicha(e.db, e.edward, id, new Date())).completitud.secciones.especificaciones;
-    expect((await esp()).estado).toBe('verde'); // la ficha llena dice «No»
-    await escribir(e, e.edward, id, 'requiere_rim', 'SI');
-    expect(await esp()).toMatchObject({ estado: 'amarillo', faltantes: ['cantidad_rim'] });
-    await escribir(e, e.edward, id, 'cantidad_rim', '12');
-    expect((await esp()).estado).toBe('verde');
-    await escribir(e, e.edward, id, 'cantidad_rim', null);
-    expect((await esp()).faltantes).toEqual(['cantidad_rim']);
-    await escribir(e, e.edward, id, 'requiere_rim', 'NO');
-    expect((await esp()).estado).toBe('verde');
+  it('RIM: lo responde la aduana; sin respuesta queda pendiente de la aduana y el area no puede escribirlo', async () => {
+    const id = await fichaEnAduana(e, { llena: true, rim: false });
+    const aduana = async () => (await vistaFicha(e.db, e.brian, id, new Date())).completitud;
+    expect((await aduana()).aduana.faltantes).toContain('requiere_rim');
+    expect((await aduana()).secciones.especificaciones.faltantes).not.toContain('requiere_rim'); // ya no es del area
+    await expect(escribir(e, e.edward, id, 'requiere_rim', 'SI')).rejects.toMatchObject({ codigo: 'SIN_PERMISO' });
+    await escribir(e, e.brian, id, 'requiere_rim', 'SI');
+    expect((await aduana()).aduana.faltantes).not.toContain('requiere_rim');
+    await escribir(e, e.brian, id, 'requiere_rim', null);
+    expect((await aduana()).aduana.faltantes).toContain('requiere_rim'); // borrarlo lo devuelve a pendiente
   });
 
   it('la aduana: desmarcar «No aplica» en restricciones u observaciones vuelve a pendiente', async () => {

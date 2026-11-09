@@ -29,6 +29,7 @@ export interface PropsSiguientePaso {
 /** Nombre corto de cada dato de la aduana en «Siguiente paso». */
 const DATO_ADUANA: Record<string, string> = {
   partida_arancelaria: 'partida',
+  requiere_rim: 'registro de importación (RIM)',
   descripciones_minimas: 'descripciones mínimas adicionales',
   restricciones: 'restricciones',
   observaciones_aduana: 'observaciones',

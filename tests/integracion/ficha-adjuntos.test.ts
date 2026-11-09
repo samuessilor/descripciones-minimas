@@ -134,7 +134,7 @@ describe('subirAdjunto', () => {
     // La agencia B no ve la ficha: 404 (no revela que existe).
     await expect(subirAdjunto(e.ctx(e.brianB), await entrada())).rejects.toMatchObject({ codigo: 'NO_ENCONTRADO' });
 
-    await e.db.update(referencia).set({ estado: 'CLASIFICADA' }).where(eq(referencia.id, f));
+    await e.db.update(referencia).set({ estado: 'CLASIFICADA', clasificadaEn: new Date(), clasificadaPor: e.admin.usuarioId }).where(eq(referencia.id, f));
     await expect(subirAdjunto(e.ctx(e.edward), await entrada())).rejects.toMatchObject({ codigo: 'FICHA_CERRADA' });
     expect(almacen.claves()).toHaveLength(0);
   });

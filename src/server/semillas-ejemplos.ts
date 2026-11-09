@@ -12,6 +12,7 @@ import { eq, sql } from 'drizzle-orm';
 import { asignacion, referencia, usuario } from '@/db/esquema';
 import type { Db } from '@/db/tipos';
 import type { Area } from '@/dominio/areas';
+import { getCampo } from '@/dominio/campos';
 import { cargarActorPorId, type Actor } from './politicas/actor';
 import { enviarA } from './acciones/asignaciones';
 import { finalizar, reabrir, solicitarReapertura } from './acciones/cierre';
@@ -45,7 +46,6 @@ function producto(desc: string, uso: string, funciones: string, rim: string | nu
     ['funciones', funciones],
     ['unidad_medida', unidad],
     ['requiere_rim', rim === null ? 'NO' : 'SI'],
-    ...(rim === null ? [] : ([['cantidad_rim', rim]] as Pares)),
     ['informacion_adicional', ADICIONAL],
   ];
 }
@@ -59,11 +59,12 @@ function detalleInsumo(materia: string, aspecto: string, empaque: string, origen
     ['pais_origen', origen],
     ['fabricante', 'Química Ejemplo SA'],
     ['proveedor', 'Distribuciones Ejemplo SAS'],
-    ['tipo_empaque', empaque],
+    ['tipo_empaque', empaque.startsWith('Bidón') ? 'Bidón' : 'Paquete'],
+    ['cantidad_empaque', empaque.replace(/^\S+ (de )?/, '')],
   ];
 }
 
-/** Detalle de un repuesto o accesorio (sin empaque propio: «No aplica»; el proveedor es el mismo fabricante). */
+/** Detalle de un repuesto o accesorio (sin empaque propio: «Unidad»; el proveedor es el mismo fabricante). */
 function detalleMaquina(maquina: string, materia: string, origen: string): Pares {
   return [
     ['maquina_destino', maquina],
@@ -73,7 +74,7 @@ function detalleMaquina(maquina: string, materia: string, origen: string): Pares
     ['pais_origen', origen],
     ['fabricante', 'Industrias Ejemplo SA'],
     ['proveedor', { mismo_fabricante: true }],
-    ['tipo_empaque', { no_aplica: true }],
+    ['tipo_empaque', 'Unidad'],
   ];
 }
 
@@ -86,7 +87,7 @@ function detalleEquipo(materia: string, origen: string, fabricacion: string): Pa
     ['pais_origen', origen],
     ['fabricante', 'Industrias Ejemplo SA'],
     ['proveedor', 'Suministros Ejemplo SAS'],
-    ['tipo_empaque', 'Guacal de madera'],
+    ['tipo_empaque', 'Unidad'],
     ['fecha_fabricacion', { fecha: fabricacion }],
   ];
 }
@@ -104,7 +105,7 @@ const FICHAS = {
         '12x20',
         'Kilogramos',
       ),
-      ...detalleInsumo('Resina epóxica 78 %\nEndurecedor amínico 20 %\nAditivos 2 %', 'Líquido', 'Balde de 20 kg', 'DE'),
+      ...detalleInsumo('Resina epóxica 78 %\nEndurecedor amínico 20 %\nAditivos 2 %', 'Líquido', 'Paquete de 20 kg', 'DE'),
     ],
   },
   filtroAire: {
@@ -279,7 +280,9 @@ async function crear(db: Db, actor: Actor, f: Ficha): Promise<string> {
     { db, actor },
     { codigo: f.codigo, nombreProducto: f.nombre, tipoProducto: f.tipo, ...(f.area ? { areaResponsable: f.area } : {}) },
   );
-  for (const [campo, valor] of f.datos) await guardar(db, actor, r.id, campo, valor);
+  // Los campos de la aduana (hoy, el RIM) no los escribe el solicitante: la semilla los pone con el admin.
+  const admin = await actorPorEmail(db, 'admin@desarrollo.invalid');
+  for (const [campo, valor] of f.datos) await guardar(db, getCampo(campo)?.grupo === 'A' ? admin : actor, r.id, campo, valor);
   return r.id;
 }
 

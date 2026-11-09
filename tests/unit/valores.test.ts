@@ -181,12 +181,30 @@ describe('descripciones minimas (texto libre de la aduana)', () => {
 });
 describe('normalizarValor: «No aplica», proveedor vinculado y respuesta del area (reunion 2026-10-29)', () => {
   it('«No aplica» solo lo admiten los campos que lo declaran', () => {
-    for (const k of ['aspecto_fisico', 'tipo_empaque', 'descripciones_minimas', 'restricciones', 'observaciones_aduana']) {
+    for (const k of ['aspecto_fisico', 'descripciones_minimas', 'restricciones', 'observaciones_aduana']) {
       expect(normalizarValor(campo(k), { no_aplica: true }, ctx), k).toEqual({ ok: true, valor: { no_aplica: true } });
     }
     expect(normalizarValor(campo('uso'), { no_aplica: true }, ctx).ok).toBe(false);
     expect(estaVacio({ no_aplica: true })).toBe(false);
     expect(textoDeValor({ no_aplica: true })).toBe('No aplica');
+  });
+
+  it('el tipo de empaque es una lista fija: acepta Bidón, Paquete y Unidad, y rechaza «No aplica» y valores fuera de la lista', () => {
+    for (const v of ['Bidón', 'Paquete', 'Unidad']) {
+      expect(normalizarValor(campo('tipo_empaque'), v, ctx), v).toEqual({ ok: true, valor: v });
+    }
+    expect(normalizarValor(campo('tipo_empaque'), '  Paquete ', ctx)).toEqual({ ok: true, valor: 'Paquete' });
+    expect(normalizarValor(campo('tipo_empaque'), { no_aplica: true }, ctx)).toMatchObject({ ok: false, mensaje: 'Este campo no admite «No aplica».' });
+    for (const v of ['Caja', 'Bidón de 20 kg', 'bidón', 'No aplica', 'unidad']) {
+      expect(normalizarValor(campo('tipo_empaque'), v, ctx), v).toMatchObject({ ok: false, mensaje: 'Elige una opción de la lista.' });
+    }
+    expect(normalizarValor(campo('tipo_empaque'), '   ', ctx)).toEqual({ ok: true, valor: null });
+  });
+
+  it('el contenido por empaque es texto libre con maximo de 60 caracteres y no admite «No aplica»', () => {
+    expect(normalizarValor(campo('cantidad_empaque'), ' 20 litros ', ctx)).toEqual({ ok: true, valor: '20 litros' });
+    expect(normalizarValor(campo('cantidad_empaque'), 'x'.repeat(61), ctx).ok).toBe(false);
+    expect(normalizarValor(campo('cantidad_empaque'), { no_aplica: true }, ctx).ok).toBe(false);
   });
 
   it('el proveedor admite texto o «el mismo fabricante»', () => {

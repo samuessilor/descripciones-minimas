@@ -201,13 +201,13 @@ describe('visibilidad por organizacion y una sola agencia a la vez (8.3 reglas 2
 
   it('una ficha archivada o clasificada no se envia salvo para revisar', async () => {
     const id = await nuevaFicha(e);
-    await e.db.update(referencia).set({ estado: 'CLASIFICADA', clasificadaEn: T0 }).where(eq(referencia.id, id));
+    await e.db.update(referencia).set({ estado: 'CLASIFICADA', clasificadaEn: T0, clasificadaPor: e.admin.usuarioId }).where(eq(referencia.id, id));
     expect(await codigoError(enviarA(e.ctx(e.edward, T0), { referenciaId: id, destinatarios: [{ usuarioId: e.charles.usuarioId, pedido: 'completar' }] }))).toBe('FICHA_CERRADA');
     const r = await enviarA(e.ctx(e.edward, T0), { referenciaId: id, destinatarios: [{ usuarioId: e.charles.usuarioId, pedido: 'revisar' }] });
     expect(r.creadas).toBe(1);
 
     const id2 = await nuevaFicha(e);
-    await e.db.update(referencia).set({ archivadaEn: T0 }).where(eq(referencia.id, id2));
+    await e.db.update(referencia).set({ archivadaEn: T0, archivadaPor: e.admin.usuarioId, motivoArchivo: 'prueba', estadoPrevioArchivo: 'BORRADOR' }).where(eq(referencia.id, id2));
     expect(await codigoError(enviarA(e.ctx(e.admin, T0), { referenciaId: id2, destinatarios: [{ usuarioId: e.charles.usuarioId }] }))).toBe('FICHA_CERRADA');
   });
 });
@@ -246,7 +246,7 @@ describe('enviarALote (RV-37): hasta 25 fichas a varias personas', () => {
 
     const buena = await nuevaFicha(e);
     const archivada = await nuevaFicha(e);
-    await e.db.update(referencia).set({ archivadaEn: T0 }).where(eq(referencia.id, archivada));
+    await e.db.update(referencia).set({ archivadaEn: T0, archivadaPor: e.admin.usuarioId, motivoArchivo: 'prueba', estadoPrevioArchivo: 'BORRADOR' }).where(eq(referencia.id, archivada));
     await expect(
       enviarALote(e.ctx(e.admin, T0), { referenciaIds: [buena, archivada], destinatarios: [{ usuarioId: e.charles.usuarioId }] }),
     ).rejects.toMatchObject({ codigo: 'FICHA_CERRADA' });

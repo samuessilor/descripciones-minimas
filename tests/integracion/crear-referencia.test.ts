@@ -141,9 +141,9 @@ describe('Crear similar (F10, CA 12.4)', () => {
     await g('marca', { texto: 'ACME' });
     await g('pais_origen', 'CN');
     await g('fabricante', 'Fabrica SA');
-    await g('tipo_empaque', 'Caja de 10');
-    await g('requiere_rim', 'SI');
-    await g('cantidad_rim', '2*3');
+    await g('tipo_empaque', 'Paquete');
+    await g('cantidad_empaque', '10 unidades');
+    await g('requiere_rim', 'SI', e.admin); // lo responde la aduana (o el admin): nunca se copia
     await g('descripcion_factura', 'Segun factura');
     await asignarAAduana(e, origen, e.brian);
     await guardarCampo(e.ctx(e.brian), { referenciaId: origen, campo: 'partida_arancelaria', valor: '8501.31.20.00', versionEsperada: 0 });
@@ -157,10 +157,25 @@ describe('Crear similar (F10, CA 12.4)', () => {
     const [f] = await e.db.select().from(referencia).where(eq(referencia.id, r.id));
     const claves = Object.keys(f!.datos).sort();
     expect(claves).toEqual(
-      ['codigo', 'fabricante', 'fecha_solicitud', 'maquina_destino', 'marca', 'nombre_producto', 'pais_origen', 'proveedor', 'tipo_empaque', 'tipo_producto'].sort(),
+      [
+        'cantidad_empaque',
+        'codigo',
+        'fabricante',
+        'fecha_solicitud',
+        'maquina_destino',
+        'marca',
+        'nombre_producto',
+        'pais_origen',
+        'proveedor',
+        'tipo_empaque',
+        'tipo_producto',
+      ].sort(),
     );
     expect(f!.datos.maquina_destino!.v).toBe('Biseladora Mei 641');
     expect(f!.datos.maquina_destino!.a).toBe(e.charles.usuarioId); // el autor es quien copia
+    expect(f!.datos.tipo_empaque!.v).toBe('Paquete');
+    expect(f!.datos.cantidad_empaque!.v).toBe('10 unidades');
+    expect(f!.datos.requiere_rim).toBeUndefined();
     expect(f!.datos.codigo!.v).toBe('SIMILAR-1');
     expect(f!.partida).toBeNull();
   });

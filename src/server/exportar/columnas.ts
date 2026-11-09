@@ -34,9 +34,9 @@ export const COLUMNAS_BASE: readonly ColumnaBase[] = [
   { clave: 'fabricante', encabezado: 'Fabricante', ancho: 24, tipo: 'texto' },
   { clave: 'proveedor', encabezado: 'Proveedor', ancho: 24, tipo: 'texto' },
   { clave: 'tipo_empaque', encabezado: 'Tipo de empaque', ancho: 20, tipo: 'texto' },
+  { clave: 'cantidad_empaque', encabezado: 'Contenido por empaque', ancho: 22, tipo: 'texto' },
   { clave: 'maquina_destino', encabezado: 'Máquina de destino', ancho: 26, tipo: 'texto_largo' },
   { clave: 'requiere_rim', encabezado: 'Requiere RIM', ancho: 12, tipo: 'texto' },
-  { clave: 'cantidad_rim', encabezado: 'Cantidad (RIM)', ancho: 14, tipo: 'numero' },
   { clave: 'fecha_fabricacion', encabezado: 'Fecha de fabricación', ancho: 20, tipo: 'fecha' },
   { clave: 'fotos', encabezado: 'Fotos', ancho: 10, tipo: 'texto' },
   { clave: 'informacion_adicional', encabezado: 'Información adicional', ancho: 40, tipo: 'texto_largo' },
@@ -62,3 +62,39 @@ export const COLUMNAS_BASE: readonly ColumnaBase[] = [
 /** Colores de la columna Estado (SPEC 15.1): el amarillo del formato de la agencia y el verde de Excel (S-17). */
 export const RELLENO_AMARILLO = 'FFFFFFA6';
 export const RELLENO_VERDE = 'FFC6EFCE';
+
+/**
+ * Hoja `Resumen de estado`: una fila por referencia con lo que importa para seguirla (estado, dias en gestion, que tan
+ * completa va cada parte y de quien falta). Las claves `resumen_*` las calcula `filas.ts`; el resto son las mismas de `Base`.
+ */
+export const COLUMNAS_RESUMEN: readonly ColumnaBase[] = [
+  { clave: 'codigo', encabezado: 'Código', ancho: 18, tipo: 'texto' },
+  { clave: 'nombre', encabezado: 'Nombre del producto', ancho: 30, tipo: 'texto' },
+  { clave: 'tipo', encabezado: 'Tipo de producto', ancho: 16, tipo: 'texto' },
+  { clave: 'area_responsable', encabezado: 'Área responsable', ancho: 16, tipo: 'texto' },
+  { clave: 'estado', encabezado: 'Estado', ancho: 15, tipo: 'estado' },
+  { clave: 'etiqueta', encabezado: 'Etiqueta de estado', ancho: 24, tipo: 'texto' },
+  { clave: 'fecha_solicitud', encabezado: 'Fecha de solicitud', ancho: 16, tipo: 'fecha' },
+  { clave: 'dias', encabezado: 'Días en gestión', ancho: 12, tipo: 'numero' },
+  { clave: 'resumen_producto', encabezado: 'Producto', ancho: 14, tipo: 'texto' },
+  { clave: 'resumen_detalle', encabezado: 'Detalle', ancho: 14, tipo: 'texto' },
+  { clave: 'resumen_especificaciones', encabezado: 'Especificaciones', ancho: 20, tipo: 'texto' },
+  { clave: 'resumen_aduana', encabezado: 'Aduana', ancho: 14, tipo: 'texto' },
+  { clave: 'resumen_faltan_area', encabezado: 'Campos que faltan del área', ancho: 16, tipo: 'numero' },
+  { clave: 'resumen_faltan_aduana', encabezado: 'Campos que faltan de la aduana', ancho: 18, tipo: 'numero' },
+  { clave: 'pendiente_con', encabezado: 'Pendiente con (de quién falta)', ancho: 30, tipo: 'texto' },
+  { clave: 'actualizada', encabezado: 'Última actualización', ancho: 20, tipo: 'fechahora' },
+];
+
+/** Hoja `Historial`: un cambio de campo por fila (ver `historial.ts`). La fecha va en hora de Bogota. */
+export const COLUMNAS_HISTORIAL: readonly ColumnaBase[] = [
+  { clave: 'codigo', encabezado: 'Código', ancho: 18, tipo: 'texto' },
+  { clave: 'nombre', encabezado: 'Nombre del producto', ancho: 28, tipo: 'texto' },
+  { clave: 'campo', encabezado: 'Campo', ancho: 28, tipo: 'texto' },
+  { clave: 'evento', encabezado: 'Evento', ancho: 14, tipo: 'texto' },
+  { clave: 'anterior', encabezado: 'Valor anterior', ancho: 40, tipo: 'texto_largo' },
+  { clave: 'nuevo', encabezado: 'Valor nuevo', ancho: 40, tipo: 'texto_largo' },
+  { clave: 'quien', encabezado: 'Quién', ancho: 24, tipo: 'texto' },
+  { clave: 'cuando', encabezado: 'Fecha y hora (Bogotá)', ancho: 20, tipo: 'fechahora' },
+  { clave: 'motivo', encabezado: 'Motivo', ancho: 36, tipo: 'texto_largo' },
+];

@@ -5,7 +5,11 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: '0 6 * * *' # nocturno: incluye db-real
+    - cron: '0 6 * * 1' # semanal (lunes): incluye db-real; el nocturno gastaba minutos gratis sin aportar
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

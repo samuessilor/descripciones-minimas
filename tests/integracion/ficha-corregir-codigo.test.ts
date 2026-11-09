@@ -69,7 +69,7 @@ describe('corregirCodigo', () => {
 
   it('clasificada: el creador ya no; el admin si, y el creador recibe un aviso', async () => {
     const f = await nuevaFicha(e, { codigo: 'CLAS-1' });
-    await e.db.update(referencia).set({ estado: 'CLASIFICADA' }).where(eq(referencia.id, f));
+    await e.db.update(referencia).set({ estado: 'CLASIFICADA', clasificadaEn: new Date(), clasificadaPor: e.admin.usuarioId }).where(eq(referencia.id, f));
     await expect(corregirCodigo(e.ctx(e.edward), { referenciaId: f, codigoNuevo: 'CLAS-2', motivo: 'x' })).rejects.toMatchObject({ codigo: 'FICHA_CERRADA' });
     await corregirCodigo(e.ctx(e.admin), { referenciaId: f, codigoNuevo: 'CLAS-2', motivo: 'Error de digitacion en la factura' });
     expect((await fila(f)).codigo).toBe('CLAS-2');
@@ -79,7 +79,7 @@ describe('corregirCodigo', () => {
 
   it('una ficha archivada no se corrige', async () => {
     const f = await nuevaFicha(e);
-    await e.db.update(referencia).set({ archivadaEn: new Date() }).where(eq(referencia.id, f));
+    await e.db.update(referencia).set({ archivadaEn: new Date(), archivadaPor: e.admin.usuarioId, motivoArchivo: 'prueba', estadoPrevioArchivo: 'BORRADOR' }).where(eq(referencia.id, f));
     await expect(corregirCodigo(e.ctx(e.admin), { referenciaId: f, codigoNuevo: 'ARCH-NUEVO', motivo: 'x' })).rejects.toMatchObject({ codigo: 'FICHA_CERRADA' });
   });
 
@@ -91,7 +91,7 @@ describe('corregirCodigo', () => {
       expect(err, intento).toMatchObject({ codigo: 'DUPLICADO', detalle: { id: otra } });
     }
     // Y si esa otra esta archivada, el mensaje dice como salir.
-    await e.db.update(referencia).set({ archivadaEn: new Date() }).where(eq(referencia.id, otra));
+    await e.db.update(referencia).set({ archivadaEn: new Date(), archivadaPor: e.admin.usuarioId, motivoArchivo: 'prueba', estadoPrevioArchivo: 'BORRADOR' }).where(eq(referencia.id, otra));
     await expect(corregirCodigo(e.ctx(e.edward), { referenciaId: f, codigoNuevo: 'DUP-100', motivo: 'x' })).rejects.toMatchObject({
       codigo: 'DUPLICADO',
       message: expect.stringContaining('archivada'),

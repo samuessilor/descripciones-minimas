@@ -1,6 +1,7 @@
 /**
  * `npm run db:migrate`: aplica las migraciones de `drizzle/` (generadas + escritas a mano: triggers
- * y permisos). Paso EXPLICITO, nunca parte del `build`. En produccion lo ejecuta CI con
+ * y permisos). Paso EXPLICITO, nunca parte del `build`. En produccion lo ejecuta quien
+ * despliega, desde su equipo y ANTES de empujar codigo que toque `drizzle/` (`datos/desplegar-bd.ps1`), con
  * `DATABASE_URL_UNPOOLED` (URL directa) conectando como el rol `migrador` (duenio de las tablas);
  * la aplicacion usa `DATABASE_URL` con el rol `app` (D-31). Nunca `drizzle-kit push` en produccion.
  *

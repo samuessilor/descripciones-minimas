@@ -6,7 +6,7 @@
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { adjunto, asignacion, campoHistorial, referencia, usuario } from '@/db/esquema';
 import type { Ejecutor } from '@/db/tipos';
-import { CAMPOS, ETIQUETA_TIPO, aplicaEnFicha, getCampo, type Seccion, type TipoProducto } from '@/dominio/campos';
+import { CAMPOS, ETIQUETA_TIPO, type Seccion, type TipoProducto } from '@/dominio/campos';
 import { calcularCompletitud } from '@/dominio/completitud';
 import { diasEnGestion } from '@/dominio/dias-gestion';
 import { colorFicha, etiquetaFicha, type EstadoFicha } from '@/dominio/estado';
@@ -49,6 +49,11 @@ export class NombresUsuarios {
     if (!id) return '';
     return nombreDeAutor(this.actor, this.mapa.get(id));
   }
+
+  /** Tipo de organizacion de una persona ya cargada (interna si no se conoce, como en el historial de la ficha). */
+  tipoOrganizacion(id: string): TipoOrganizacion {
+    return this.mapa.get(id)?.organizacionTipo ?? 'interna';
+  }
 }
 
 /** Una fecha `YYYY-MM-DD` como fecha de Excel (medianoche UTC: el numero de serie queda entero). */
@@ -68,12 +73,6 @@ export function fechaHoraBogota(instante: Date | string | null | undefined): Dat
   const d = typeof instante === 'string' ? new Date(instante) : instante;
   if (Number.isNaN(d.getTime())) return null;
   return new Date(d.getTime() - 5 * 3_600_000);
-}
-
-function numeroDe(v: unknown): number | null {
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
-  if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Number(v);
-  return null;
 }
 
 const SECCION_DE: Record<string, Seccion> = Object.fromEntries(CAMPOS.map((c) => [c.clave, c.seccion]));
@@ -177,12 +176,6 @@ function construirFila(
     if (estaVacio(v)) return null;
     return textoDeValor(v) || null;
   };
-  // Un campo que solo aplica segun otro (la cantidad, si requiere RIM) se deja en blanco cuando no aplica.
-  const siAplica = (clave: string, valor: ValorCelda): ValorCelda => {
-    const d = getCampo(clave);
-    return d && aplicaEnFicha(d, tipo, valores) ? valor : null;
-  };
-
   // Autoria por seccion: la ultima edicion de cualquier campo de esa seccion.
   const ultima: Record<Seccion, { t: string; a: string } | null> = { producto: null, detalle: null, especificaciones: null };
   for (const [clave, e] of Object.entries(datos)) {
@@ -193,7 +186,6 @@ function construirFila(
   }
 
   const fabricacion = valores.fecha_fabricacion as { fecha?: string; por_confirmar?: boolean; nota?: string } | null | undefined;
-  const cantidad = valores.cantidad_rim as { valor?: string } | null | undefined;
   const rim = valores.requiere_rim;
   const pais = valores.pais_origen;
 
@@ -219,9 +211,9 @@ function construirFila(
     // «El proveedor es el mismo fabricante» esta vinculado: el Excel muestra el nombre del fabricante.
     proveedor: (valores.proveedor as { mismo_fabricante?: boolean } | null)?.mismo_fabricante ? texto('fabricante') : texto('proveedor'),
     tipo_empaque: texto('tipo_empaque'),
+    cantidad_empaque: texto('cantidad_empaque'),
     maquina_destino: texto('maquina_destino'),
     requiere_rim: rim === 'SI' ? 'Sí' : rim === 'NO' ? 'No' : null,
-    cantidad_rim: siAplica('cantidad_rim', numeroDe(cantidad?.valor)),
     fecha_fabricacion: fabricacion?.por_confirmar
       ? `Por confirmar${fabricacion.nota ? ` (${fabricacion.nota})` : ''}`
       : fechaSolo(fabricacion?.fecha ?? null),
@@ -242,6 +234,13 @@ function construirFila(
     detalle_en: fechaHoraBogota(ultima.detalle?.t),
     especificaciones_por: ultima.especificaciones ? c.nombres.nombre(ultima.especificaciones.a) : null,
     especificaciones_en: fechaHoraBogota(ultima.especificaciones?.t),
+    // Solo para la hoja «Resumen de estado» (no son columnas de la hoja Base): que tan completa va cada parte.
+    resumen_producto: completitud.secciones.producto.texto,
+    resumen_detalle: completitud.secciones.detalle.texto,
+    resumen_especificaciones: completitud.secciones.especificaciones.texto,
+    resumen_aduana: completitud.aduana.faltan === 0 ? 'Completa' : completitud.aduana.faltan === 1 ? 'Falta 1' : `Faltan ${completitud.aduana.faltan}`,
+    resumen_faltan_area: completitud.area.faltan,
+    resumen_faltan_aduana: completitud.aduana.faltan,
   };
   // `fecha_clasificacion` usa el dia de Bogota, no el de UTC.
   if (f.clasificadaEn) {

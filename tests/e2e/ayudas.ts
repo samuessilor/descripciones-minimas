@@ -71,3 +71,32 @@ export function vigilarErrores(page: Page): string[] {
   });
   return errores;
 }
+
+/** Las tres secciones de la ficha y los bloques de la zona de la aduana: todos arrancan PLEGADOS (reunion 2026-11). */
+export const SECCIONES_FICHA = ['producto', 'detalle', 'especificaciones'] as const;
+export const BLOQUES_ADUANA = ['aduana-partida', 'aduana-rim', 'aduana-descripciones', 'aduana-restricciones', 'aduana-cierre'] as const;
+
+/** El boton que pliega/despliega una seccion de la ficha (`#producto`) o un bloque de la zona (`#aduana-partida`). */
+export function botonDeSeccion(page: Page, id: string): Locator {
+  return page.locator(`#${id} > :is(h2, h3) > button[aria-expanded]`).first();
+}
+
+/**
+ * Abre una seccion o bloque plegado y espera a que quede abierto. Reintenta el clic: antes de que React hidrate la
+ * pagina el boton se ve pero todavia no responde. Si ya esta abierto no hace nada.
+ */
+export async function abrirSeccion(page: Page, id: string): Promise<void> {
+  const boton = botonDeSeccion(page, id);
+  await boton.waitFor({ state: 'visible', timeout: 60_000 });
+  await expect(async () => {
+    if ((await boton.getAttribute('aria-expanded')) !== 'true') await boton.click({ timeout: 5_000 });
+    await expect(boton).toHaveAttribute('aria-expanded', 'true', { timeout: 2_000 });
+  }).toPass({ timeout: 60_000 });
+}
+
+/** Abre las tres secciones de la ficha (y, con `{ aduana: true }`, los bloques de la zona de la aduana). */
+export async function abrirTodo(page: Page, opciones: { aduana?: boolean } = {}): Promise<void> {
+  await page.locator('[data-barra-ficha]').waitFor({ state: 'visible', timeout: 60_000 });
+  for (const id of SECCIONES_FICHA) await abrirSeccion(page, id);
+  if (opciones.aduana) for (const id of BLOQUES_ADUANA) await abrirSeccion(page, id);
+}

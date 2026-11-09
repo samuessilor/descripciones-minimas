@@ -3,6 +3,8 @@ import matriz from '../fixtures/matriz-spec7.json';
 import {
   CAMPOS,
   CAMPOS_RETIRADOS,
+  EMPAQUES,
+  EMPAQUES_CON_CONTENIDO,
   ETIQUETA_TIPO,
   TIPOS_PRODUCTO,
   aplicaEnFicha,
@@ -101,14 +103,56 @@ describe('catalogo de campos contra la matriz del SPEC 7 con los cambios de la r
     expect(getCampo('descripciones_minimas')?.noAplica).toBe('No es necesario por ahora / no aplica');
   });
 
-  it('la cantidad del RIM solo aplica si requiere RIM (E2)', () => {
-    const cantidad = getCampo('cantidad_rim')!;
-    expect(getCampo('requiere_rim')?.tipoDato).toBe('si_no');
-    expect(aplicaEnFicha(cantidad, 'INSUMO', {})).toBe(false);
-    expect(aplicaEnFicha(cantidad, 'INSUMO', { requiere_rim: 'NO' })).toBe(false);
-    expect(aplicaEnFicha(cantidad, 'INSUMO', { requiere_rim: 'SI' })).toBe(true);
-    expect(camposObligatoriosCliente('INSUMO', undefined, { requiere_rim: 'NO' }).map((c) => c.clave)).not.toContain('cantidad_rim');
-    expect(camposObligatoriosCliente('INSUMO', undefined, { requiere_rim: 'SI' }).map((c) => c.clave)).toContain('cantidad_rim');
+  it('requiere_rim lo llena la aduana (grupo A), sigue obligatorio y cantidad_rim ya no existe (reunion 2026-11)', () => {
+    const rim = getCampo('requiere_rim')!;
+    expect(rim).toMatchObject({ grupo: 'A', tipoDato: 'si_no', seccion: 'especificaciones', escribible: true });
+    for (const tipo of TIPOS_PRODUCTO) {
+      expect(obligatoriedadPara(rim, tipo), tipo).toBe('O');
+      expect(camposObligatoriosAduana(tipo).map((c) => c.clave)).toContain('requiere_rim');
+      expect(camposObligatoriosCliente(tipo).map((c) => c.clave)).not.toContain('requiere_rim');
+    }
+    expect(CAMPOS.some((c) => c.clave === 'cantidad_rim')).toBe(false);
+    expect(CAMPOS_RETIRADOS.some((c) => c.clave === 'cantidad_rim')).toBe(true);
+  });
+
+  it('tipo_empaque es una lista fija (Bidón, Paquete, Unidad), siempre obligatoria y sin «No aplica»', () => {
+    const empaque = getCampo('tipo_empaque')!;
+    expect(empaque).toMatchObject({ tipoDato: 'lista', grupo: 'C', seccion: 'detalle' });
+    expect(empaque.opciones).toEqual(['Bidón', 'Paquete', 'Unidad']);
+    expect(EMPAQUES).toEqual(['Bidón', 'Paquete', 'Unidad']);
+    expect(empaque.noAplica).toBeFalsy();
+    for (const tipo of TIPOS_PRODUCTO) {
+      expect(obligatoriedadPara(empaque, tipo), tipo).toBe('O');
+      expect(aplicaEnFicha(empaque, tipo, {}), tipo).toBe(true);
+      expect(camposObligatoriosCliente(tipo, undefined, {}).map((c) => c.clave)).toContain('tipo_empaque');
+    }
+  });
+
+  it('el contenido por empaque solo aplica con Bidón o Paquete y cuenta como obligatorio solo entonces', () => {
+    const contenido = getCampo('cantidad_empaque')!;
+    expect(contenido).toMatchObject({ grupo: 'C', seccion: 'detalle', fila: 34, tipoDato: 'texto' });
+    expect(EMPAQUES_CON_CONTENIDO).toEqual(['Bidón', 'Paquete']);
+    for (const tipo of TIPOS_PRODUCTO) {
+      expect(aplicaEnFicha(contenido, tipo, {}), `${tipo}/vacio`).toBe(false);
+      expect(aplicaEnFicha(contenido, tipo, { tipo_empaque: 'Unidad' }), `${tipo}/Unidad`).toBe(false);
+      expect(aplicaEnFicha(contenido, tipo, { tipo_empaque: 'Bidón' }), `${tipo}/Bidón`).toBe(true);
+      expect(aplicaEnFicha(contenido, tipo, { tipo_empaque: 'Paquete' }), `${tipo}/Paquete`).toBe(true);
+    }
+    const claves = (v: Record<string, unknown>) => camposObligatoriosCliente('INSUMO', undefined, v).map((c) => c.clave);
+    expect(claves({ tipo_empaque: 'Unidad' })).not.toContain('cantidad_empaque');
+    expect(claves({})).not.toContain('cantidad_empaque');
+    expect(claves({ tipo_empaque: 'Bidón' })).toContain('cantidad_empaque');
+    expect(claves({ tipo_empaque: 'Paquete' })).toContain('cantidad_empaque');
+  });
+
+  it('la fecha de fabricacion es opcional («si aplica»), visible solo en equipos, y vive en detalle', () => {
+    const fecha = getCampo('fecha_fabricacion')!;
+    expect(fecha.seccion).toBe('detalle');
+    expect(obligatoriedadPara(fecha, 'EQUIPO')).toBe('P');
+    for (const tipo of TIPOS_PRODUCTO) {
+      if (tipo !== 'EQUIPO') expect(esVisible(fecha, tipo), tipo).toBe(false);
+      expect(camposObligatoriosCliente(tipo).map((c) => c.clave), tipo).not.toContain('fecha_fabricacion');
+    }
   });
 
   it('las etiquetas de uso y funciones son las que pidio la usuaria en todos los tipos', () => {
@@ -126,17 +170,17 @@ describe('catalogo de campos contra la matriz del SPEC 7 con los cambios de la r
         expect(claves).not.toContain(fuera);
       }
     }
-    expect(camposObligatoriosCliente('EQUIPO').map((c) => c.clave)).toContain('fecha_fabricacion');
-    expect(camposObligatoriosCliente('INSUMO').map((c) => c.clave)).not.toContain('fecha_fabricacion');
+    // La fecha de fabricacion es opcional («si aplica»): ya no cuenta para el color de la seccion ni en equipos.
+    expect(camposObligatoriosCliente('EQUIPO').map((c) => c.clave)).not.toContain('fecha_fabricacion');
   });
 
-  it('descripciones minimas adicionales: texto de la aduana, obligatorio; la aduana cuenta cinco obligatorios', () => {
+  it('descripciones minimas adicionales: texto de la aduana, obligatorio; la aduana cuenta seis obligatorios (con requiere_rim)', () => {
     const dm = getCampo('descripciones_minimas');
     expect(dm).toMatchObject({ etiqueta: 'Descripciones mínimas adicionales', grupo: 'A', tipoDato: 'texto_largo', escribible: true, subbloque: null });
     expect(dm?.maximo).toBeGreaterThanOrEqual(2000);
     for (const tipo of TIPOS_PRODUCTO) {
       expect(camposObligatoriosAduana(tipo).map((c) => c.clave).sort()).toEqual(
-        ['clasificacion_finalizada', 'descripciones_minimas', 'observaciones_aduana', 'partida_arancelaria', 'restricciones'],
+        ['clasificacion_finalizada', 'descripciones_minimas', 'observaciones_aduana', 'partida_arancelaria', 'requiere_rim', 'restricciones'],
       );
     }
     expect(getCampo('respuesta_area')).toMatchObject({ grupo: 'C', tipoDato: 'respuesta', subbloque: 'complementos_aduana' });

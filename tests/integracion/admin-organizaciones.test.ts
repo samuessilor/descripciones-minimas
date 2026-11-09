@@ -36,6 +36,7 @@ async function enviarA(referenciaId: string, a: { usuarioId: string }, estado: '
     aUsuarioId: a.usuarioId,
     pedido: 'clasificar',
     estado,
+    ...(estado === 'hecha' ? { completadaEn: new Date() } : {}),
     ...(accesoHasta ? { accesoHasta } : {}),
   });
 }

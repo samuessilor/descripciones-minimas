@@ -167,6 +167,7 @@ describe('exportacion: nombres y fechas', () => {
     expect(COLUMNAS_BASE[34]?.encabezado).toBe('Última actualización');
     const claves = COLUMNAS_BASE.map((c) => c.clave);
     for (const fuera of ['valor_unitario', 'cantidad_a_radicar', 'primer_clasificador', 'segundo_clasificador']) expect(claves).not.toContain(fuera);
-    for (const nueva of ['area_responsable', 'requiere_rim', 'cantidad_rim', 'respuesta_area']) expect(claves).toContain(nueva);
+    for (const nueva of ['area_responsable', 'requiere_rim', 'cantidad_empaque', 'respuesta_area']) expect(claves).toContain(nueva);
+    expect(claves).not.toContain('cantidad_rim');
   });
 });

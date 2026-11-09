@@ -27,12 +27,11 @@ import { contextoAdmin, param } from '../_contexto';
 
 export const metadata: Metadata = { title: 'Catálogos · Descripciones mínimas' };
 
-type Clave = 'unidades' | 'aspecto' | 'empaques' | 'paises' | 'tipos' | 'restricciones' | 'partidas';
+type Clave = 'unidades' | 'aspecto' | 'paises' | 'tipos' | 'restricciones' | 'partidas';
 
 const SECCIONES: ReadonlyArray<{ id: Clave; etiqueta: string }> = [
   { id: 'unidades', etiqueta: 'Unidades de medida' },
   { id: 'aspecto', etiqueta: 'Aspecto físico' },
-  { id: 'empaques', etiqueta: 'Tipos de empaque' },
   { id: 'paises', etiqueta: 'Países' },
   { id: 'tipos', etiqueta: 'Tipos de producto' },
   { id: 'restricciones', etiqueta: 'Restricciones' },
@@ -53,13 +52,6 @@ const LISTAS = {
     descripcion: 'Las opciones del campo «Aspecto físico» de la ficha.',
     ejemplo: 'Ejemplo: Granulado',
     singular: 'aspecto',
-  },
-  empaques: {
-    catalogo: 'sugerencia_empaque' as const,
-    titulo: 'Tipos de empaque',
-    descripcion: 'Son sugerencias: quien llena puede escribir otro empaque («bolsa por diez»). Aquí se ordenan las que se ofrecen primero.',
-    ejemplo: 'Ejemplo: Caja de 12',
-    singular: 'empaque',
   },
 };
 
@@ -238,7 +230,7 @@ export default async function AdminCatalogos({ searchParams }: { searchParams: P
   const pestanas = SECCIONES.map((s) => ({ id: s.id, etiqueta: s.etiqueta, href: s.id === 'unidades' ? '/admin/catalogos' : `/admin/catalogos?seccion=${s.id}` }));
 
   let contenido: ReactNode;
-  if (activa === 'unidades' || activa === 'aspecto' || activa === 'empaques') {
+  if (activa === 'unidades' || activa === 'aspecto') {
     const items = await listarItemsCatalogo(ctx.db, ctx.actor, LISTAS[activa].catalogo);
     contenido = <ListaDeValores clave={activa} items={items} />;
   } else if (activa === 'paises') {

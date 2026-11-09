@@ -93,6 +93,7 @@ export function FilaEsperandoUI({ f }: { f: FilaEsperando }) {
           <h3 className="break-words font-display text-lg font-extrabold leading-snug text-tinta">
             <Link
               href={`/referencias/${f.referenciaId}`}
+              prefetch={false}
               aria-label={`Abrir ${f.codigo}: ${f.nombreProducto}`}
               className="after:absolute after:inset-0 after:content-[''] hover:text-azul-700 focus-visible:outline-offset-4"
             >
@@ -146,6 +147,7 @@ export function FilaRecienteUI({ f }: { f: FilaReciente }) {
           <h3 className="break-words font-display text-base font-extrabold leading-snug text-tinta">
             <Link
               href={`/referencias/${f.id}`}
+              prefetch={false}
               aria-label={`Abrir ${f.codigo}: ${f.nombreProducto}`}
               className="after:absolute after:inset-0 after:content-[''] hover:text-azul-700 focus-visible:outline-offset-4"
             >

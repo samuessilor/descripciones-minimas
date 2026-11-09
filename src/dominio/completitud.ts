@@ -2,13 +2,13 @@
  * Semaforo por seccion y global (8.2, D-13, D-26). Funcion pura sobre la matriz de campos.
  *
  * Una seccion es VERDE si todos sus campos `O` DEL GRUPO CLIENTE que aplican a la ficha tienen valor valido (la marca
- * «No aplica», «No tiene marca» o «El proveedor es el mismo fabricante» cuentan como valor; la cantidad del RIM solo
- * se pide si requiere RIM). Los `O` del grupo aduana (partida, descripciones minimas adicionales, restricciones,
- * observaciones y clasificacion finalizada) no entran: se cuentan en "De la aduana", igual que la respuesta del area a
+ * «No aplica», «No tiene marca» o «El proveedor es el mismo fabricante» cuentan como valor; el contenido por
+ * empaque solo se pide con bidon o paquete). Los `O` del grupo aduana (partida, RIM, descripciones minimas adicionales,
+ * restricciones, observaciones y clasificacion finalizada) no entran: se cuentan en "De la aduana", igual que la respuesta del area a
  * una solicitud de la aduana mientras este pendiente. Mientras `clasificacion_finalizada` sea `NO`, Especificaciones se
  * muestra amarilla ("La aduana pidió más información").
  *
- * Todo sale de los valores vigentes: borrar un valor, desmarcar «No aplica» o pasar el RIM a «Sí» sin cantidad lo
+ * Todo sale de los valores vigentes: borrar un valor, desmarcar «No aplica» o elegir bidon o paquete sin contenido lo
  * vuelve a dejar pendiente en el mismo calculo que usan la ficha, el tablero, el listado, la bandeja y el Excel.
  */
 import { SECCIONES, camposObligatoriosAduana, camposObligatoriosCliente, type Seccion, type TipoProducto } from './campos';

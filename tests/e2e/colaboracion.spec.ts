@@ -12,7 +12,7 @@
  */
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
-import { CLAVE_EJEMPLO, entrarComo, pulsarHidratado } from './ayudas';
+import { abrirSeccion, CLAVE_EJEMPLO, entrarComo, pulsarHidratado } from './ayudas';
 
 test.describe.configure({ mode: 'serial' });
 test.setTimeout(600_000);
@@ -196,6 +196,7 @@ test('restaurar un valor anterior desde el campo: siempre pide motivo y deja una
   const id = await crearFicha(a, `E2E-${SUFIJO}-2`, 'Producto para restaurar');
 
   // A escribe, B (otra persona) lo reemplaza con motivo.
+  await abrirSeccion(a, 'producto');
   const campoA = a.getByLabel('Descripción según factura');
   await campoA.fill('LIMPIADOR VERSION UNO');
   await campoA.blur();
@@ -203,6 +204,7 @@ test('restaurar un valor anterior desde el campo: siempre pide motivo y deja una
   await expect(a.locator('[data-campo="descripcion_factura"]').getByRole('button', { name: /Ver el historial de este campo/ })).toBeVisible({ timeout: 180_000 });
 
   await b.goto(`/referencias/${id}`);
+  await abrirSeccion(b, 'producto');
   const campoB = b.getByLabel('Descripción según factura');
   await campoB.fill('LIMPIADOR VERSION DOS');
   await campoB.blur();

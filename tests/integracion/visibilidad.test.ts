@@ -105,6 +105,7 @@ describe('acceso temporal de la aduana (8.3 regla 10, S-22)', () => {
       deUsuarioId: e.edward.usuarioId,
       aUsuarioId: e.brian.usuarioId,
       estado,
+      ...(['hecha', 'reasignada', 'cancelada'].includes(estado) ? { completadaEn: new Date() } : {}),
       accesoHasta,
     });
     return f;
@@ -153,7 +154,7 @@ describe('acceso temporal de la aduana (8.3 regla 10, S-22)', () => {
     const f = await nuevaFicha(e);
     await asignarAAduana(e, f, e.brian);
     expect(await codigoDe(vistaFicha(e.db, e.brian, f, ahora))).toBe('OK');
-    await e.db.update(referencia).set({ archivadaEn: new Date(), archivadaPor: e.admin.usuarioId, motivoArchivo: 'p' }).where(eq(referencia.id, f));
+    await e.db.update(referencia).set({ archivadaEn: new Date(), archivadaPor: e.admin.usuarioId, motivoArchivo: 'p', estadoPrevioArchivo: 'BORRADOR' }).where(eq(referencia.id, f));
     expect(await codigoDe(vistaFicha(e.db, e.brian, f, ahora))).toBe('NO_ENCONTRADO');
     expect(await codigoDe(vistaFicha(e.db, e.edward, f, ahora))).toBe('OK'); // los internos si la ven
   });

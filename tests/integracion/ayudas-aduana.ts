@@ -7,7 +7,10 @@ import { guardarCampo } from '@/server/acciones/guardar-campo';
 import type { Actor } from '@/server/politicas/actor';
 import { asignarAAduana, nuevaFicha, versionDe, type Escenario } from './ayudas';
 
-/** Los `O` del grupo cliente de un INSUMO (datos inventados). */
+/**
+ * Los `O` del grupo cliente de un INSUMO (datos inventados). El RIM ya no esta aqui: lo responde la aduana al clasificar
+ * (reunion 2026-11); `fichaEnAduana({ llena: true })` lo pone en nombre de Brian.
+ */
 export const DATOS_INSUMO: Array<[string, unknown]> = [
   // Un area sin cuentas en el escenario: la solicitud de la aduana le llega a quien creo la ficha.
   ['area_responsable', 'Instrumentos'],
@@ -21,8 +24,7 @@ export const DATOS_INSUMO: Array<[string, unknown]> = [
   ['pais_origen', 'FR'],
   ['fabricante', 'Fabricante Demo SA'],
   ['proveedor', 'Proveedor Demo SA'],
-  ['tipo_empaque', 'Bidón de 20 kg'],
-  ['requiere_rim', 'NO'],
+  ['tipo_empaque', 'Unidad'],
 ];
 
 export async function escribir(e: Escenario, actor: Actor, id: string, campo: string, valor: unknown, motivo?: string): Promise<void> {
@@ -39,10 +41,10 @@ export async function llenarComoArea(e: Escenario, id: string, actor: Actor = e.
   for (const [campo, valor] of DATOS_INSUMO) await escribir(e, actor, id, campo, valor);
 }
 
-/** Ficha creada por Edward, enviada a Brian (agencia A). `llena` completa lo del area. */
+/** Ficha creada por Edward, enviada a Brian (agencia A). `llena` completa lo del area y Brian responde el RIM (No). */
 export async function fichaEnAduana(
   e: Escenario,
-  opciones: { llena?: boolean; tipo?: TipoProducto; codigo?: string; nombre?: string } = {},
+  opciones: { llena?: boolean; rim?: 'SI' | 'NO' | false; tipo?: TipoProducto; codigo?: string; nombre?: string } = {},
 ): Promise<string> {
   const id = await nuevaFicha(e, {
     ...(opciones.tipo ? { tipo: opciones.tipo } : {}),
@@ -51,6 +53,9 @@ export async function fichaEnAduana(
   });
   if (opciones.llena) await llenarComoArea(e, id);
   await asignarAAduana(e, id, e.brian);
+  // La aduana responde el RIM: con `llena` queda respondido (No) para poder cerrar; `rim: false` lo deja sin responder.
+  const rim = opciones.rim ?? (opciones.llena ? 'NO' : false);
+  if (rim) await escribir(e, e.brian, id, 'requiere_rim', rim);
   return id;
 }
 

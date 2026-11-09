@@ -1,7 +1,7 @@
 'use client';
 
 import { Copy, EllipsisVertical, Lock, Pencil, TriangleAlert, CircleCheck, WifiOff } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EVENTO_FICHA_CAMBIADA } from '@/componentes/colaboracion/api';
 import { EVENTO_PRESENCIA, presente } from '@/componentes/colaboracion/presencia';
 import { SONDEO } from '@/componentes/colaboracion/sondeo';
@@ -76,20 +76,11 @@ export function FichaFormulario({
   const [editando, setEditando] = useState<EstadoSondeo['editando']>([]);
   const [problemaSondeo, setProblemaSondeo] = useState<'sesion' | 'red' | null>(null);
   const [fases, setFases] = useState<Record<string, { fase: FaseCampo; etiqueta: string }>>({});
-  // Lo que la persona abrio o cerro a mano; si no toco nada, manda el valor por defecto (movil: plegadas las completas).
-  const [manual, setManual] = useState<Partial<Record<Seccion, boolean>>>({});
-  const esMovil = useSyncExternalStore(
-    (cb) => {
-      const m = window.matchMedia('(max-width: 599.98px)');
-      m.addEventListener('change', cb);
-      return () => m.removeEventListener('change', cb);
-    },
-    () => window.matchMedia('(max-width: 599.98px)').matches,
-    () => false,
-  );
-  const abiertas = Object.fromEntries(
-    SECCIONES.map((s) => [s, manual[s] ?? (esMovil ? inicial.completitud.secciones[s].estado !== 'verde' : true)]),
-  ) as Record<Seccion, boolean>;
+  // Todas las secciones arrancan plegadas (reunion 2026-11: «que se vea limpio»). Lo que la persona abre o cierra a mano se
+  // conserva mientras no recargue: los refrescos por sondeo cambian `ficha`, nunca este estado. Excepcion: una ficha
+  // borrador recien creada, sin ningun campo lleno, abre Producto; un enlace con ancla abre su seccion (efecto de abajo).
+  const [manual, setManual] = useState<Partial<Record<Seccion, boolean>>>(() => (esBorradorVirgen(inicial) ? { producto: true } : {}));
+  const abiertas = Object.fromEntries(SECCIONES.map((s) => [s, manual[s] ?? false])) as Record<Seccion, boolean>;
   const setAbiertas = (fn: (a: Record<Seccion, boolean>) => Record<Seccion, boolean>) => setManual(fn(abiertas));
   const [activa, setActiva] = useState<Seccion>('producto');
   const [corrigiendo, setCorrigiendo] = useState(false);
@@ -239,13 +230,16 @@ export function FichaFormulario({
     [tipo, valores],
   );
 
-  // Un enlace con ancla (#detalle) abre esa seccion y baja hasta ella (F8).
+  // Un enlace con ancla (#detalle, o el nombre de un campo: #uso) abre esa seccion y baja hasta ella (F8).
   useEffect(() => {
-    const ancla = window.location.hash.replace('#', '') as Seccion;
-    if (!(SECCIONES as readonly string[]).includes(ancla)) return;
+    const ancla = window.location.hash.replace('#', '');
+    const seccion: Seccion | undefined = (SECCIONES as readonly string[]).includes(ancla)
+      ? (ancla as Seccion)
+      : CAMPOS.find((c) => c.clave === ancla && !c.subbloque)?.seccion;
+    if (!seccion) return;
     const t = requestAnimationFrame(() => {
-      setManual((m) => ({ ...m, [ancla]: true }));
-      requestAnimationFrame(() => document.getElementById(ancla)?.scrollIntoView({ block: 'start' }));
+      setManual((m) => ({ ...m, [seccion]: true }));
+      requestAnimationFrame(() => (document.querySelector<HTMLElement>(`[data-campo="${CSS.escape(ancla)}"]`) ?? document.getElementById(seccion))?.scrollIntoView({ block: 'start' }));
     });
     return () => cancelAnimationFrame(t);
   }, []);
@@ -671,6 +665,14 @@ export function FichaFormulario({
       ) : null}
     </div>
   );
+}
+
+/** Campos que ya trae una ficha al crearse (la ficha nace con ellos): no cuentan como «algo lleno». */
+const CAMPOS_DE_ALTA: ReadonlySet<string> = new Set(['codigo', 'nombre_producto', 'fecha_solicitud', 'tipo_producto', 'area_responsable']);
+
+/** Borrador recien creado: nadie ha llenado nada aparte de lo que pide el alta. */
+function esBorradorVirgen(f: FichaVista): boolean {
+  return f.estado === 'BORRADOR' && !f.archivada && Object.values(f.campos).every((c) => CAMPOS_DE_ALTA.has(c.clave) || estaVacio(c.valor));
 }
 
 /** Etiquetas de los campos con regla `-` para este tipo (transparencia: «no pedimos…»). */

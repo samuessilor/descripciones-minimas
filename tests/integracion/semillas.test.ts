@@ -116,6 +116,8 @@ describe('semillas de desarrollo', () => {
     expect(v.completitud.secciones.producto.estado).toBe('verde');
     expect(v.completitud.aduana.faltan).toBeGreaterThan(0);
     expect(v.campos.requiere_rim!.valor).toBe('SI');
-    expect(v.campos.cantidad_rim!.valor).toEqual({ valor: '156', expresion: '13x12' });
+    expect(v.campos.tipo_empaque!.valor).toBe('Bidón');
+    expect(v.campos.cantidad_empaque!.valor).toBe('20 kg');
+    expect(v.campos.cantidad_rim).toBeUndefined(); // retirado: ya no se siembra
   });
 });

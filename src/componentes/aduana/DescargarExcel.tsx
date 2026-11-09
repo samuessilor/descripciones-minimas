@@ -90,7 +90,7 @@ export function DescargarExcel() {
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
-      avisar({ tipo: 'exito', titulo: 'Excel descargado', descripcion: `${total ? `${filas(Number(total))} · ` : ''}${nombre}` });
+      avisar({ tipo: 'exito', titulo: 'Excel descargado', descripcion: `${total ? `${filas(Number(total))} · ` : ''}${nombre} · con las hojas Resumen de estado e Historial` });
     } catch {
       avisar({ tipo: 'error', titulo: 'No pudimos descargar el Excel', descripcion: 'Revisa tu conexión e intenta de nuevo.' });
     } finally {

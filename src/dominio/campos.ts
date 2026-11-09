@@ -74,7 +74,9 @@ export interface CampoDef {
   catalogo?: 'unidad_medida' | 'aspecto_fisico';
   /** Admite la marca «No aplica» (`{ no_aplica: true }`), que cuenta como diligenciado. Es el texto de la casilla. */
   noAplica?: string;
-  /** Solo se pide si otro campo tiene ese valor (la cantidad, solo si requiere RIM). */
+  /** Opciones fijas de una lista (sin catalogo administrable). Se valida en el servidor. */
+  opciones?: readonly string[];
+  /** Solo se pide si otro campo tiene ese valor (o uno de estos): el contenido, solo si el empaque es bidon o paquete. */
   soloSi?: { clave: string; valor: unknown };
   ayuda: string;
   ayudaPorTipo?: Partial<Record<TipoProducto, string>>;
@@ -96,6 +98,11 @@ const TODOS_P = r('P', 'P', 'P', 'P');
 const NINGUNO = r('-', '-', '-', '-');
 
 export const TEXTO_NO_APLICA = 'No aplica';
+
+/** Tipos de empaque (reunion 2026-11): siempre hay uno; si no viene en empaque, es «Unidad». */
+export const EMPAQUES = ['Bidón', 'Paquete', 'Unidad'] as const;
+/** Con estos empaques se pide ademas «por cuanto» viene (litros/kilos por bidon, unidades por paquete). */
+export const EMPAQUES_CON_CONTENIDO: readonly string[] = ['Bidón', 'Paquete'];
 
 function def(c: Omit<CampoDef, 'subbloque' | 'escribible' | 'ayuda'> & Partial<Pick<CampoDef, 'subbloque' | 'escribible' | 'ayuda'>>): CampoDef {
   return { subbloque: null, escribible: true, ayuda: '', ...c };
@@ -188,8 +195,14 @@ export const CAMPOS: readonly CampoDef[] = [
   }),
   def({
     clave: 'tipo_empaque', etiqueta: 'Tipo de empaque', seccion: 'detalle', grupo: 'C', fila: 16, confianza: 'F',
-    tipoDato: 'texto', reglas: TODOS_O, maximo: 200, noAplica: TEXTO_NO_APLICA,
-    ayuda: 'Ej.: Bidones',
+    tipoDato: 'lista', opciones: EMPAQUES, reglas: TODOS_O, maximo: 100,
+    ayuda: 'Siempre aplica: si no viene en bidón ni en paquete, elige «Unidad».',
+  }),
+  // «Por cuanto»: aparece solo con bidon o paquete. Ej.: 20 litros, 10 kilos, 10 unidades.
+  def({
+    clave: 'cantidad_empaque', etiqueta: 'Contenido por empaque', seccion: 'detalle', grupo: 'C', fila: 34, confianza: 'F',
+    tipoDato: 'texto', reglas: TODOS_O, maximo: 60, soloSi: { clave: 'tipo_empaque', valor: EMPAQUES_CON_CONTENIDO.join('|') },
+    ayuda: 'Bidón: litros o kilos por bidón (ej.: 20 litros). Paquete: unidades por paquete (ej.: 10 unidades).',
   }),
   // Obligatoria donde aplica hoy (repuesto y accesorio); a la montura no le aplica.
   def({
@@ -197,19 +210,18 @@ export const CAMPOS: readonly CampoDef[] = [
     confianza: 'S', tipoDato: 'texto_largo', reglas: r('-', 'O', '-', 'O', '-'), maximo: 500,
     ayuda: 'Ej.: Aspiradora MEI',
   }),
+  // Solo para equipos/instrumentos y «si aplica» (reunion 2026-11): opcional, con calendario.
+  def({
+    clave: 'fecha_fabricacion', etiqueta: 'Fecha de fabricación', seccion: 'detalle', grupo: 'C', fila: 20,
+    confianza: 'F', tipoDato: 'fecha_fabricacion', reglas: r('-', '-', 'P', '-'),
+    ayuda: 'Si aplica (instrumentos y equipos de medición). Elige la fecha en el calendario.',
+  }),
   // ---- Especificaciones
+  // Lo sabe el agente aduanero al clasificar (reunion 2026-11); si requiere RIM, Comercio Exterior sigue por fuera.
   def({
-    clave: 'requiere_rim', etiqueta: '¿Requiere registro de importación (RIM)?', seccion: 'especificaciones', grupo: 'C',
+    clave: 'requiere_rim', etiqueta: '¿Requiere registro de importación (RIM)?', seccion: 'especificaciones', grupo: 'A',
     fila: 30, confianza: 'F', tipoDato: 'si_no', reglas: TODOS_O,
-  }),
-  def({
-    clave: 'cantidad_rim', etiqueta: 'Cantidad', seccion: 'especificaciones', grupo: 'C', fila: 31, confianza: 'F',
-    tipoDato: 'cantidad', reglas: TODOS_O, soloSi: { clave: 'requiere_rim', valor: 'SI' },
-    ayuda: 'La cantidad del registro de importación. Ej.: 156 o 13x12',
-  }),
-  def({
-    clave: 'fecha_fabricacion', etiqueta: 'Fecha de fabricación', seccion: 'especificaciones', grupo: 'C', fila: 20,
-    confianza: 'F', tipoDato: 'fecha_fabricacion', reglas: r('-', '-', 'O', '-'),
+    ayuda: 'Lo responde la aduana al clasificar. Si es Sí, Comercio Exterior gestiona el registro por fuera de la plataforma.',
   }),
   def({
     clave: 'adjuntos', etiqueta: 'Foto', seccion: 'especificaciones', grupo: 'C', fila: 21, confianza: 'F',
@@ -259,6 +271,11 @@ export const CAMPOS: readonly CampoDef[] = [
  * se sigue leyendo con su etiqueta. No van en `CAMPOS`.
  */
 export const CAMPOS_RETIRADOS: readonly CampoDef[] = [
+  // La cantidad del RIM se gestiona por fuera de la plataforma (reunion 2026-11).
+  def({
+    clave: 'cantidad_rim', etiqueta: 'Cantidad', seccion: 'especificaciones', grupo: 'C', fila: 31, confianza: 'F',
+    tipoDato: 'cantidad', reglas: NINGUNO, escribible: false,
+  }),
   def({
     clave: 'valor_unitario', etiqueta: 'Valor unitario (USD)', seccion: 'especificaciones', grupo: 'C', fila: 18,
     confianza: 'F', tipoDato: 'valor_unitario', reglas: NINGUNO, escribible: false,
@@ -292,7 +309,10 @@ export function esVisible(campo: CampoDef, tipo: TipoProducto): boolean {
 /** El campo se pide en esta ficha: visible para el tipo y, si depende de otro, con el valor que lo activa. */
 export function aplicaEnFicha(campo: CampoDef, tipo: TipoProducto, valores: Record<string, unknown>): boolean {
   if (!esVisible(campo, tipo)) return false;
-  return !campo.soloSi || valores[campo.soloSi.clave] === campo.soloSi.valor;
+  if (!campo.soloSi) return true;
+  const actual = valores[campo.soloSi.clave];
+  const validos = typeof campo.soloSi.valor === 'string' ? campo.soloSi.valor.split('|') : [campo.soloSi.valor];
+  return validos.includes(actual as string);
 }
 
 export function obligatoriedadPara(campo: CampoDef, tipo: TipoProducto): Obligatoriedad {
@@ -310,7 +330,7 @@ export function camposPantalla(tipo: TipoProducto): CampoDef[] {
 
 /**
  * Los `O` del grupo cliente: lo que el area debe llenar para ver la seccion en verde (D-26). Con `valores`, solo los
- * que aplican en esa ficha (la cantidad del RIM cuenta solo si requiere RIM).
+ * que aplican en esa ficha (el contenido por empaque cuenta solo con bidon o paquete).
  */
 export function camposObligatoriosCliente(tipo: TipoProducto, seccion?: Seccion, valores?: Record<string, unknown>): CampoDef[] {
   return CAMPOS.filter(

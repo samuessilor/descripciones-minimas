@@ -105,14 +105,14 @@ describe('comentarios con alcance (RV-29)', () => {
 
   it('se puede comentar una ficha clasificada, no una archivada; y un comentario no se edita ni se borra', async () => {
     const id = await nuevaFicha(e);
-    await e.db.update(referencia).set({ estado: 'CLASIFICADA', clasificadaEn: T0 }).where(eq(referencia.id, id));
+    await e.db.update(referencia).set({ estado: 'CLASIFICADA', clasificadaEn: T0, clasificadaPor: e.admin.usuarioId }).where(eq(referencia.id, id));
     const r = await comentar(e.ctx(e.edward, T0), { referenciaId: id, texto: 'Sigue válida', visibilidad: 'interno' });
     expect(r.id).toBeTruthy();
     await rechazaCon(e.db.update(comentario).set({ texto: 'cambiado' }).where(eq(comentario.id, r.id)), /solo escritura|solo-escritura|no admite/i);
     await rechazaCon(e.db.delete(comentario).where(eq(comentario.id, r.id)), /solo escritura|solo-escritura|no admite/i);
 
     const arch = await nuevaFicha(e);
-    await e.db.update(referencia).set({ archivadaEn: T0 }).where(eq(referencia.id, arch));
+    await e.db.update(referencia).set({ archivadaEn: T0, archivadaPor: e.admin.usuarioId, motivoArchivo: 'prueba', estadoPrevioArchivo: 'BORRADOR' }).where(eq(referencia.id, arch));
     expect(await codigo(comentar(e.ctx(e.admin, T0), { referenciaId: arch, texto: 'x', visibilidad: 'interno' }))).toBe('FICHA_CERRADA');
   });
 
@@ -392,7 +392,7 @@ describe('historial de la ficha: autor, motivo oculto a la aduana (PA-38) y rest
     const solo = await historialDeFichaDe(e.db, e.edward, id, T0, { campo: 'uso' });
     expect(solo.items.every((x) => x.campo === 'uso')).toBe(true);
 
-    await e.db.update(referencia).set({ estado: 'CLASIFICADA', clasificadaEn: T0 }).where(eq(referencia.id, id));
+    await e.db.update(referencia).set({ estado: 'CLASIFICADA', clasificadaEn: T0, clasificadaPor: e.admin.usuarioId }).where(eq(referencia.id, id));
     const cerrada = await historialDeFichaDe(e.db, e.edward, id, T0, { campo: 'uso' });
     expect(cerrada.items.every((x) => !x.restaurable)).toBe(true);
   });

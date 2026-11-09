@@ -1,7 +1,8 @@
 /**
  * P-06 / CA-25: el Excel se relee con exceljs y se compara con los datos sembrados. Sin formulas, `=1+1` como texto,
  * tildes y saltos de linea intactos, codigo y partida como texto, archivadas solo con la casilla, aislamiento de
- * agencias, filtros, auditoria, limite de uso y reautenticacion de externos.
+ * agencias, filtros, auditoria, limite de uso y reautenticacion de externos. Incluye las hojas `Resumen de estado` e
+ * `Historial` (reunion 2026-11: poder descargar un registro tangible).
  */
 import { and, eq } from 'drizzle-orm';
 import type ExcelJS from 'exceljs';
@@ -11,8 +12,12 @@ import { archivar, finalizar } from '@/server/acciones/aduana';
 import { crearReferencia } from '@/server/acciones/crear-referencia';
 import { fijarPartida } from '@/server/acciones/partida';
 import { ErrorAccion } from '@/server/acciones/resultado';
-import { COLUMNAS_BASE } from '@/server/exportar/columnas';
-import { contarExportable, exportarBase, nombreDeArchivo } from '@/server/exportar';
+import { COLUMNAS_BASE, COLUMNAS_HISTORIAL, COLUMNAS_RESUMEN } from '@/server/exportar/columnas';
+import { contarExportable, exportarBase, flujoDeDescarga, nombreDeArchivo } from '@/server/exportar';
+import { NombresUsuarios } from '@/server/exportar/filas';
+import { cargarHistorial, TOPE_HISTORIAL } from '@/server/exportar/historial';
+import { escribirLibro } from '@/server/exportar/libro';
+import { condicionVisible } from '@/server/politicas/referencias';
 import { asignarAAduana, nuevoEscenario, type Escenario } from './ayudas';
 import { abrirLibro, escribir, fichaEnAduana } from './ayudas-aduana';
 
@@ -32,9 +37,13 @@ beforeAll(async () => {
   await escribir(e, e.edward, pendiente, 'materia_constitutiva', 'Línea uno con ñandú\nLínea dos');
   await escribir(e, e.edward, pendiente, 'uso', '@SUM(A1:A9)');
   await escribir(e, e.edward, pendiente, 'proveedor', '+cmd|calc');
-  await escribir(e, e.edward, pendiente, 'tipo_empaque', '-2+3');
-  await escribir(e, e.edward, pendiente, 'requiere_rim', 'SI');
-  await escribir(e, e.edward, pendiente, 'cantidad_rim', '13x12');
+  await escribir(e, e.edward, pendiente, 'tipo_empaque', 'Bidón');
+  await escribir(e, e.edward, pendiente, 'cantidad_empaque', '-2+3');
+  // Un valor que otra persona del area reemplaza, con motivo: dos versiones en el historial.
+  await escribir(e, e.edward, pendiente, 'informacion_adicional', 'Primera versión');
+  await escribir(e, e.charles, pendiente, 'informacion_adicional', 'Versión corregida', 'Así lo dice la ficha técnica');
+  // El RIM lo responde la aduana (Brian), no el area.
+  await escribir(e, e.brian, pendiente, 'requiere_rim', 'SI');
   await fijarPartida(e.ctx(e.brian), { referenciaId: pendiente, partida: '8479.90.00.00', versionEsperada: 0 });
   await escribir(e, e.brian, pendiente, 'descripciones_minimas', 'Producto: bomba de vacío\nDestino: mesa de deposición\n=Lote: 42');
 
@@ -88,11 +97,11 @@ async function fallo(p: Promise<unknown>): Promise<ErrorAccion> {
 }
 
 describe('estructura del libro (P-06)', () => {
-  it('nombre de archivo con la fecha de Bogota, dos hojas y encabezados legibles', async () => {
+  it('nombre de archivo con la fecha de Bogota, cuatro hojas y encabezados legibles', async () => {
     const { libro, r } = await descargar();
     expect(r.nombreArchivo).toBe('descripciones-minimas_20261021_1530.xlsx');
     expect(nombreDeArchivo(AHORA)).toBe(r.nombreArchivo);
-    expect(libro.worksheets.map((h) => h.name)).toEqual(['Base', 'Leyenda']);
+    expect(libro.worksheets.map((h) => h.name)).toEqual(['Base', 'Resumen de estado', 'Historial', 'Leyenda']);
 
     const base = libro.getWorksheet('Base')!;
     const encabezados = (base.getRow(1).values as string[]).slice(1);
@@ -152,7 +161,6 @@ describe('contenido', () => {
     expect(p.getCell(col('fecha_solicitud')).value).toBeInstanceOf(Date);
     expect(p.getCell(col('actualizada')).value).toBeInstanceOf(Date);
     expect(p.getCell(col('requiere_rim')).text).toBe('Sí');
-    expect(p.getCell(col('cantidad_rim')).value).toBe(156);
     expect(p.getCell(1).value).toBe('00123-AB'); // texto, con ceros a la izquierda
     // La partida de trabajo de una pendiente no sale (L1: solo la final, como el listado); la clasificada la trae como texto.
     expect(p.getCell(col('partida')).value).toBeNull();
@@ -179,7 +187,7 @@ describe('contenido', () => {
     expect(celdas).toBeGreaterThan(100);
 
     const p = filaDe(libro.getWorksheet('Base')!, '00123-AB')!;
-    for (const [clave, valor] of [['nombre', '=1+1'], ['uso', '@SUM(A1:A9)'], ['proveedor', '+cmd|calc'], ['tipo_empaque', '-2+3']] as const) {
+    for (const [clave, valor] of [['nombre', '=1+1'], ['uso', '@SUM(A1:A9)'], ['proveedor', '+cmd|calc'], ['cantidad_empaque', '-2+3']] as const) {
       const c = p.getCell(col(clave));
       expect(c.value, clave).toBe(valor);
       expect(typeof c.value).toBe('string');
@@ -226,9 +234,8 @@ describe('contenido', () => {
     // «El proveedor es el mismo fabricante» sale con el nombre del fabricante.
     expect(c.getCell(col('proveedor')).text).toBe(c.getCell(col('fabricante')).text);
     expect(c.getCell(col('proveedor')).text).not.toBe('');
-    // Sin RIM: la cantidad no aplica y queda en blanco.
+    // La aduana respondio que no requiere RIM.
     expect(c.getCell(col('requiere_rim')).text).toBe('No');
-    expect(c.getCell(col('cantidad_rim')).value).toBeNull();
     expect((c.getCell(col('fecha_clasificacion')).value as Date).toISOString().slice(0, 10)).toBe('2026-10-21');
   });
 
@@ -243,6 +250,182 @@ describe('contenido', () => {
     expect(todo).toContain('Referencias exportadas 3');
     expect(todo).toContain('Pendiente');
     expect(todo).toContain('Clasificada');
+  });
+});
+
+const colResumen = (clave: string) => COLUMNAS_RESUMEN.findIndex((c) => c.clave === clave) + 1;
+const colHist = (clave: string) => COLUMNAS_HISTORIAL.findIndex((c) => c.clave === clave) + 1;
+const cambiosDe = (hoja: ExcelJS.Worksheet, codigo: string) => filas(hoja).filter((f) => f.getCell(1).text === codigo);
+const cambio = (hoja: ExcelJS.Worksheet, codigo: string, campo: string) =>
+  cambiosDe(hoja, codigo).filter((f) => f.getCell(colHist('campo')).text === campo);
+
+describe('hoja «Resumen de estado»', () => {
+  it('una fila por referencia con estado, dias en gestion, que tan completa va cada parte y de quien falta', async () => {
+    const { libro } = await descargar();
+    const hoja = libro.getWorksheet('Resumen de estado')!;
+    expect(((hoja.getRow(1).values as string[]).slice(1))).toEqual(COLUMNAS_RESUMEN.map((c) => c.encabezado));
+    expect(filas(hoja).map((f) => f.getCell(1).text).sort()).toEqual(['00123-AB', 'TEST-B-1', 'TEST-CLAS-1']);
+    expect(hoja.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
+
+    const p = filas(hoja).find((f) => f.getCell(1).text === '00123-AB')!;
+    expect(p.getCell(colResumen('estado')).text).toBe('Pendiente');
+    expect((p.getCell(colResumen('estado')).fill as ExcelJS.FillPattern).fgColor?.argb).toBe('FFFFFFA6');
+    expect(typeof p.getCell(colResumen('dias')).value).toBe('number');
+    expect(p.getCell(colResumen('pendiente_con')).text).toContain('Brian'); // de quien falta
+    expect(p.getCell(colResumen('resumen_aduana')).text).toMatch(/^Falt/);
+    expect(typeof p.getCell(colResumen('resumen_faltan_aduana')).value).toBe('number');
+
+    const c = filas(hoja).find((f) => f.getCell(1).text === 'TEST-CLAS-1')!;
+    expect(c.getCell(colResumen('estado')).text).toBe('Clasificada');
+    expect((c.getCell(colResumen('estado')).fill as ExcelJS.FillPattern).fgColor?.argb).toBe('FFC6EFCE');
+    for (const k of ['resumen_producto', 'resumen_detalle', 'resumen_especificaciones']) expect(c.getCell(colResumen(k)).text, k).toBe('Completa');
+    expect(c.getCell(colResumen('resumen_aduana')).text).toMatch(/^(Completa|Falta)/); // la clasificada se cerro con la aduana al dia o con pendientes
+    expect(c.getCell(colResumen('resumen_faltan_area')).value).toBe(0);
+
+    const vacia = filas(hoja).find((f) => f.getCell(1).text === 'TEST-B-1')!;
+    expect(vacia.getCell(colResumen('resumen_producto')).text).toMatch(/^Falta/);
+  });
+
+  it('la leyenda cuenta pendientes y clasificadas y nombra las hojas', async () => {
+    const { libro } = await descargar();
+    const t: string[] = [];
+    libro.getWorksheet('Leyenda')!.eachRow((f) => t.push(`${f.getCell(1).text} ${f.getCell(2).text}`));
+    const todo = t.join('\n');
+    expect(todo).toContain('Pendientes 2');
+    expect(todo).toContain('Clasificadas 1');
+    expect(todo).toContain('Hoja «Resumen de estado»');
+    expect(todo).toMatch(/Hoja «Historial» \d+ cambios de campo/);
+  });
+});
+
+describe('hoja «Historial»', () => {
+  it('cada cambio de campo: referencia, campo, valor anterior y nuevo, quien y cuando (hora de Bogota)', async () => {
+    const { libro } = await descargar();
+    const hoja = libro.getWorksheet('Historial')!;
+    expect(((hoja.getRow(1).values as string[]).slice(1))).toEqual(COLUMNAS_HISTORIAL.map((c) => c.encabezado));
+    expect(hoja.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
+
+    // «Uso» se lleno y luego se reescribio: el mas reciente trae el valor anterior; el primero, no.
+    const [uso, usoPrimero] = cambio(hoja, '00123-AB', 'Uso');
+    expect(uso).toBeDefined();
+    expect(uso!.getCell(colHist('nombre')).text).toBe('=1+1');
+    expect(uso!.getCell(colHist('evento')).text).toBe('Cambio');
+    expect(uso!.getCell(colHist('anterior')).text).toBe('Preparar la superficie antes del recubrimiento (ejemplo).');
+    expect(uso!.getCell(colHist('nuevo')).value).toBe('@SUM(A1:A9)'); // texto, no formula
+    expect(uso!.getCell(colHist('nuevo')).numFmt).toBe('@');
+    expect(uso!.getCell(colHist('quien')).text).toBe('Edward');
+    expect(uso!.getCell(colHist('cuando')).value).toBeInstanceOf(Date);
+    expect(usoPrimero!.getCell(colHist('evento')).text).toBe('Primer valor');
+    expect(usoPrimero!.getCell(colHist('anterior')).value).toBeNull();
+
+    // Un campo con dos versiones: la segunda trae lo anterior, quien la cambio y el motivo.
+    const versiones = cambio(hoja, '00123-AB', 'Información adicional');
+    expect(versiones).toHaveLength(2);
+    const [nueva, primera] = versiones; // del mas reciente al mas antiguo
+    expect(primera!.getCell(colHist('nuevo')).text).toBe('Primera versión');
+    expect(nueva!.getCell(colHist('evento')).text).toBe('Cambio');
+    expect(nueva!.getCell(colHist('anterior')).text).toBe('Primera versión');
+    expect(nueva!.getCell(colHist('nuevo')).text).toBe('Versión corregida');
+    expect(nueva!.getCell(colHist('quien')).text).toBe('Charles');
+    expect(nueva!.getCell(colHist('motivo')).text).toBe('Así lo dice la ficha técnica');
+
+    // Saltos de linea y tildes intactos; la aduana tambien deja huella.
+    const [dm] = cambio(hoja, '00123-AB', 'Descripciones mínimas adicionales');
+    expect(dm!.getCell(colHist('nuevo')).text).toBe('Producto: bomba de vacío\nDestino: mesa de deposición\n=Lote: 42');
+    expect(dm!.getCell(colHist('quien')).text).toBe('Brian');
+  });
+
+  it('va del cambio mas reciente al mas antiguo', async () => {
+    const { libro } = await descargar();
+    const fechas = filas(libro.getWorksheet('Historial')!).map((f) => (f.getCell(colHist('cuando')).value as Date).getTime());
+    expect(fechas.length).toBeGreaterThan(20);
+    for (let i = 1; i < fechas.length; i++) expect(fechas[i]!).toBeLessThanOrEqual(fechas[i - 1]!);
+  });
+
+  it('solo trae las referencias que entran en la exportacion: filtros y archivadas', async () => {
+    const verdes = await descargar(e.admin, { alcance: 'filtrado', filtros: { estado: 'verdes' } });
+    const codigos = new Set(filas(verdes.libro.getWorksheet('Historial')!).map((f) => f.getCell(1).text));
+    expect([...codigos]).toEqual(['TEST-CLAS-1']);
+
+    const sin = await descargar(e.admin, { alcance: 'toda' });
+    expect(new Set(filas(sin.libro.getWorksheet('Historial')!).map((f) => f.getCell(1).text))).not.toContain('TEST-ARCH-X');
+    const con = await descargar(e.admin, { alcance: 'toda', incluirArchivadas: true });
+    expect(new Set(filas(con.libro.getWorksheet('Historial')!).map((f) => f.getCell(1).text))).toContain('TEST-ARCH-X');
+  });
+
+  it('una agencia solo ve el historial de lo suyo y no el motivo de cambios hechos fuera de su organizacion', async () => {
+    const a = await descargar(e.brian, { alcance: 'toda' });
+    const hojaA = a.libro.getWorksheet('Historial')!;
+    expect(new Set(filas(hojaA).map((f) => f.getCell(1).text))).toEqual(new Set(['00123-AB', 'TEST-CLAS-1']));
+    // Charles es de la organizacion interna: Brian (aduana, agencia A) ve el cambio pero no el motivo (PA-38).
+    const [nueva] = cambio(hojaA, '00123-AB', 'Información adicional');
+    expect(nueva!.getCell(colHist('quien')).text).toBe('Charles');
+    expect(nueva!.getCell(colHist('motivo')).text).toBe('Motivo no visible para tu rol');
+    expect(JSON.stringify(a.libro.getWorksheet('Historial')!.getSheetValues())).not.toContain('Así lo dice la ficha técnica');
+
+    // La agencia B no recibe nada de las fichas de la A, y a Edward (interno) lo ve con nombre.
+    const b = await descargar(e.brianB, { alcance: 'toda' });
+    const hojaB = b.libro.getWorksheet('Historial')!;
+    expect(new Set(filas(hojaB).map((f) => f.getCell(1).text))).toEqual(new Set(['TEST-B-1']));
+    expect(JSON.stringify(hojaB.getSheetValues())).not.toContain('bomba de vacío');
+  });
+
+  it('el acceso de 30 dias vencido saca tambien el historial de la ficha', async () => {
+    const tarde = new Date(AHORA.getTime() + 31 * 86_400_000);
+    const { libro } = await descargar(e.brian, { alcance: 'toda' }, tarde);
+    expect(new Set(filas(libro.getWorksheet('Historial')!).map((f) => f.getCell(1).text))).toEqual(new Set(['00123-AB']));
+  });
+
+  it('una sola consulta agrupada para todas las referencias, no una por referencia', async () => {
+    let consultas = 0;
+    const contando = new Proxy(e.db, {
+      get(t, p) {
+        const v = Reflect.get(t, p) as unknown;
+        if (p === 'select') {
+          return (...a: unknown[]) => {
+            consultas += 1;
+            return (v as (...x: unknown[]) => unknown).apply(t, a);
+          };
+        }
+        return typeof v === 'function' ? (v as (...x: unknown[]) => unknown).bind(t) : v;
+      },
+    });
+    const h = await cargarHistorial({ ej: contando, actor: e.admin, nombres: new NombresUsuarios(e.admin) }, condicionVisible(e.admin, AHORA));
+    expect(h.filas.length).toBeGreaterThan(20); // varias referencias y decenas de cambios...
+    expect(consultas).toBeLessThanOrEqual(2); // ...una consulta de cambios + una de nombres, sin importar cuantas
+    expect(h.recortado).toBe(false);
+  });
+
+  it('tiene tope: si hay mas cambios que el tope, trae los mas recientes y lo avisa', async () => {
+    const todo = await cargarHistorial({ ej: e.db, actor: e.admin, nombres: new NombresUsuarios(e.admin) }, condicionVisible(e.admin, AHORA));
+    const corto = await cargarHistorial({ ej: e.db, actor: e.admin, nombres: new NombresUsuarios(e.admin) }, condicionVisible(e.admin, AHORA), 5);
+    expect(corto.recortado).toBe(true);
+    expect(corto.tope).toBe(5);
+    expect(corto.filas).toHaveLength(5);
+    expect(corto.filas.map((f) => f.valores.nuevo)).toEqual(todo.filas.slice(0, 5).map((f) => f.valores.nuevo)); // los mas recientes
+    expect(TOPE_HISTORIAL).toBe(20_000);
+  });
+
+  it('un historial recortado se avisa arriba en la hoja y en la leyenda, y la tabla sigue desde la fila 2', async () => {
+    const { salida, flujo } = flujoDeDescarga();
+    const leyenda = { exportadoPor: 'Prueba', rol: 'admin', fecha: '2026-10-21 15:30', alcance: 'Toda', filtros: [], filas: 0, incluyeArchivadas: false };
+    const escritura = escribirLibro(salida, {
+      lotes: async function* () {
+        yield [];
+      },
+      leyenda,
+      historial: async () => ({ filas: [], recortado: true, tope: TOPE_HISTORIAL }),
+    });
+    const libro = await abrirLibro(flujo);
+    await escritura;
+    const hoja = libro.getWorksheet('Historial')!;
+    expect(hoja.getCell('A1').text).toMatch(/^Aviso: hay más cambios de los que caben/);
+    expect(hoja.getCell('A1').text).toContain('20.000');
+    expect(hoja.getCell('A2').text).toBe('Código');
+    expect(hoja.views[0]).toMatchObject({ state: 'frozen', ySplit: 2 });
+    const t: string[] = [];
+    libro.getWorksheet('Leyenda')!.eachRow((f) => t.push(`${f.getCell(1).text} ${f.getCell(2).text}`));
+    expect(t.join('\n')).toContain('Incompleto');
   });
 });
 
@@ -348,6 +531,7 @@ describe('volumen', () => {
       nombreProducto: `Producto de volumen ${i}`,
       tipoProducto: 'INSUMO',
       estado: i % 2 === 0 ? 'EN_GESTION' : 'CLASIFICADA',
+      ...(i % 2 === 0 ? {} : { clasificadaEn: new Date('2026-10-21T10:00:00Z'), clasificadaPor: e.admin.usuarioId }),
       creadaPor: e.edward.usuarioId,
       datos: { uso: { v: `Uso ${i}\ncon salto`, n: 1, a: e.edward.usuarioId, o: e.orgInterna, t: '2026-10-20T10:00:00.000Z' } },
     }));

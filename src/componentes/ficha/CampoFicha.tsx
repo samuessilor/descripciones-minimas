@@ -542,7 +542,7 @@ export function CampoFicha(props: PropsCampo) {
           />
         );
       case 'lista': {
-        const opts = def.catalogo ? catalogos[def.catalogo] : [];
+        const opts = def.opciones ? [...def.opciones] : def.catalogo ? catalogos[def.catalogo] : [];
         const lista = opts.includes(borrador.texto) || borrador.texto === '' ? opts : [borrador.texto, ...opts];
         if (def.catalogo === 'unidad_medida') {
           return (

@@ -104,8 +104,16 @@ function normalizarSegunTipo(campo: CampoDef, entrada: unknown, ctx: ContextoVal
   switch (campo.tipoDato) {
     case 'texto':
     case 'texto_largo':
-    case 'lista':
       return textoLibre(campo, entrada);
+
+    case 'lista': {
+      const r = textoLibre(campo, entrada);
+      // Lista fija (tipo de empaque): solo valen sus opciones. Las de catalogo se validan en el servidor.
+      if (r.ok && campo.opciones && typeof r.valor === 'string' && !campo.opciones.includes(r.valor)) {
+        return falla('Elige una opción de la lista.');
+      }
+      return r;
+    }
 
     case 'tipo_producto': {
       if (typeof entrada !== 'string' || !(TIPOS_PRODUCTO as readonly string[]).includes(entrada)) {
