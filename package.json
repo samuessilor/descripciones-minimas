@@ -1,0 +1,77 @@
+{
+  "name": "descripciones-minimas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plataforma de descripciones minimas (Supply Chain)",
+  "engines": {
+    "node": "24.x",
+    "npm": ">=11"
+  },
+  "scripts": {
+    "inicio": "tsx scripts/inicio.mts",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --project unit",
+    "test:integ": "vitest run --project integracion",
+    "test:db-real": "vitest run --project db-real",
+    "test:all": "vitest run --project unit --project integracion",
+    "test:e2e": "playwright test",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx --env-file-if-exists=.env.local scripts/db-migrate.mts",
+    "db:reset": "tsx --env-file-if-exists=.env.local scripts/db-reset.mts",
+    "db:roles": "tsx --env-file-if-exists=.env.local scripts/db-roles.mts",
+    "setup": "tsx scripts/setup.mts",
+    "seed": "tsx --env-file-if-exists=.env.local scripts/seed.mts",
+    "admin:inicial": "tsx --env-file-if-exists=.env.local scripts/admin-inicial.mts",
+    "cuentas:iniciales": "tsx --env-file-if-exists=.env.local scripts/cuentas-iniciales.mts",
+    "worker": "tsx --env-file-if-exists=.env.local scripts/worker.mts"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.11",
+    "@neondatabase/serverless": "1.2.0",
+    "@vercel/blob": "2.8.2",
+    "better-auth": "1.7.12",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "drizzle-orm": "0.45.4",
+    "exceljs": "4.4.0",
+    "lucide-react": "1.61.0",
+    "next": "16.4.2",
+    "nodemailer": "10.1.7",
+    "pg": "8.23.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "resend": "6.34.1",
+    "sharp": "0.35.5",
+    "tailwind-merge": "3.7.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.64.1",
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "24.19.2",
+    "@types/nodemailer": "8.0.2",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "drizzle-kit": "0.31.11",
+    "embedded-postgres": "17.10.0-beta.17",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.4.2",
+    "postcss": "8.5.31",
+    "shadcn": "4.22.1",
+    "tailwindcss": "4.3.3",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "11.1.1"
+    }
+  }
+}

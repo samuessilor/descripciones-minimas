@@ -1,0 +1,75 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * *' # nocturno: incluye db-real
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:integ
+      - run: npm run build
+        env:
+          APP_URL: http://localhost:3000
+      - name: Pruebas de navegador
+        run: |
+          npx playwright install --with-deps chromium
+          E2E_CANAL=chromium npm run test:e2e -- --project=escritorio
+        env:
+          APP_URL: http://localhost:3010
+      - name: Auditoria de dependencias de produccion
+        # exceljs 4.4.0 arrastra uuid < 11.1.1 (aviso moderado): se resuelve con `overrides`.
+        run: npm audit --omit=dev --audit-level=high
+      - name: Auditoria completa, con herramientas de desarrollo (informativa, no bloquea)
+        # eslint-config-next, shadcn y drizzle-kit arrastran avisos de fast-glob/micromatch/braces y esbuild que
+        # solo afectan al entorno de desarrollo; estan aceptados en docs/DESVIACIONES.md (seccion E). Este paso
+        # deja el registro visible sin frenar la integracion.
+        run: npm audit --audit-level=high
+        continue-on-error: true
+      - name: Escaneo de secretos
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  db-real:
+    # P-01, P-02 (y P-04 desde H3) contra un Postgres real, conectando como el rol `app` (RV-24).
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run test:db-real
+        env:
+          DATABASE_URL_TEST_ADMIN: postgres://postgres:postgres@localhost:5432/postgres

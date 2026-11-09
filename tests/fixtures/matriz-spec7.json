@@ -1,0 +1,42 @@
+{
+  "_nota": "Transcripcion independiente de la tabla de la seccion 7 del SPEC (columnas Insumo, Repuesto, Equipo/Maq., Accesorio, Montura) con los cambios de la reunion con el area del 2026-10-29: Montura como Accesorio salvo la maquina donde se instala; descripcion, uso, funciones y unidad de medida obligatorios en todos los tipos; aspecto fisico, fabricante, proveedor y tipo de empaque obligatorios; maquina donde se instala obligatoria donde aplica; RIM (filas 30-31) en lugar de valor unitario y cantidad a radicar; observaciones obligatorias con «No aplica»; respuesta del area (fila 32, regla propia); clasificadores retirados. O=obligatorio para verde, P=opcional visible, -=oculto. Las filas 'auto'/'calc' se tratan como P y la fila 5 (tipo) como O porque se pide al crear. Sirve de tabla de pruebas contra src/dominio/campos.ts (riesgo R-06).",
+  "filas": [
+    { "fila": 1,  "clave": "codigo",                   "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 2,  "clave": "nombre_producto",          "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 3,  "clave": "fecha_solicitud",          "seccion": "producto",         "obl": ["P","P","P","P","P"], "grupo": "S", "conf": "F" },
+    { "fila": 4,  "clave": "dias_gestion",             "seccion": "producto",         "obl": ["P","P","P","P","P"], "grupo": "S", "conf": "F" },
+    { "fila": 5,  "clave": "tipo_producto",            "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 33, "clave": "area_responsable",         "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 6,  "clave": "descripcion_factura",      "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 7,  "clave": "uso",                      "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 8,  "clave": "funciones",                "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 9,  "clave": "unidad_medida",            "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 10, "clave": "materia_constitutiva",     "seccion": "detalle",          "obl": ["O","O","P","O","O"], "grupo": "C", "conf": "S" },
+    { "fila": 11, "clave": "aspecto_fisico",           "seccion": "detalle",          "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 12, "clave": "marca",                    "seccion": "detalle",          "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 13, "clave": "pais_origen",              "seccion": "detalle",          "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 14, "clave": "fabricante",               "seccion": "detalle",          "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 15, "clave": "proveedor",                "seccion": "detalle",          "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 16, "clave": "tipo_empaque",             "seccion": "detalle",          "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 17, "clave": "maquina_destino",          "seccion": "detalle",          "obl": ["-","O","-","O","-"], "grupo": "C", "conf": "S" },
+    { "fila": 30, "clave": "requiere_rim",             "seccion": "especificaciones", "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 31, "clave": "cantidad_rim",             "seccion": "especificaciones", "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 20, "clave": "fecha_fabricacion",        "seccion": "especificaciones", "obl": ["-","-","O","-","-"], "grupo": "C", "conf": "F" },
+    { "fila": 21, "clave": "adjuntos",                 "seccion": "especificaciones", "obl": ["P","P","P","P","P"], "grupo": "C", "conf": "F" },
+    { "fila": 22, "clave": "informacion_adicional",    "seccion": "especificaciones", "obl": ["P","P","P","P","P"], "grupo": "C", "conf": "F" },
+    { "fila": 23, "clave": "partida_arancelaria",      "seccion": "especificaciones", "obl": ["O","O","O","O","O"], "grupo": "A", "conf": "F" },
+    { "fila": 24, "clave": "descripciones_minimas",    "seccion": "especificaciones", "obl": ["O","O","O","O","O"], "grupo": "A", "conf": "F" },
+    { "fila": 25, "clave": "restricciones",            "seccion": "especificaciones", "obl": ["O","O","O","O","O"], "grupo": "A", "conf": "F" },
+    { "fila": 26, "clave": "observaciones_aduana",     "seccion": "especificaciones", "obl": ["O","O","O","O","O"], "grupo": "A", "conf": "F" },
+    { "fila": 32, "clave": "respuesta_area",           "seccion": "especificaciones", "obl": ["P","P","P","P","P"], "grupo": "C", "conf": "F" },
+    { "fila": 29, "clave": "clasificacion_finalizada", "seccion": "especificaciones", "obl": ["O","O","O","O","O"], "grupo": "A", "conf": "F" }
+  ],
+  "retiradas": ["valor_unitario", "cantidad_a_radicar", "primer_clasificador", "segundo_clasificador"],
+  "no_aplica": ["aspecto_fisico", "tipo_empaque", "descripciones_minimas", "restricciones", "observaciones_aduana"],
+  "orden_pantalla": {
+    "producto": ["codigo", "nombre_producto", "fecha_solicitud", "dias_gestion", "tipo_producto", "area_responsable", "descripcion_factura", "uso", "funciones", "unidad_medida"],
+    "detalle": ["materia_constitutiva", "aspecto_fisico", "marca", "pais_origen", "fabricante", "proveedor", "tipo_empaque", "maquina_destino"],
+    "especificaciones": ["requiere_rim", "cantidad_rim", "fecha_fabricacion", "adjuntos", "partida_arancelaria", "descripciones_minimas", "informacion_adicional", "restricciones", "clasificacion_finalizada"],
+    "complementos_aduana": ["observaciones_aduana", "respuesta_area"]
+  }
+}

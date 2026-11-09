@@ -1,0 +1,1 @@
+ALTER TABLE "asignacion" ADD COLUMN "secciones" text;

@@ -1,0 +1,17 @@
+Logos y marca
+
+Archivos de esta carpeta (usados por src/componentes/Logo.tsx y src/app/icon.svg):
+
+  essilorluxottica-wordmark-blanco.svg   viewBox 1550 x 169   para fondos azules (barra superior, entrada)
+  essilorluxottica-wordmark-negro.svg    viewBox 1550 x 169   para fondos claros (correos, impresos)
+  essilorluxottica-simbolo-negro.svg     viewBox 1524 x 677   simbolo de las dos lentes (icono de la pestana)
+
+Procedencia: descargados el 2026-10-21 de un agregador de logos de terceros (companieslogo.com).
+NO son el kit oficial de la empresa. El wordmark es el real de la marca y es lo que muestra la interfaz;
+lo PENDIENTE es solo reemplazarlo por los archivos oficiales de Comunicaciones de EssilorLuxottica
+(pregunta abierta PA-15 del SPEC). Para reemplazarlos: guardar aqui los SVG oficiales con los mismos
+nombres (o ajustar las rutas y el viewBox en src/componentes/Logo.tsx).
+
+Reglas de uso: alt/aria-label "EssilorLuxottica"; no deformar, no recolorear; zona de respeto alrededor
+igual a la altura del logo. El azul de la interfaz (--azul-700 en src/app/globals.css) es PROVISIONAL:
+no hay hexadecimal oficial en las fuentes.

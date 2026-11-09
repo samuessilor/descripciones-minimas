@@ -1,0 +1,25 @@
+# dependencias y compilacion
+node_modules/
+.next/
+.next-*/
+out/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+next-env.d.ts
+
+# entorno y datos locales
+.env
+.env.*
+!.env.example
+.data/
+
+# sistema
+.DS_Store
+Thumbs.db
+npm-debug.log*
+.vercel
+
+# cuentas reales (correos de la empresa)
+cuentas.json

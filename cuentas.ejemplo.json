@@ -1,0 +1,15 @@
+{
+  "administradores": [
+    { "correo": "administradora@empresa.com", "nombre": "Nombre de quien administra (dueña del proceso)" }
+  ],
+  "areas": [
+    { "area": "Consumibles", "correo": "consumibles@empresa.com", "nombre": "Consumibles" },
+    { "area": "Mantenimiento", "correo": "mantenimiento@empresa.com", "nombre": "Mantenimiento" },
+    { "area": "Instrumentos", "correo": "instrumentos@empresa.com", "nombre": "Instrumentos" },
+    { "area": "Marketing", "correo": "marketing@empresa.com", "nombre": "Marketing" }
+  ],
+  "agencias": [
+    { "empresa": "Agencia de aduanas X", "correo": "clasificacion@agencia-x.com", "nombre": "Agencia de aduanas X" }
+  ],
+  "lectores": []
+}
