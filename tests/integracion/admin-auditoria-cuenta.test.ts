@@ -1,5 +1,5 @@
 /** Visor de auditoria y «Mi cuenta» (H5). */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { auditoria, session, usuario } from '@/db/esquema';
 import { ErrorAccion } from '@/server/acciones/resultado';
@@ -52,15 +52,15 @@ describe('visor de auditoria (solo lectura, solo admin)', () => {
 
     const dia10 = await listarAuditoriaAdmin(e.db, e.admin, { desde: '2026-03-10', hasta: '2026-03-10' });
     expect(dia10.filas.map((f) => f.creadoEn)).toEqual(['2026-03-10T05:30:00.000Z']);
-    expect((await listarAuditoriaAdmin(e.db, e.admin, { desde: '2026-03-09', hasta: '2026-03-10' })).total).toBe(2);
+    expect((await listarAuditoriaAdmin(e.db, e.admin, { desde: '2026-03-09', hasta: '2026-03-10' })).filas).toHaveLength(2);
     expect((await listarAuditoriaAdmin(e.db, e.admin, { usuarioId: e.charles.usuarioId, accion: 'exportar' })).filas).toHaveLength(1);
     const porFicha = await listarAuditoriaAdmin(e.db, e.admin, { ficha: 'aud 0001' });
     expect(porFicha.filas.map((f) => f.accion)).toEqual(expect.arrayContaining(['exportar', 'crear_referencia']));
     expect(porFicha.filas.every((f) => f.entidadId === ficha)).toBe(true);
     expect(porFicha.filas[0]!.entidadEtiqueta).toBe('AUD-0001');
     expect((await listarAuditoriaAdmin(e.db, e.admin, { ficha: 'NO-EXISTE' })).fichaNoExiste).toBe(true);
-    expect((await listarAuditoriaAdmin(e.db, e.admin, { ficha })).total).toBe(porFicha.total); // tambien por id
-    expect((await listarAuditoriaAdmin(e.db, e.admin, { desde: 'ayer', hasta: '31/12' })).total).toBeGreaterThan(0); // fechas invalidas se ignoran
+    expect((await listarAuditoriaAdmin(e.db, e.admin, { ficha })).filas.map((f) => f.id)).toEqual(porFicha.filas.map((f) => f.id)); // tambien por id
+    expect((await listarAuditoriaAdmin(e.db, e.admin, { desde: 'ayer', hasta: '31/12' })).filas.length).toBeGreaterThan(0); // fechas invalidas se ignoran
 
     const evento = porFicha.filas.find((f) => f.accion === 'exportar')!;
     expect((await obtenerEventoAuditoria(e.db, e.admin, evento.id))?.detalle).toEqual({ filas: 3 });
@@ -77,16 +77,51 @@ describe('visor de auditoria (solo lectura, solo admin)', () => {
     expect(porFicha.filas.map((f) => f.accion)).toEqual(expect.arrayContaining(['crear_referencia', 'enviar_a']));
   });
 
-  it('pagina de a 50, del mas reciente al mas antiguo, sin repetir', async () => {
+  it('pagina por cursor de a 50, del mas reciente al mas antiguo, sin repetir y en los dos sentidos', async () => {
     for (let i = 0; i < 120; i++) await auditar(e.db, { usuarioId: null, accion: 'login_fallido', entidad: 'usuario', entidadId: 'desconocido', detalle: { i } });
-    const p1 = await listarAuditoriaAdmin(e.db, e.admin, { accion: 'login_fallido', pagina: 1 });
-    const p2 = await listarAuditoriaAdmin(e.db, e.admin, { accion: 'login_fallido', pagina: 2 });
-    const p3 = await listarAuditoriaAdmin(e.db, e.admin, { accion: 'login_fallido', pagina: 3 });
-    expect(p1.total).toBe(120);
+    const f = { accion: 'login_fallido' };
+    const p1 = await listarAuditoriaAdmin(e.db, e.admin, f);
+    expect(p1.anterior).toBeNull();
+    const p2 = await listarAuditoriaAdmin(e.db, e.admin, { ...f, antes: p1.siguiente! });
+    const p3 = await listarAuditoriaAdmin(e.db, e.admin, { ...f, antes: p2.siguiente! });
     expect([p1.filas.length, p2.filas.length, p3.filas.length]).toEqual([POR_PAGINA_AUDITORIA, POR_PAGINA_AUDITORIA, 20]);
-    const ids = [...p1.filas, ...p2.filas, ...p3.filas].map((f) => f.id);
+    expect([p1.siguiente !== null, p2.siguiente !== null, p3.siguiente]).toEqual([true, true, null]);
+    expect([p2.anterior, p3.anterior].every((c) => c !== null)).toBe(true);
+    const ids = [...p1.filas, ...p2.filas, ...p3.filas].map((x) => x.id);
     expect(new Set(ids).size).toBe(120);
     expect([...ids].sort((a, b) => b - a)).toEqual(ids);
+
+    // de vuelta hacia las mas recientes: mismas paginas, mismo orden
+    const v2 = await listarAuditoriaAdmin(e.db, e.admin, { ...f, despues: p3.anterior! });
+    expect(v2.filas.map((x) => x.id)).toEqual(p2.filas.map((x) => x.id));
+    expect(v2.siguiente).toBe(p2.siguiente);
+    expect(v2.anterior).toBe(p2.anterior);
+    const v1 = await listarAuditoriaAdmin(e.db, e.admin, { ...f, despues: v2.anterior! });
+    expect(v1.filas.map((x) => x.id)).toEqual(p1.filas.map((x) => x.id));
+    expect(v1.anterior).toBeNull();
+
+    // una pagina exacta no inventa otra: 50 eventos de una accion poco usada -> sin siguiente
+    for (let i = 0; i < POR_PAGINA_AUDITORIA; i++) await auditar(e.db, { usuarioId: null, accion: 'restablecer_clave', entidad: 'usuario', entidadId: 'desconocido' });
+    const exacta = await listarAuditoriaAdmin(e.db, e.admin, { accion: 'restablecer_clave' });
+    expect(exacta.filas).toHaveLength(POR_PAGINA_AUDITORIA);
+    expect(exacta.siguiente).toBeNull();
+
+    // el cursor convive con los demas filtros y uno invalido se ignora
+    const sinCursor = await listarAuditoriaAdmin(e.db, e.admin, { ...f, antes: -3, despues: Number.NaN });
+    expect(sinCursor.filas.map((x) => x.id)).toEqual(p1.filas.map((x) => x.id));
+    const otraAccion = await listarAuditoriaAdmin(e.db, e.admin, { accion: 'exportar', antes: p1.siguiente! });
+    expect(otraAccion.filas.every((x) => x.accion === 'exportar' && x.id < p1.siguiente!)).toBe(true);
+  });
+
+  it('crea los indices del visor y la lista de acciones sale sin repetir', async () => {
+    const r = await e.db.execute<{ indexname: string }>(sql`select indexname from pg_indexes where tablename = 'auditoria'`);
+    const nombres = (Array.isArray(r) ? r : ((r as unknown as { rows: Array<{ indexname: string }> }).rows ?? [])).map((x) => x.indexname);
+    expect(nombres).toEqual(expect.arrayContaining(['auditoria_creado_en_idx', 'auditoria_accion_idx', 'auditoria_usuario_idx', 'auditoria_ficha_idx']));
+    const { acciones } = await opcionesFiltroAuditoria(e.db, e.admin);
+    expect(new Set(acciones).size).toBe(acciones.length);
+    expect([...acciones].sort()).toEqual(acciones);
+    const reales = await e.db.selectDistinct({ accion: auditoria.accion }).from(auditoria);
+    expect(acciones.sort()).toEqual(reales.map((x) => x.accion).sort());
   });
 
   it('el CSV neutraliza formulas (13.4) y respeta los filtros', async () => {

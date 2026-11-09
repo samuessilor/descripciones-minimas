@@ -14,6 +14,7 @@ import {
   listarAuditoriaAdmin,
   opcionesFiltroAuditoria,
   type FilaAuditoria,
+  MAXIMO_FILAS_CSV,
   type FiltrosAuditoria,
 } from '@/server/politicas/administracion-auditoria';
 import { SinPermiso } from '@/componentes/ui/pantallas';
@@ -100,9 +101,10 @@ export default async function AdminAuditoria({ searchParams }: { searchParams: P
     usuarioId: param(sp.persona),
     accion: param(sp.accion),
     ficha: param(sp.ficha),
-    pagina: Math.max(1, Number(param(sp.pagina)) || 1),
+    antes: Number(param(sp.antes)) || undefined,
+    despues: Number(param(sp.despues)) || undefined,
   };
-  const [{ filas, total, pagina, porPagina, fichaNoExiste }, opciones] = await Promise.all([
+  const [{ filas, siguiente, anterior, fichaNoExiste }, opciones] = await Promise.all([
     listarAuditoriaAdmin(ctx.db, ctx.actor, filtros),
     opcionesFiltroAuditoria(ctx.db, ctx.actor),
   ]);
@@ -115,9 +117,6 @@ export default async function AdminAuditoria({ searchParams }: { searchParams: P
     return s ? `?${s}` : '';
   };
   const hayFiltros = !!(filtros.desde || filtros.hasta || filtros.usuarioId || filtros.accion || filtros.ficha);
-  const desdeFila = total === 0 ? 0 : (pagina - 1) * porPagina + 1;
-  const hastaFila = Math.min(total, pagina * porPagina);
-  const hayMas = pagina * porPagina < total;
 
   return (
     <>
@@ -125,10 +124,13 @@ export default async function AdminAuditoria({ searchParams }: { searchParams: P
         titulo="Auditoría"
         descripcion="Quién hizo qué y cuándo. Es un registro de solo lectura: nadie puede cambiarlo ni borrarlo."
         acciones={
-          <a href={`/api/admin/auditoria/exportar${consulta()}`} className={botonVariantes({ variante: 'secundario' })} download>
-            <Download aria-hidden className="size-4" />
-            Descargar CSV
-          </a>
+          <div className="flex flex-col items-end gap-1">
+            <a href={`/api/admin/auditoria/exportar${consulta()}`} className={botonVariantes({ variante: 'secundario' })} download>
+              <Download aria-hidden className="size-4" />
+              Descargar CSV
+            </a>
+            <span className="text-xs text-tinta-suave">Hasta {MAXIMO_FILAS_CSV.toLocaleString('es-CO')} eventos, los más recientes.</span>
+          </div>
         }
       />
 
@@ -180,7 +182,7 @@ export default async function AdminAuditoria({ searchParams }: { searchParams: P
       </form>
 
       <p className="mb-3 text-sm text-tinta-suave" aria-live="polite">
-        {total === 0 ? 'Sin eventos' : `Eventos ${desdeFila.toLocaleString('es-CO')}–${hastaFila.toLocaleString('es-CO')} de ${total.toLocaleString('es-CO')}`}, del más reciente al más antiguo. Hora de Bogotá.
+        {filas.length === 0 ? 'Sin eventos' : `${filas.length.toLocaleString('es-CO')} ${filas.length === 1 ? 'evento' : 'eventos'}`}, del más reciente al más antiguo. Hora de Bogotá.
       </p>
 
       <TablaDatos
@@ -216,12 +218,12 @@ export default async function AdminAuditoria({ searchParams }: { searchParams: P
         }
       />
 
-      {total > porPagina ? (
+      {siguiente || anterior ? (
         <Paginacion
           className="mt-4"
-          resumen={`Página ${pagina} de ${Math.ceil(total / porPagina)}`}
-          anterior={pagina > 1 ? { href: `/admin/auditoria${consulta({ pagina: String(pagina - 1) })}` } : null}
-          siguiente={hayMas ? { href: `/admin/auditoria${consulta({ pagina: String(pagina + 1) })}` } : null}
+          resumen="Del más reciente al más antiguo"
+          anterior={anterior ? { href: `/admin/auditoria${consulta({ despues: String(anterior) })}` } : null}
+          siguiente={siguiente ? { href: `/admin/auditoria${consulta({ antes: String(siguiente) })}` } : null}
         />
       ) : null}
     </>

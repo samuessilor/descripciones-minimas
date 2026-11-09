@@ -1,8 +1,9 @@
 /**
- * Visor de auditoria (13.6): solo lectura, solo `admin`. La tabla es append-only; aqui nunca se escribe.
- * Los filtros viven en la URL, asi un enlace reproduce lo que se ve.
+ * Visor de auditoria (13.6): solo lectura, solo `admin` y supervisora. La tabla es append-only; aqui nunca se escribe.
+ * Los filtros y el cursor viven en la URL, asi un enlace reproduce lo que se ve. Se pagina por cursor sobre el id
+ * (sin `count(*)` ni OFFSET): cada pagina cuesta lo mismo con 1.000 o con 10 millones de eventos.
  */
-import { and, asc, desc, eq, gte, lt, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, lt, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { auditoria, referencia, usuario } from '@/db/esquema';
 import type { Ejecutor } from '@/db/tipos';
@@ -22,7 +23,10 @@ export interface FiltrosAuditoria {
   accion?: string | undefined;
   /** Codigo de referencia (se normaliza) o id de la ficha. */
   ficha?: string | undefined;
-  pagina?: number | undefined;
+  /** Cursor: la pagina de eventos anteriores (mas antiguos) al id dado. */
+  antes?: number | undefined;
+  /** Cursor: la pagina de eventos posteriores (mas recientes) al id dado. */
+  despues?: number | undefined;
 }
 
 export interface FilaAuditoria {
@@ -121,28 +125,51 @@ function aFila(f: {
   };
 }
 
-export async function listarAuditoriaAdmin(
-  ej: Ejecutor,
-  actor: Actor,
-  filtros: FiltrosAuditoria = {},
-): Promise<{ filas: FilaAuditoria[]; total: number; pagina: number; porPagina: number; fichaNoExiste: boolean }> {
+function cursorValido(n: number | undefined): n is number {
+  return n !== undefined && Number.isSafeInteger(n) && n > 0;
+}
+
+export interface PaginaAuditoria {
+  filas: FilaAuditoria[];
+  /** Cursor (`antes`) de la pagina con eventos mas antiguos; `null` si no hay mas. */
+  siguiente: number | null;
+  /** Cursor (`despues`) de la pagina con eventos mas recientes; `null` si esta es la primera. */
+  anterior: number | null;
+  porPagina: number;
+  fichaNoExiste: boolean;
+}
+
+export async function listarAuditoriaAdmin(ej: Ejecutor, actor: Actor, filtros: FiltrosAuditoria = {}): Promise<PaginaAuditoria> {
   exigir(actor, 'supervisar');
-  const pagina = Math.max(1, Math.floor(filtros.pagina ?? 1));
   const { donde, fichaNoExiste } = await condiciones(ej, filtros);
-  if (fichaNoExiste) return { filas: [], total: 0, pagina, porPagina: POR_PAGINA_AUDITORIA, fichaNoExiste };
+  if (fichaNoExiste) return { filas: [], siguiente: null, anterior: null, porPagina: POR_PAGINA_AUDITORIA, fichaNoExiste };
+  const haciaAtras = cursorValido(filtros.despues) && !cursorValido(filtros.antes);
+  const cursor = haciaAtras ? gt(auditoria.id, filtros.despues!) : cursorValido(filtros.antes) ? lt(auditoria.id, filtros.antes) : undefined;
   const { objetivo, columnas } = seleccion();
-  const [t] = await ej.select({ n: sql<number>`count(*)::int` }).from(auditoria).where(donde);
-  const filas = await ej
+  // Se pide una fila de mas solo para saber si hay otra pagina.
+  const leidas = await ej
     .select(columnas)
     .from(auditoria)
     .leftJoin(usuario, eq(usuario.id, auditoria.usuarioId))
     .leftJoin(referencia, and(eq(auditoria.entidad, 'referencia'), sql`${referencia.id}::text = ${auditoria.entidadId}`))
     .leftJoin(objetivo, and(eq(auditoria.entidad, 'usuario'), sql`${objetivo.id}::text = ${auditoria.entidadId}`))
-    .where(donde)
-    .orderBy(desc(auditoria.id))
-    .limit(POR_PAGINA_AUDITORIA)
-    .offset((pagina - 1) * POR_PAGINA_AUDITORIA);
-  return { filas: filas.map(aFila), total: t?.n ?? 0, pagina, porPagina: POR_PAGINA_AUDITORIA, fichaNoExiste };
+    .where(and(donde, cursor))
+    .orderBy(haciaAtras ? asc(auditoria.id) : desc(auditoria.id))
+    .limit(POR_PAGINA_AUDITORIA + 1);
+  const hayMas = leidas.length > POR_PAGINA_AUDITORIA;
+  const filas = leidas.slice(0, POR_PAGINA_AUDITORIA).map(aFila);
+  if (haciaAtras) filas.reverse();
+  const primero = filas[0]?.id;
+  const ultimo = filas[filas.length - 1]?.id;
+  const hayCursor = cursorValido(filtros.antes) || haciaAtras;
+  return {
+    filas,
+    // Viniendo de una pagina mas reciente, siempre quedan eventos mas antiguos (los de la pagina de origen).
+    siguiente: ultimo !== undefined && (haciaAtras || hayMas) ? ultimo : null,
+    anterior: primero !== undefined && (haciaAtras ? hayMas : hayCursor) ? primero : null,
+    porPagina: POR_PAGINA_AUDITORIA,
+    fichaNoExiste,
+  };
 }
 
 /** Para el CSV: hasta `MAXIMO_FILAS_CSV` filas, de la mas nueva a la mas vieja. */
@@ -170,14 +197,23 @@ export interface OpcionesFiltroAuditoria {
 
 export async function opcionesFiltroAuditoria(ej: Ejecutor, actor: Actor): Promise<OpcionesFiltroAuditoria> {
   exigir(actor, 'supervisar');
-  const acciones = await ej.selectDistinct({ accion: auditoria.accion }).from(auditoria).orderBy(asc(auditoria.accion));
+  // Acciones distintas sin recorrer la tabla: salta de valor en valor por `auditoria_accion_idx` (loose index scan).
+  const r = await ej.execute<{ accion: string }>(sql`
+    with recursive a(accion) as (
+      (select accion from ${auditoria} order by accion limit 1)
+      union all
+      select (select x.accion from ${auditoria} x where x.accion > a.accion order by x.accion limit 1) from a where a.accion is not null
+    )
+    select accion from a where accion is not null`);
   const usuarios = await ej
     .select({ id: usuario.id, nombre: usuario.nombre })
     .from(usuario)
     .where(sql`exists (select 1 from ${auditoria} a where a.usuario_id = ${usuario.id})`)
     .orderBy(asc(usuario.nombre))
     .limit(300);
-  return { acciones: acciones.map((a) => a.accion), usuarios };
+  // Segun el controlador (PGlite, pg, Neon) el resultado es la lista o un objeto con `rows`.
+  const filas = (Array.isArray(r) ? r : ((r as unknown as { rows?: Array<{ accion: string }> }).rows ?? [])) as Array<{ accion: string }>;
+  return { acciones: filas.map((f) => f.accion), usuarios };
 }
 
 /** Un evento por id (para la ficha de detalle). */

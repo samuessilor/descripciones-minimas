@@ -99,6 +99,13 @@
       "when": 1794244010828,
       "tag": "0013_aviso_cuenta_creada",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794246034982,
+      "tag": "0014_indices_auditoria",
+      "breakpoints": true
     }
   ]
 }

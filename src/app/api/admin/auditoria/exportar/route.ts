@@ -64,11 +64,13 @@ export async function GET(request: Request): Promise<Response> {
     });
 
     const fecha = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Bogota' });
+    // Si hay mas eventos que el tope, el nombre del archivo lo dice: el navegador no muestra las cabeceras.
+    const nombre = truncado ? `auditoria-${fecha}-ultimos-${MAXIMO_FILAS_CSV}.csv` : `auditoria-${fecha}.csv`;
     return new Response(csv, {
       status: 200,
       headers: {
         'content-type': 'text/csv; charset=utf-8',
-        'content-disposition': `attachment; filename="auditoria-${fecha}.csv"`,
+        'content-disposition': `attachment; filename="${nombre}"`,
         'cache-control': 'no-store',
         'x-content-type-options': 'nosniff',
         'x-filas': String(filas.length),
