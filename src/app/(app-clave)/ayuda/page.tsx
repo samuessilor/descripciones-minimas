@@ -51,7 +51,7 @@ export default async function Ayuda() {
         <Paso titulo="2. Crear una referencia">
           <ol>
             <li>Pulsa «Nueva referencia».</li>
-            <li>Escribe el código, el nombre y el tipo (Insumo, Repuesto, Equipo/Máquina, Accesorio o Montura).</li>
+            <li>Escribe el código, la descripción según factura y el tipo (Insumo, Repuesto, Equipo/Máquina, Accesorio o Montura).</li>
             <li>
               Elige el <b>área responsable</b> (Consumibles, Mantenimiento, Instrumentos o Marketing): la referencia es de esa área, aunque la crees desde
               otra. No depende del tipo: un repuesto puede ser de Consumibles.
@@ -66,7 +66,7 @@ export default async function Ayuda() {
             <li>Si no tienes un dato, déjalo vacío y sigue: la sección queda en amarillo y otra persona lo puede completar.</li>
             <li>
               Si un dato no aplica al producto, márcalo: «No aplica» en aspecto físico o tipo de empaque, «No tiene marca», «El proveedor es el mismo
-              fabricante». Cuenta como lleno. Si lo desmarcas o borras un valor, vuelve a quedar pendiente.
+              fabricante». «Reembolsable» se responde Sí, No o No aplica, y siempre hay que elegir una. Cuenta como lleno. Si lo desmarcas o borras un valor, vuelve a quedar pendiente.
             </li>
             <li>
               «¿Requiere registro de importación (RIM)?»: si eliges «Sí», aparece «Cantidad» y hay que llenarla; con «No» no se pide.

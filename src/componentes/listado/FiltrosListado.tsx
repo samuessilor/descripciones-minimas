@@ -105,7 +105,7 @@ export function FiltrosListado({
               name="q"
               type="search"
               autoComplete="off"
-              placeholder="Código, nombre, descripción, proveedor, fabricante…"
+              placeholder="Código, descripción, nombre comercial, proveedor, fabricante…"
               className="pl-9 pr-10 [&::-webkit-search-cancel-button]:hidden"
               value={v.q}
               onChange={(e) => aplicar({ q: e.target.value }, true)}

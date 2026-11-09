@@ -45,6 +45,7 @@ function producto(desc: string, uso: string, funciones: string, rim: string | nu
     ['uso', uso],
     ['funciones', funciones],
     ['unidad_medida', unidad],
+    ['reembolsable', 'No'],
     ['requiere_rim', rim === null ? 'NO' : 'SI'],
     ['informacion_adicional', ADICIONAL],
   ];
@@ -388,7 +389,7 @@ export async function sembrarEjemplos(db: Db): Promise<void> {
     'Precisión: la lámpara va en la línea 2, no en la 1.',
   );
   await guardar(db, edgar, lampara, 'funciones', 'Emite luz ultravioleta de 365 nm que endurece el recubrimiento.', 'Dato exacto de la ficha del fabricante.');
-  await enviar(db, edgar, lampara, carla, 'Faltan fabricante, proveedor y materia. ¿Los completas tú?', 'completar', ['detalle']);
+  await enviar(db, edgar, lampara, carla, 'Faltan fabricante, proveedor y materia. ¿Los completas tú?', 'completar', ['producto', 'detalle']);
   // Las partes quedan repartidas: Detalle para Carla y Especificaciones para la administradora.
   // Requiere RIM pero aun no tiene la cantidad: Especificaciones queda pendiente.
   await enviar(db, edgar, lampara, ana, 'Tú revisa las especificaciones: falta la cantidad del RIM.', 'completar', ['especificaciones']);
@@ -418,7 +419,7 @@ export async function sembrarEjemplos(db: Db): Promise<void> {
 
   // 11) Pendiente para Edgar: Carla se la envia para que complete el detalle.
   const rodamiento = await crear(db, carla, f.rodamiento);
-  await enviar(db, carla, rodamiento, edgar, 'Falta el fabricante y el país de origen; tú conoces al proveedor.', 'completar', ['detalle']);
+  await enviar(db, carla, rodamiento, edgar, 'Falta el fabricante y el país de origen; tú conoces al proveedor.', 'completar', ['producto', 'detalle']);
 
   // 12) Clasificada y luego reabierta por la aduana (en gestion, etiqueta «Reabierta», pendiente para ella).
   const carbon = await crear(db, edgar, f.carbon);

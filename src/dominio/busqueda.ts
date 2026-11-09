@@ -19,7 +19,7 @@ export function prefijoPartida(texto: string): string {
 }
 
 /**
- * `texto_busqueda` (6.4): codigo, nombre, descripcion segun factura, marca, proveedor, fabricante,
+ * `texto_busqueda` (6.4): codigo, descripcion segun factura (`nombre_producto`), nombre comercial, marca, proveedor, fabricante,
  * partida y maquina de destino, normalizado (minusculas, sin tildes, espacios colapsados). Se
  * agrega ademas el codigo normalizado para que `B3210KIT5` encuentre `B32 10-KIT5`.
  */

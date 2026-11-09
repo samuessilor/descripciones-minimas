@@ -132,10 +132,10 @@ describe('C1: responsabilidad derivada del area', () => {
 
   it('deja de ser del area cuando una persona tiene en la mano lo que falta, o cuando el area ya lo lleno', async () => {
     const id = await crear(consumibles, 'Mantenimiento');
-    // Solo Detalle para Charles: Producto sigue siendo del area (Especificaciones ya no tiene nada del cliente).
-    await e.db.insert(asignacion).values({ referenciaId: id, deUsuarioId: consumibles.usuarioId, aUsuarioId: e.charles.usuarioId, pedido: 'completar', secciones: 'detalle', estado: 'pendiente' });
+    // Solo Producto para Charles: Detalle sigue siendo del area (Especificaciones ya no tiene nada del cliente).
+    await e.db.insert(asignacion).values({ referenciaId: id, deUsuarioId: consumibles.usuarioId, aUsuarioId: e.charles.usuarioId, pedido: 'completar', secciones: 'producto', estado: 'pendiente' });
     const parcial = (await delArea(mant)).find((p) => p.referenciaId === id);
-    expect(parcial?.falta).toMatch(/^Falta: Producto/);
+    expect(parcial?.falta).toMatch(/^Falta: Detalle/);
     // Todo para Charles: ya no es del area.
     await e.db.update(asignacion).set({ secciones: null }).where(eq(asignacion.referenciaId, id));
     expect((await delArea(mant)).some((p) => p.referenciaId === id)).toBe(false);

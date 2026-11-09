@@ -81,12 +81,24 @@ describe('partes de la ficha', () => {
     const id = await nuevaFicha(e, { codigo: 'PAR-0004' });
     await enviarA(e.ctx(e.admin, T0), {
       referenciaId: id,
-      destinatarios: [{ usuarioId: e.edward.usuarioId, secciones: ['detalle'] }, { usuarioId: e.charles.usuarioId }],
+      destinatarios: [{ usuarioId: e.edward.usuarioId, secciones: ['especificaciones'] }, { usuarioId: e.charles.usuarioId }],
     });
     const por = (await responsablesPorParte(e.db, e.admin, [id], new Date(T0.getTime() + 3 * DIAS))).get(id);
     expect(por?.producto.map((r) => r.nombre)).toEqual(['Charles']);
-    expect(por?.detalle.map((r) => r.nombre).sort()).toEqual(['Charles', 'Edward']);
-    expect(por?.detalle[0]?.dias).toBe(3);
+    expect(por?.detalle.map((r) => r.nombre)).toEqual(['Charles']);
+    expect(por?.especificaciones.map((r) => r.nombre).sort()).toEqual(['Charles', 'Edward']);
+    expect(por?.especificaciones[0]?.dias).toBe(3);
+  });
+
+  it('una asignacion de solo Detalle tambien cubre Producto (pais, fabricante y proveedor pasaron a Producto)', async () => {
+    const id = await nuevaFicha(e, { codigo: 'PAR-0005' });
+    await enviarA(e.ctx(e.admin, T0), { referenciaId: id, destinatarios: [{ usuarioId: e.edward.usuarioId, secciones: ['detalle'] }] });
+    const por = (await responsablesPorParte(e.db, e.admin, [id], T0)).get(id);
+    expect(por?.producto.map((r) => r.nombre)).toEqual(['Edward']);
+    expect(por?.detalle.map((r) => r.nombre)).toEqual(['Edward']);
+    expect(por?.especificaciones).toHaveLength(0);
+    // Lo guardado no se reescribe: sigue diciendo «detalle».
+    expect((await asignacionesDe(e.db, id))[0]?.secciones).toBe('detalle');
   });
 });
 
@@ -94,7 +106,7 @@ describe('tablero: quien falta', () => {
   it('cuenta, dice de quien esta cada parte y marca lo detenido', async () => {
     const solo = await nuevaFicha(e, { codigo: 'TAB-0001', nombre: 'Sin dueno' });
     const repartida = await nuevaFicha(e, { codigo: 'TAB-0002', nombre: 'Repartida' });
-    await enviarA(e.ctx(e.admin, T0), { referenciaId: repartida, destinatarios: [{ usuarioId: e.edward.usuarioId, secciones: ['detalle'] }] });
+    await enviarA(e.ctx(e.admin, T0), { referenciaId: repartida, destinatarios: [{ usuarioId: e.edward.usuarioId, secciones: ['producto'] }] });
     await e.db.update(asignacion).set({ creadaEn: new Date(T0.getTime() - 6 * DIAS) }).where(eq(asignacion.referenciaId, repartida));
 
     const t = await tableroDe(e.db, e.admin, T0);
@@ -102,10 +114,10 @@ describe('tablero: quien falta', () => {
     const filaRep = t.abiertas.find((f) => f.id === repartida);
     // Un borrador que nadie ha enviado dice lo mismo que el listado, no «Sin responsable».
     expect(filaSolo?.bloqueo).toMatchObject({ clase: 'sin_enviar', texto: 'Aún sin enviar' });
-    expect(filaRep?.partes.detalle.responsables.map((r) => r.nombre)).toEqual(['Edward']);
-    // Producto sigue sin dueno (Especificaciones ya no tiene campos del cliente): la razon inmediata es esa, no Edward.
+    expect(filaRep?.partes.producto.responsables.map((r) => r.nombre)).toEqual(['Edward']);
+    // Detalle sigue sin dueno (Especificaciones ya no tiene campos del cliente): la razon inmediata es esa, no Edward.
     expect(filaRep?.bloqueo.clase).toBe('sin_responsable');
-    expect(filaRep?.bloqueo.texto).toBe('Sin responsable en Producto');
+    expect(filaRep?.bloqueo.texto).toBe('Sin responsable en Detalle');
     expect(t.porPersona.find((p) => p.nombre === 'Edward')?.masAntiguaDias).toBeGreaterThanOrEqual(6);
     expect(t.resumen.abiertas).toBe(t.abiertas.length);
   });
@@ -114,8 +126,8 @@ describe('tablero: quien falta', () => {
     const antes = (await tableroDe(e.db, e.admin, T0)).resumen.sinResponsable;
     await nuevaFicha(e, { codigo: 'TAB-0005' }); // borrador: no cuenta
     const enviada = await nuevaFicha(e, { codigo: 'TAB-0006' });
-    await enviarA(e.ctx(e.admin, T0), { referenciaId: enviada, destinatarios: [{ usuarioId: e.edward.usuarioId, secciones: ['detalle'] }] });
-    // Con una asignacion activa no cuenta, aunque Producto no tenga dueno.
+    await enviarA(e.ctx(e.admin, T0), { referenciaId: enviada, destinatarios: [{ usuarioId: e.edward.usuarioId, secciones: ['producto'] }] });
+    // Con una asignacion activa no cuenta, aunque Detalle no tenga dueno.
     expect((await tableroDe(e.db, e.admin, T0)).resumen.sinResponsable).toBe(antes);
     await e.db.update(asignacion).set({ estado: 'hecha', completadaEn: new Date() }).where(eq(asignacion.referenciaId, enviada));
     expect((await tableroDe(e.db, e.admin, T0)).resumen.sinResponsable).toBe(antes + 1);

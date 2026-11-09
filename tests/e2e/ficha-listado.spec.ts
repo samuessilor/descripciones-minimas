@@ -75,13 +75,13 @@ test('crear: el codigo repetido se avisa con enlace, el parecido no bloquea y la
   await page.getByLabel('Código de referencia').fill('');
   await page.getByRole('button', { name: 'Crear y seguir' }).click();
   await expect(page.getByText('Escribe el código de la referencia.')).toBeVisible();
-  await expect(page.getByText('Escribe el nombre del producto.')).toBeVisible();
+  await expect(page.getByText('Escribe la descripción según factura.')).toBeVisible();
   await expect(page.getByText('Elige el tipo de producto.')).toBeVisible();
 
   expect(await graves(page), 'axe en /referencias/nueva').toEqual([]);
 
   await page.getByLabel('Código de referencia').fill(CODIGO);
-  await page.getByLabel('Nombre del producto').fill(NOMBRE);
+  await page.getByLabel('Descripción según factura').fill(NOMBRE);
   await page.getByRole('radio', { name: /Insumo/ }).check();
   await page.getByLabel('Área responsable').selectOption('Consumibles');
   await page.getByRole('button', { name: 'Crear y seguir' }).click();
@@ -116,12 +116,20 @@ test('ficha: llenar las tres secciones, ver amarillo y verde por seccion, y reca
   await abrirTodo(page);
 
   // Producto
-  await llenar(page, 'descripcion_factura', () => page.getByLabel(/^Descripción según factura/).fill('LIMPIADOR ALCALINO (prueba)'));
-  await llenar(page, 'uso', () => page.getByLabel(/^Uso$/).fill('Preparar la superficie del lente antes del recubrimiento.'));
-  await llenar(page, 'funciones', () => page.getByLabel(/^Funciones$/).fill('Elimina grasa y partículas.'));
+  await llenar(page, 'descripcion_factura', () => page.getByLabel(/^Nombre comercial/).fill('LIMPIADOR ALCALINO (prueba)'));
+  await llenar(page, 'uso', () => page.getByLabel(/^Uso del producto$/).fill('Preparar la superficie del lente antes del recubrimiento.'));
+  await llenar(page, 'funciones', () => page.getByLabel(/^Función de la máquina$/).fill('Elimina grasa y partículas.'));
   await page.getByLabel('Unidad de medida').click();
   await page.getByRole('option', { name: 'Kilogramos' }).click();
   await expect(bloque(page, 'unidad_medida')).toHaveAttribute('data-fase', /^(guardado|limpio)$/);
+  await page.getByLabel('País de origen').fill('fran');
+  await page.getByRole('option', { name: /Francia/ }).click();
+  await expect(bloque(page, 'pais_origen')).toHaveAttribute('data-fase', /^(guardado|limpio)$/);
+  await llenar(page, 'fabricante', () => page.getByLabel(/^Fabricante/).fill('Fabricante de prueba'));
+  await llenar(page, 'proveedor', () => page.getByLabel(/^Proveedor/).fill('Proveedor de prueba'));
+  // Reembolsable: lista fija Sí / No / No aplica; siempre hay que elegir una.
+  await page.getByLabel('Reembolsable').selectOption('No');
+  await expect(bloque(page, 'reembolsable')).toHaveAttribute('data-fase', /^(guardado|limpio)$/);
   await expect(barra.getByRole('button', { name: /Producto.*Completa/i })).toBeVisible({ timeout: 20_000 });
 
   // Detalle (insumo: composicion con porcentajes)
@@ -134,11 +142,6 @@ test('ficha: llenar las tres secciones, ver amarillo y verde por seccion, y reca
   await page.getByLabel('Aspecto físico').selectOption('Líquido');
   await expect(bloque(page, 'aspecto_fisico')).toHaveAttribute('data-fase', /^(guardado|limpio)$/);
   await llenar(page, 'marca', () => page.getByLabel(/^Marca/).fill('NAGA'));
-  await page.getByLabel('País de origen').fill('fran');
-  await page.getByRole('option', { name: /Francia/ }).click();
-  await expect(bloque(page, 'pais_origen')).toHaveAttribute('data-fase', /^(guardado|limpio)$/);
-  await llenar(page, 'fabricante', () => page.getByLabel(/^Fabricante/).fill('Fabricante de prueba'));
-  await llenar(page, 'proveedor', () => page.getByLabel(/^Proveedor/).fill('Proveedor de prueba'));
   // Tipo de empaque: lista fija sin «No aplica». Con Bidón o Paquete aparece «Contenido por empaque».
   await page.getByLabel(/^Tipo de empaque/).selectOption('Bidón');
   await expect(bloque(page, 'tipo_empaque')).toHaveAttribute('data-fase', /^(guardado|limpio)$/);
@@ -164,7 +167,7 @@ test('ficha: llenar las tres secciones, ver amarillo y verde por seccion, y reca
     await expect(botonDeSeccion(page, s)).toContainText('Completa');
   }
   await abrirTodo(page);
-  await expect(page.getByLabel(/^Uso$/)).toHaveValue('Preparar la superficie del lente antes del recubrimiento.');
+  await expect(page.getByLabel(/^Uso del producto$/)).toHaveValue('Preparar la superficie del lente antes del recubrimiento.');
   await expect(page.getByLabel('Componente 1', { exact: true })).toHaveValue('1-metoxi-2-propanol');
   await expect(page.getByLabel(/^Marca/)).toHaveValue('NAGA');
   await expect(page.getByLabel(/^Contenido por empaque/)).toHaveValue('20 litros');
@@ -184,7 +187,7 @@ test('segunda sesion: editar un valor ajeno pide motivo y, si se guardo a la vez
     }
 
     // Valor ajeno: Carla edita el «Uso» de Edgar -> franja de motivo; sin motivo no se guarda.
-    const uso = b.page.getByLabel(/^Uso$/);
+    const uso = b.page.getByLabel(/^Uso del producto$/);
     await uso.fill('Preparar la superficie y quitar residuos.');
     await expect(b.page.getByText(/Este valor lo puso/)).toBeVisible();
     // Salir del campo sin motivo no guarda ni pierde el texto: la franja se resalta.
@@ -428,13 +431,13 @@ test('ficha: el encabezado se opera con teclado y un enlace con ancla abre solo 
   const producto = botonDeSeccion(page, 'producto');
   await producto.focus();
   await expect(producto).toBeFocused();
-  await expect(page.getByLabel(/^Uso$/)).toBeHidden();
+  await expect(page.getByLabel(/^Uso del producto$/)).toBeHidden();
   await page.keyboard.press('Enter');
   await expect(producto).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.getByLabel(/^Uso$/)).toBeVisible();
+  await expect(page.getByLabel(/^Uso del producto$/)).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(producto).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.getByLabel(/^Uso$/)).toBeHidden();
+  await expect(page.getByLabel(/^Uso del producto$/)).toBeHidden();
 
   // La zona de la aduana: bloques plegados, con su estado en el encabezado, y el atajo de arriba abre el bloque.
   const partida = botonDeSeccion(page, 'aduana-partida');

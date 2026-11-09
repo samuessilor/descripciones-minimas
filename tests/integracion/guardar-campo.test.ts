@@ -151,6 +151,15 @@ describe('normalizacion de numeros y listas', () => {
     expect((await guardar(f, 'tipo_empaque', 'Unidad', e.edward, { motivo: 'No viene en bidón' })).escrito).toBe(true);
   });
 
+  it('reembolsable es una lista fija (Sí, No, No aplica): «No aplica» es una opcion mas y cualquier otro texto se rechaza', async () => {
+    const f = await nuevaFicha(e);
+    expect((await guardar(f, 'reembolsable', 'Sí')).valor).toBe('Sí');
+    expect((await guardar(f, 'reembolsable', 'No aplica', e.edward, { motivo: 'No se reembolsa' })).valor).toBe('No aplica');
+    await fallaCon(guardar(f, 'reembolsable', 'Tal vez', e.edward, { motivo: 'prueba' }), 'VALIDACION');
+    await fallaCon(guardar(f, 'reembolsable', { no_aplica: true }, e.edward, { motivo: 'prueba' }), 'VALIDACION');
+    expect((await historial(f, 'reembolsable')).map((h) => h.valor)).toEqual(['Sí', 'No aplica']);
+  });
+
   it('requiere_rim lo escribe la aduana (o el admin), no el solicitante', async () => {
     const f = await nuevaFicha(e);
     await asignarAAduana(e, f, e.brian);

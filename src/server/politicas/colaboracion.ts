@@ -19,10 +19,10 @@ import { ETIQUETA_SECCION, SECCIONES, getCampo, type Seccion, type TipoProducto 
 import {
   esAsignacionActiva,
   nombreSinMarca,
-  parsearSecciones,
   pedidoPorDefecto,
   pedidosPermitidos,
   plural,
+  seccionesCubiertas,
   type EstadoAsignacion,
   type Pedido,
 } from '@/dominio/colaboracion';
@@ -94,7 +94,7 @@ export function describirFalta(c: Completitud, pedido: string | null, estado: Es
       ? `Te pidieron información · faltan ${plural(c.area.faltan, 'campo', 'campos')} del área`
       : 'Te pidieron información: lee el mensaje';
   }
-  const propias = parsearSecciones(secciones);
+  const propias = seccionesCubiertas(secciones);
   const seccion = (propias.length > 0 ? propias : SECCIONES).find((s) => c.secciones[s].estado === 'amarillo');
   if (seccion) return `Falta: ${ETIQUETA_SECCION[seccion]} (${plural(c.secciones[seccion].faltan, 'campo', 'campos')})`;
   // Lo suyo ya esta en verde: la asignacion sigue abierta hasta que marque «Listo por mi parte».

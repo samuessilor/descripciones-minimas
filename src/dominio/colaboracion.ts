@@ -71,6 +71,16 @@ export function parsearSecciones(texto: string | null | undefined): Seccion[] {
   return SECCIONES.filter((s) => pedidas.has(s));
 }
 
+/**
+ * Las secciones que una asignacion cubre de verdad. Pais de origen, fabricante y proveedor pasaron de Detalle a Producto
+ * (reunion 2026-11-09): quien tenia pendiente Detalle sigue cubriendo tambien Producto, para que esos tres campos no
+ * queden sin dueno en las asignaciones ya hechas. Se resuelve al leer; no se reescribe nada.
+ */
+export function seccionesCubiertas(texto: string | null | undefined): Seccion[] {
+  const elegidas = parsearSecciones(texto);
+  return elegidas.includes('detalle') && !elegidas.includes('producto') ? ['producto', ...elegidas] : elegidas;
+}
+
 /** Lo que se guarda: nulo si no se eligio nada o se eligieron las tres (= toda su parte). */
 export function textoDeSecciones(lista: readonly Seccion[]): string | null {
   const unicas = SECCIONES.filter((s) => lista.includes(s));
@@ -80,7 +90,7 @@ export function textoDeSecciones(lista: readonly Seccion[]): string | null {
 /** Partes que tiene pendientes una persona segun su asignacion: la aduana siempre su bloque; el area, las elegidas o las tres. */
 export function partesDeAsignacion(secciones: string | null | undefined, rolDestino: Rol): ParteFicha[] {
   if (rolDestino === 'aduana') return ['aduana'];
-  const elegidas = parsearSecciones(secciones);
+  const elegidas = seccionesCubiertas(secciones);
   return elegidas.length > 0 ? elegidas : [...SECCIONES];
 }
 

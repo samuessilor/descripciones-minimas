@@ -122,6 +122,7 @@ export async function sembrarDesarrollo(db: Db): Promise<void> {
     ['pais_origen', 'FR'],
     ['fabricante', 'Fabricante Demo SA'],
     ['proveedor', 'Proveedor Demo SA'],
+    ['reembolsable', 'No'],
     ['tipo_empaque', 'Bidón'],
     ['cantidad_empaque', '20 kg'],
     ['informacion_adicional', 'PRUEBA: datos de ejemplo, no representan una mercancía real.'],

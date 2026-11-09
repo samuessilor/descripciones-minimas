@@ -15,7 +15,7 @@ export interface ColumnaBase {
 
 export const COLUMNAS_BASE: readonly ColumnaBase[] = [
   { clave: 'codigo', encabezado: 'Código', ancho: 18, tipo: 'texto' },
-  { clave: 'nombre', encabezado: 'Nombre del producto', ancho: 28, tipo: 'texto' },
+  { clave: 'nombre', encabezado: 'Descripción según factura', ancho: 28, tipo: 'texto' },
   { clave: 'tipo', encabezado: 'Tipo de producto', ancho: 16, tipo: 'texto' },
   { clave: 'area_responsable', encabezado: 'Área responsable', ancho: 16, tipo: 'texto' },
   { clave: 'estado', encabezado: 'Estado', ancho: 15, tipo: 'estado' },
@@ -23,16 +23,17 @@ export const COLUMNAS_BASE: readonly ColumnaBase[] = [
   { clave: 'fecha_solicitud', encabezado: 'Fecha de solicitud', ancho: 16, tipo: 'fecha' },
   { clave: 'dias', encabezado: 'Días en gestión', ancho: 12, tipo: 'numero' },
   { clave: 'creada_por', encabezado: 'Creada por', ancho: 24, tipo: 'texto' },
-  { clave: 'descripcion_factura', encabezado: 'Descripción según factura', ancho: 40, tipo: 'texto_largo' },
-  { clave: 'uso', encabezado: 'Uso', ancho: 40, tipo: 'texto_largo' },
-  { clave: 'funciones', encabezado: 'Funciones', ancho: 40, tipo: 'texto_largo' },
+  { clave: 'descripcion_factura', encabezado: 'Nombre comercial', ancho: 40, tipo: 'texto_largo' },
+  { clave: 'uso', encabezado: 'Uso del producto', ancho: 40, tipo: 'texto_largo' },
+  { clave: 'funciones', encabezado: 'Función de la máquina', ancho: 40, tipo: 'texto_largo' },
   { clave: 'unidad_medida', encabezado: 'Unidad de medida', ancho: 16, tipo: 'texto' },
-  { clave: 'materia_constitutiva', encabezado: 'Materia constitutiva', ancho: 40, tipo: 'texto_largo' },
-  { clave: 'aspecto_fisico', encabezado: 'Aspecto físico', ancho: 16, tipo: 'texto' },
-  { clave: 'marca', encabezado: 'Marca', ancho: 20, tipo: 'texto' },
   { clave: 'pais_origen', encabezado: 'País de origen', ancho: 18, tipo: 'texto' },
   { clave: 'fabricante', encabezado: 'Fabricante', ancho: 24, tipo: 'texto' },
   { clave: 'proveedor', encabezado: 'Proveedor', ancho: 24, tipo: 'texto' },
+  { clave: 'reembolsable', encabezado: 'Reembolsable', ancho: 14, tipo: 'texto' },
+  { clave: 'materia_constitutiva', encabezado: 'Materia constitutiva', ancho: 40, tipo: 'texto_largo' },
+  { clave: 'aspecto_fisico', encabezado: 'Aspecto físico', ancho: 16, tipo: 'texto' },
+  { clave: 'marca', encabezado: 'Marca', ancho: 20, tipo: 'texto' },
   { clave: 'tipo_empaque', encabezado: 'Tipo de empaque', ancho: 20, tipo: 'texto' },
   { clave: 'cantidad_empaque', encabezado: 'Contenido por empaque', ancho: 22, tipo: 'texto' },
   { clave: 'maquina_destino', encabezado: 'Máquina de destino', ancho: 26, tipo: 'texto_largo' },
@@ -69,7 +70,7 @@ export const RELLENO_VERDE = 'FFC6EFCE';
  */
 export const COLUMNAS_RESUMEN: readonly ColumnaBase[] = [
   { clave: 'codigo', encabezado: 'Código', ancho: 18, tipo: 'texto' },
-  { clave: 'nombre', encabezado: 'Nombre del producto', ancho: 30, tipo: 'texto' },
+  { clave: 'nombre', encabezado: 'Descripción según factura', ancho: 30, tipo: 'texto' },
   { clave: 'tipo', encabezado: 'Tipo de producto', ancho: 16, tipo: 'texto' },
   { clave: 'area_responsable', encabezado: 'Área responsable', ancho: 16, tipo: 'texto' },
   { clave: 'estado', encabezado: 'Estado', ancho: 15, tipo: 'estado' },
@@ -89,7 +90,7 @@ export const COLUMNAS_RESUMEN: readonly ColumnaBase[] = [
 /** Hoja `Historial`: un cambio de campo por fila (ver `historial.ts`). La fecha va en hora de Bogota. */
 export const COLUMNAS_HISTORIAL: readonly ColumnaBase[] = [
   { clave: 'codigo', encabezado: 'Código', ancho: 18, tipo: 'texto' },
-  { clave: 'nombre', encabezado: 'Nombre del producto', ancho: 28, tipo: 'texto' },
+  { clave: 'nombre', encabezado: 'Descripción según factura', ancho: 28, tipo: 'texto' },
   { clave: 'campo', encabezado: 'Campo', ancho: 28, tipo: 'texto' },
   { clave: 'evento', encabezado: 'Evento', ancho: 14, tipo: 'texto' },
   { clave: 'anterior', encabezado: 'Valor anterior', ancho: 40, tipo: 'texto_largo' },

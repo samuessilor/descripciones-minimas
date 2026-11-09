@@ -130,7 +130,7 @@ export default async function Referencias({ searchParams }: { searchParams: Prom
     },
     {
       id: 'nombre',
-      encabezado: 'Nombre del producto',
+      encabezado: 'Descripción según factura',
       celda: (f) => <span className="line-clamp-2 break-words">{f.nombreProducto}</span>,
       className: 'max-w-[18rem]',
       etiquetaTarjeta: 'Producto',

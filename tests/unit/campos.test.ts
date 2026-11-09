@@ -20,7 +20,7 @@ import {
 
 describe('catalogo de campos contra la matriz del SPEC 7 con los cambios de la reunion (R-06)', () => {
   it('tiene exactamente las filas de la matriz', () => {
-    expect(matriz.filas).toHaveLength(29);
+    expect(matriz.filas).toHaveLength(30);
     expect(CAMPOS.map((c) => c.clave).sort()).toEqual(matriz.filas.map((f) => f.clave).sort());
   });
 
@@ -56,7 +56,7 @@ describe('catalogo de campos contra la matriz del SPEC 7 con los cambios de la r
   it('descripcion, uso, funciones y unidad de medida son obligatorios en todos los tipos (P2)', () => {
     for (const tipo of TIPOS_PRODUCTO) {
       expect(camposObligatoriosCliente(tipo).map((c) => c.clave)).toEqual(
-        expect.arrayContaining(['descripcion_factura', 'uso', 'funciones', 'unidad_medida', 'aspecto_fisico', 'fabricante', 'proveedor', 'tipo_empaque']),
+        expect.arrayContaining(['descripcion_factura', 'uso', 'funciones', 'unidad_medida', 'aspecto_fisico', 'fabricante', 'proveedor', 'tipo_empaque', 'reembolsable']),
       );
     }
   });
@@ -155,12 +155,41 @@ describe('catalogo de campos contra la matriz del SPEC 7 con los cambios de la r
     }
   });
 
-  it('las etiquetas de uso y funciones son las que pidio la usuaria en todos los tipos', () => {
-    expect(getCampo('uso')?.etiqueta).toBe('Uso');
-    expect(getCampo('funciones')?.etiqueta).toBe('Funciones');
-    expect(ayudaPara(getCampo('uso')!, 'REPUESTO')).toMatch(/máquina/i);
+  it('las etiquetas de uso y funciones son las que pidio la usuaria en todos los tipos, sin el duplicado «Máquina:» en las ayudas', () => {
+    expect(getCampo('uso')?.etiqueta).toBe('Uso del producto');
+    expect(getCampo('funciones')?.etiqueta).toBe('Función de la máquina');
+    for (const tipo of TIPOS_PRODUCTO) expect(ayudaPara(getCampo('uso')!, tipo), tipo).not.toMatch(/máquina/i);
     expect(ayudaPara(getCampo('uso')!, 'INSUMO')).not.toBe(ayudaPara(getCampo('uso')!, 'REPUESTO'));
     expect(getCampo('informacion_adicional')?.ayuda).toBe('Información relevante que el área quiera añadir.');
+  });
+
+  it('las etiquetas de nombre_producto y descripcion_factura se intercambian sin cambiar las claves (reunion 2026-11-09)', () => {
+    const titulo = getCampo('nombre_producto')!;
+    expect(titulo).toMatchObject({ etiqueta: 'Descripción según factura', maximo: 500, tipoDato: 'texto' });
+    expect(titulo.ayuda).toMatch(/FILTRO/);
+    const comercial = getCampo('descripcion_factura')!;
+    expect(comercial).toMatchObject({ etiqueta: 'Nombre comercial', seccion: 'producto' });
+    expect(comercial.ayuda).toBe('Ej.: NSR E1');
+  });
+
+  it('pais de origen, fabricante y proveedor viven en Producto, en ese orden y despues de la unidad de medida', () => {
+    const claves = CAMPOS.filter((c) => c.seccion === 'producto').map((c) => c.clave);
+    const desde = claves.indexOf('unidad_medida');
+    expect(claves.slice(desde)).toEqual(['unidad_medida', 'pais_origen', 'fabricante', 'proveedor', 'reembolsable']);
+    for (const k of ['pais_origen', 'fabricante', 'proveedor']) expect(getCampo(k)).toMatchObject({ seccion: 'producto', grupo: 'C' });
+    expect(getCampo('fabricante')?.tipoDato).toBe('texto');
+  });
+
+  it('reembolsable: lista fija Sí / No / No aplica, obligatoria en todos los tipos, del cliente y sin catalogo', () => {
+    const c = getCampo('reembolsable')!;
+    expect(c).toMatchObject({ etiqueta: 'Reembolsable', seccion: 'producto', grupo: 'C', fila: 35, tipoDato: 'lista', escribible: true });
+    expect(c.opciones).toEqual(['Sí', 'No', 'No aplica']);
+    expect(c.catalogo).toBeUndefined();
+    expect(c.noAplica).toBeFalsy();
+    for (const tipo of TIPOS_PRODUCTO) {
+      expect(obligatoriedadPara(c, tipo), tipo).toBe('O');
+      expect(camposObligatoriosCliente(tipo, 'producto', {}).map((x) => x.clave), tipo).toContain('reembolsable');
+    }
   });
 
   it('solo el cliente (C) cuenta para el color de seccion: los O de la aduana y la respuesta del area quedan fuera (D-26)', () => {

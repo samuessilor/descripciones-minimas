@@ -268,7 +268,7 @@ describe('hoja «Historial» del Excel de la agencia', () => {
     expect(b.texto).not.toContain('Nota de Brian');
 
     const admin = await historialExcel(e.admin);
-    expect(admin.filas.some((f) => f.campo === 'Uso')).toBe(true);
+    expect(admin.filas.some((f) => f.campo === 'Uso del producto')).toBe(true);
     expect(admin.filas.some((f) => f.quien === 'Charles' && f.motivo === 'Motivo interno confidencial')).toBe(true);
     expect(admin.libro.getWorksheet('Leyenda')!.getSheetValues().flat().join('|')).not.toContain('Historial limitado');
   });

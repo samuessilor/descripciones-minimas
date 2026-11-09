@@ -24,6 +24,7 @@ export const DATOS_INSUMO: Array<[string, unknown]> = [
   ['pais_origen', 'FR'],
   ['fabricante', 'Fabricante Demo SA'],
   ['proveedor', 'Proveedor Demo SA'],
+  ['reembolsable', 'No'],
   ['tipo_empaque', 'Unidad'],
 ];
 

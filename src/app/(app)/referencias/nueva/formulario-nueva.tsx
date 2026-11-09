@@ -90,7 +90,7 @@ export function FormularioNueva({
   function validar(e: React.FormEvent<HTMLFormElement>) {
     const nuevos: typeof errores = {};
     if (codigo.trim() === '') nuevos.codigo = 'Escribe el código de la referencia.';
-    if (nombre.trim() === '') nuevos.nombre = 'Escribe el nombre del producto.';
+    if (nombre.trim() === '') nuevos.nombre = 'Escribe la descripción según factura.';
     if (tipo === '') nuevos.tipo = 'Elige el tipo de producto.';
     if (area === '') nuevos.area = 'Elige el área responsable.';
     if (duplicado) nuevos.codigo = 'Esa referencia ya existe. Ábrela en vez de crear otra.';
@@ -112,7 +112,7 @@ export function FormularioNueva({
         <h1 className="relative mt-1 font-display text-3xl font-extrabold tracking-tight">{similar ? 'Crear similar' : 'Nueva referencia'}</h1>
         <p className="relative mt-2 max-w-[48ch] text-base text-azul-100">
           {similar
-            ? `Parte de ${similar.codigo}. Pon el código y el nombre de la nueva; lo demás ya viene copiado.`
+            ? `Parte de ${similar.codigo}. Pon el código y la descripción según factura de la nueva; lo demás ya viene copiado.`
             : 'Empieza con cuatro datos. Todo lo demás lo llenas en la ficha, que se guarda sola.'}
         </p>
       </div>
@@ -125,8 +125,8 @@ export function FormularioNueva({
           <Aviso tipo="info" titulo="Qué se copia de la otra referencia">
             <span className="inline-flex flex-wrap items-center gap-x-1.5">
               <Copy aria-hidden className="size-3.5" />
-              {similar.copiados.length > 0 ? similar.copiados.join(', ') : 'No había datos compartidos para copiar'}. No se copian el código, el
-              nombre, el valor, la cantidad, la partida ni la clasificación.
+              {similar.copiados.length > 0 ? similar.copiados.join(', ') : 'No había datos compartidos para copiar'}. No se copian el código, la
+              descripción, el valor, la cantidad, la partida ni la clasificación.
             </span>
           </Aviso>
         ) : null}
@@ -184,16 +184,16 @@ export function FormularioNueva({
         ) : null}
 
         <CampoFormulario
-          etiqueta="Nombre del producto"
-          ayuda="Qué es el producto. Ej.: NSR E1"
-          error={errores.nombre ?? (estado.estado === 'error' && !existenteServidor && /nombre/i.test(estado.mensaje ?? '') ? estado.mensaje : undefined)}
+          etiqueta="Descripción según factura"
+          ayuda="Tal cual aparece en la factura. Ej.: FILTRO ABSOLUTO -AIRE NUEVO"
+          error={errores.nombre ?? (estado.estado === 'error' && !existenteServidor && /descripci[oó]n/i.test(estado.mensaje ?? '') ? estado.mensaje : undefined)}
         >
           {(p) => (
             <Campo
               {...p}
               name="nombreProducto"
               required
-              maxLength={200}
+              maxLength={500}
               autoComplete="off"
               value={nombre}
               onChange={(e) => {

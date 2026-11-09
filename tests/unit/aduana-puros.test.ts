@@ -160,14 +160,14 @@ describe('exportacion: nombres y fechas', () => {
     expect(fechaHoraBogota(null)).toBeNull();
   });
   it('las columnas del SPEC 15.1 (con los cambios de la reunion) mas la autoria por seccion, con encabezados unicos', () => {
-    expect(COLUMNAS_BASE).toHaveLength(41); // con el area responsable
-    expect(new Set(COLUMNAS_BASE.map((c) => c.encabezado)).size).toBe(41);
-    expect(new Set(COLUMNAS_BASE.map((c) => c.clave)).size).toBe(41);
+    expect(COLUMNAS_BASE).toHaveLength(42); // con el area responsable y reembolsable
+    expect(new Set(COLUMNAS_BASE.map((c) => c.encabezado)).size).toBe(42);
+    expect(new Set(COLUMNAS_BASE.map((c) => c.clave)).size).toBe(42);
     expect(COLUMNAS_BASE[0]?.encabezado).toBe('Código');
-    expect(COLUMNAS_BASE[34]?.encabezado).toBe('Última actualización');
+    expect(COLUMNAS_BASE[35]?.encabezado).toBe('Última actualización');
     const claves = COLUMNAS_BASE.map((c) => c.clave);
     for (const fuera of ['valor_unitario', 'cantidad_a_radicar', 'primer_clasificador', 'segundo_clasificador']) expect(claves).not.toContain(fuera);
-    for (const nueva of ['area_responsable', 'requiere_rim', 'cantidad_empaque', 'respuesta_area']) expect(claves).toContain(nueva);
+    for (const nueva of ['area_responsable', 'requiere_rim', 'cantidad_empaque', 'respuesta_area', 'reembolsable']) expect(claves).toContain(nueva);
     expect(claves).not.toContain('cantidad_rim');
   });
 });

@@ -28,7 +28,7 @@ import { parsear, textoLimpio } from './validacion';
 
 export const entradaCrearReferencia = z.object({
   codigo: textoLimpio().pipe(z.string().trim().min(1, 'Escribe el código de la referencia.').max(80)),
-  nombreProducto: textoLimpio().pipe(z.string().trim().min(1, 'Escribe el nombre del producto.').max(200)),
+  nombreProducto: textoLimpio().pipe(z.string().trim().min(1, 'Escribe la descripción según factura.').max(500)),
   tipoProducto: z.enum(TIPOS_PRODUCTO),
   /** Area responsable (P4). Si no llega (API, pruebas), se toma la de la referencia de origen o la de quien crea; si no hay, queda pendiente. */
   areaResponsable: z.enum(AREAS, 'Elige el área responsable.').optional(),
@@ -57,6 +57,7 @@ export const CAMPOS_SIMILAR: readonly string[] = [
   'marca',
   'pais_origen',
   'fabricante',
+  'reembolsable',
   'unidad_medida',
   'aspecto_fisico',
   'tipo_empaque',

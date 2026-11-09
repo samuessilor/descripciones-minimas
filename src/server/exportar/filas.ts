@@ -210,6 +210,7 @@ function construirFila(
     fabricante: texto('fabricante'),
     // «El proveedor es el mismo fabricante» esta vinculado: el Excel muestra el nombre del fabricante.
     proveedor: (valores.proveedor as { mismo_fabricante?: boolean } | null)?.mismo_fabricante ? texto('fabricante') : texto('proveedor'),
+    reembolsable: texto('reembolsable'),
     tipo_empaque: texto('tipo_empaque'),
     cantidad_empaque: texto('cantidad_empaque'),
     maquina_destino: texto('maquina_destino'),

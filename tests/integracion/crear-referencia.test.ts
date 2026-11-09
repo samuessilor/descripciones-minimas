@@ -141,6 +141,7 @@ describe('Crear similar (F10, CA 12.4)', () => {
     await g('marca', { texto: 'ACME' });
     await g('pais_origen', 'CN');
     await g('fabricante', 'Fabrica SA');
+    await g('reembolsable', 'No aplica');
     await g('tipo_empaque', 'Paquete');
     await g('cantidad_empaque', '10 unidades');
     await g('requiere_rim', 'SI', e.admin); // lo responde la aduana (o el admin): nunca se copia
@@ -167,6 +168,7 @@ describe('Crear similar (F10, CA 12.4)', () => {
         'nombre_producto',
         'pais_origen',
         'proveedor',
+        'reembolsable',
         'tipo_empaque',
         'tipo_producto',
       ].sort(),
@@ -175,6 +177,7 @@ describe('Crear similar (F10, CA 12.4)', () => {
     expect(f!.datos.maquina_destino!.a).toBe(e.charles.usuarioId); // el autor es quien copia
     expect(f!.datos.tipo_empaque!.v).toBe('Paquete');
     expect(f!.datos.cantidad_empaque!.v).toBe('10 unidades');
+    expect(f!.datos.reembolsable!.v).toBe('No aplica');
     expect(f!.datos.requiere_rim).toBeUndefined();
     expect(f!.datos.codigo!.v).toBe('SIMILAR-1');
     expect(f!.partida).toBeNull();

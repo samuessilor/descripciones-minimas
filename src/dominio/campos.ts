@@ -99,6 +99,9 @@ const NINGUNO = r('-', '-', '-', '-');
 
 export const TEXTO_NO_APLICA = 'No aplica';
 
+/** Respuestas de «Reembolsable» (reunion 2026-11-09). */
+export const REEMBOLSABLE = ['Sí', 'No', 'No aplica'] as const;
+
 /** Tipos de empaque (reunion 2026-11): siempre hay uno; si no viene en empaque, es «Unidad». */
 export const EMPAQUES = ['Bidón', 'Paquete', 'Unidad'] as const;
 /** Con estos empaques se pide ademas «por cuanto» viene (litros/kilos por bidon, unidades por paquete). */
@@ -116,9 +119,15 @@ export const CAMPOS: readonly CampoDef[] = [
     tipoDato: 'codigo', reglas: TODOS_O, maximo: 80, escribible: false,
     ayuda: 'Ej.: 1GA0612A00',
   }),
+  // Reunion 2026-11-09: la etiqueta de `nombre_producto` es «Descripción según factura» (titulo de la referencia en toda la
+  // app) y la de `descripcion_factura` es «Nombre comercial». Las claves guardadas no cambian.
   def({
-    clave: 'nombre_producto', etiqueta: 'Nombre del producto', seccion: 'producto', grupo: 'C', fila: 2, confianza: 'F',
-    tipoDato: 'texto', reglas: TODOS_O, maximo: 200, ayuda: 'Ej.: NSR E1',
+    clave: 'nombre_producto', etiqueta: 'Descripción según factura', seccion: 'producto', grupo: 'C', fila: 2, confianza: 'F',
+    tipoDato: 'texto', reglas: TODOS_O, maximo: 500, ayuda: 'Ej.: FILTRO ABSOLUTO -AIRE NUEVO',
+  }),
+  def({
+    clave: 'descripcion_factura', etiqueta: 'Nombre comercial', seccion: 'producto', grupo: 'C', fila: 6,
+    confianza: 'F', tipoDato: 'texto_largo', reglas: TODOS_O, maximo: 500, ayuda: 'Ej.: NSR E1',
   }),
   def({
     clave: 'fecha_solicitud', etiqueta: 'Fecha de solicitud', seccion: 'producto', grupo: 'S', fila: 3, confianza: 'F',
@@ -139,25 +148,20 @@ export const CAMPOS: readonly CampoDef[] = [
     tipoDato: 'area', reglas: TODOS_O,
     ayuda: 'El área a la que le pertenece la referencia. Sus personas la verán en «Para mí».',
   }),
-  // Descripcion, uso, funciones y unidad de medida: obligatorios en todos los tipos (reunion con el area).
+  // Uso, funcion y unidad de medida: obligatorios en todos los tipos (reunion con el area).
   def({
-    clave: 'descripcion_factura', etiqueta: 'Descripción según factura', seccion: 'producto', grupo: 'C', fila: 6,
-    confianza: 'F', tipoDato: 'texto_largo', reglas: TODOS_O, maximo: 500,
-    ayuda: 'Ej.: FILTRO ABSOLUTO -AIRE NUEVO',
-  }),
-  def({
-    clave: 'uso', etiqueta: 'Uso', seccion: 'producto', grupo: 'C', fila: 7, confianza: 'F',
+    clave: 'uso', etiqueta: 'Uso del producto', seccion: 'producto', grupo: 'C', fila: 7, confianza: 'F',
     tipoDato: 'texto_largo', reglas: TODOS_O, maximo: 2000,
     ayuda: 'Ej.: preparación de las superficies del lente oftálmico para la aplicación de recubrimientos',
     ayudaPorTipo: {
-      REPUESTO: 'Ej.: Máquina: Aspiradora MEI, uso: aspirado de polvo',
-      ACCESORIO: 'Ej.: Máquina: Máquina FOG ID, uso: sujetar plantilla de marcado',
-      EQUIPO: 'Ej.: Máquina: Aspiradora MEI, uso: aspirado de polvo',
+      REPUESTO: 'Ej.: aspirado de polvo',
+      ACCESORIO: 'Ej.: sujetar plantilla de marcado',
+      EQUIPO: 'Ej.: aspirado de polvo',
       MONTURA: 'Ej.: montura oftálmica para exhibir en tienda',
     },
   }),
   def({
-    clave: 'funciones', etiqueta: 'Funciones', seccion: 'producto', grupo: 'C', fila: 8, confianza: 'F',
+    clave: 'funciones', etiqueta: 'Función de la máquina', seccion: 'producto', grupo: 'C', fila: 8, confianza: 'F',
     tipoDato: 'texto_largo', reglas: TODOS_O, maximo: 2000,
     ayuda: 'Ej.: Sujetar, fijar el eje Z',
   }),
@@ -165,6 +169,26 @@ export const CAMPOS: readonly CampoDef[] = [
     clave: 'unidad_medida', etiqueta: 'Unidad de medida', seccion: 'producto', grupo: 'C', fila: 9, confianza: 'F',
     tipoDato: 'lista', catalogo: 'unidad_medida', reglas: TODOS_O, maximo: 100,
     ayuda: 'Ej.: Kilogramos, Unidades, Paquete',
+  }),
+  def({
+    clave: 'pais_origen', etiqueta: 'País de origen', seccion: 'producto', grupo: 'C', fila: 13, confianza: 'F',
+    tipoDato: 'pais', reglas: TODOS_O, ayuda: 'Ej.: Francia',
+  }),
+  def({
+    clave: 'fabricante', etiqueta: 'Fabricante', seccion: 'producto', grupo: 'C', fila: 14, confianza: 'F',
+    tipoDato: 'texto', reglas: TODOS_O, maximo: 200, ayuda: 'Ej.: NAGA',
+  }),
+  // Texto, o `{ mismo_fabricante: true }` (casilla «El proveedor es el mismo fabricante»): vinculado, no copiado.
+  def({
+    clave: 'proveedor', etiqueta: 'Proveedor', seccion: 'producto', grupo: 'C', fila: 15, confianza: 'F',
+    tipoDato: 'proveedor', reglas: TODOS_O, maximo: 200, ayuda: 'Ej.: Essilor International',
+  }),
+  // Reunion 2026-11-09: si la compra se reembolsa. Lista fija, obligatoria en todos los tipos; «No aplica» es una
+  // respuesta valida (cuenta como diligenciado).
+  def({
+    clave: 'reembolsable', etiqueta: 'Reembolsable', seccion: 'producto', grupo: 'C', fila: 35, confianza: 'S',
+    tipoDato: 'lista', opciones: REEMBOLSABLE, reglas: TODOS_O, maximo: 100,
+    ayuda: 'Elige Sí, No o No aplica.',
   }),
   // ---- Detalle
   def({
@@ -179,19 +203,6 @@ export const CAMPOS: readonly CampoDef[] = [
   def({
     clave: 'marca', etiqueta: 'Marca', seccion: 'detalle', grupo: 'C', fila: 12, confianza: 'F', tipoDato: 'marca',
     reglas: TODOS_O, maximo: 200, ayuda: 'Ej.: NAGA',
-  }),
-  def({
-    clave: 'pais_origen', etiqueta: 'País de origen', seccion: 'detalle', grupo: 'C', fila: 13, confianza: 'F',
-    tipoDato: 'pais', reglas: TODOS_O, ayuda: 'Ej.: Francia',
-  }),
-  def({
-    clave: 'fabricante', etiqueta: 'Fabricante', seccion: 'detalle', grupo: 'C', fila: 14, confianza: 'F',
-    tipoDato: 'texto', reglas: TODOS_O, maximo: 200, ayuda: 'Ej.: NAGA',
-  }),
-  // Texto, o `{ mismo_fabricante: true }` (casilla «El proveedor es el mismo fabricante»): vinculado, no copiado.
-  def({
-    clave: 'proveedor', etiqueta: 'Proveedor', seccion: 'detalle', grupo: 'C', fila: 15, confianza: 'F',
-    tipoDato: 'proveedor', reglas: TODOS_O, maximo: 200, ayuda: 'Ej.: Essilor International',
   }),
   def({
     clave: 'tipo_empaque', etiqueta: 'Tipo de empaque', seccion: 'detalle', grupo: 'C', fila: 16, confianza: 'F',

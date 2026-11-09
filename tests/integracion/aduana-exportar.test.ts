@@ -106,7 +106,7 @@ describe('estructura del libro (P-06)', () => {
     const base = libro.getWorksheet('Base')!;
     const encabezados = (base.getRow(1).values as string[]).slice(1);
     expect(encabezados).toHaveLength(COLUMNAS_BASE.length);
-    expect(encabezados.slice(0, 6)).toEqual(['Código', 'Nombre del producto', 'Tipo de producto', 'Área responsable', 'Estado', 'Etiqueta de estado']);
+    expect(encabezados.slice(0, 6)).toEqual(['Código', 'Descripción según factura', 'Tipo de producto', 'Área responsable', 'Estado', 'Etiqueta de estado']);
     expect(encabezados).toEqual(
       expect.arrayContaining(['Partida arancelaria final', 'Restricciones', 'Descripciones mínimas adicionales', 'Respuesta del área', 'Requiere RIM', 'Días en gestión', 'Producto: última edición por']),
     );
@@ -114,7 +114,7 @@ describe('estructura del libro (P-06)', () => {
     expect(encabezados).not.toContain('Valor unitario (USD)');
     // Las columnas del SPEC 15.1 con los cambios de la reunion (sin valor, cantidad a radicar ni clasificadores; con el area
     // responsable) mas la autoria por seccion (6).
-    expect(COLUMNAS_BASE.length).toBe(41);
+    expect(COLUMNAS_BASE.length).toBe(42);
   });
 
   it('congela la fila 1 y la primera columna, y deja autofiltro sobre todos los encabezados', async () => {
@@ -236,6 +236,9 @@ describe('contenido', () => {
     expect(c.getCell(col('proveedor')).text).not.toBe('');
     // La aduana respondio que no requiere RIM.
     expect(c.getCell(col('requiere_rim')).text).toBe('No');
+    // Reembolsable viaja tal cual se eligio, y el nombre comercial (descripcion_factura) tiene su propia columna.
+    expect(c.getCell(col('reembolsable')).text).toBe('No');
+    expect(c.getCell(col('descripcion_factura')).text).not.toBe('');
     expect((c.getCell(col('fecha_clasificacion')).value as Date).toISOString().slice(0, 10)).toBe('2026-10-21');
   });
 
@@ -306,7 +309,7 @@ describe('hoja «Historial»', () => {
     expect(hoja.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
 
     // «Uso» se lleno y luego se reescribio: el mas reciente trae el valor anterior; el primero, no.
-    const [uso, usoPrimero] = cambio(hoja, '00123-AB', 'Uso');
+    const [uso, usoPrimero] = cambio(hoja, '00123-AB', 'Uso del producto');
     expect(uso).toBeDefined();
     expect(uso!.getCell(colHist('nombre')).text).toBe('=1+1');
     expect(uso!.getCell(colHist('evento')).text).toBe('Cambio');
@@ -359,7 +362,7 @@ describe('hoja «Historial»', () => {
     expect(new Set(filas(hojaA).map((f) => f.getCell(1).text))).toEqual(new Set(['00123-AB', 'TEST-CLAS-1']));
     // Lo que escribe el area (con su motivo, PA-38) no llega: ni el cambio de «Información adicional» ni su motivo.
     expect(cambio(hojaA, '00123-AB', 'Información adicional')).toHaveLength(0);
-    expect(cambio(hojaA, '00123-AB', 'Uso')).toHaveLength(0);
+    expect(cambio(hojaA, '00123-AB', 'Uso del producto')).toHaveLength(0);
     const texto = JSON.stringify(hojaA.getSheetValues());
     expect(texto).not.toContain('Así lo dice la ficha técnica');
     expect(texto).not.toContain('Versión corregida');

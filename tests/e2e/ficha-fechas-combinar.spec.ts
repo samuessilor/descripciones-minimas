@@ -18,7 +18,7 @@ const guardado = /^(guardado|limpio)$/;
 async function crearFicha(page: Page): Promise<string> {
   await page.goto('/referencias/nueva');
   await page.getByLabel('Código de referencia').fill(`E2E-AG-${Date.now().toString(36).toUpperCase()}`);
-  await page.getByLabel('Nombre del producto').fill('Producto de autoguardado');
+  await page.getByLabel('Descripción según factura').fill('Producto de autoguardado');
   await page.getByRole('radio', { name: /Insumo/ }).check();
   await page.getByLabel('Área responsable').selectOption('Consumibles');
   await page.getByRole('button', { name: 'Crear y seguir' }).click();
@@ -62,9 +62,9 @@ test('«Combinar» en un campo de una linea separa los dos textos', async ({ bro
     const url = await crearFicha(a.page);
     await b.page.goto(url);
     await expect(b.page.locator('[data-barra-ficha]')).toBeVisible({ timeout: 120_000 });
-    // El Fabricante vive en Detalle, que arranca plegada.
-    await abrirSeccion(a.page, 'detalle');
-    await abrirSeccion(b.page, 'detalle');
+    // El Fabricante vive en Producto, que arranca plegada.
+    await abrirSeccion(a.page, 'producto');
+    await abrirSeccion(b.page, 'producto');
 
     const fabB = b.page.getByLabel(/^Fabricante/);
     await fabB.click();

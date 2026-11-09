@@ -70,7 +70,7 @@ test.beforeEach(() => {
 async function crearFicha(page: Page, codigo: string, nombre: string): Promise<string> {
   await page.goto('/referencias/nueva');
   await page.getByLabel('Código de referencia').fill(codigo);
-  await page.getByLabel('Nombre del producto').fill(nombre);
+  await page.getByLabel('Descripción según factura').fill(nombre);
   await page.getByRole('radio', { name: /^Insumo/ }).check();
   await page.getByLabel('Área responsable').selectOption('Consumibles');
   await page.getByRole('button', { name: /Crear y seguir/ }).click();
@@ -197,7 +197,7 @@ test('restaurar un valor anterior desde el campo: siempre pide motivo y deja una
 
   // A escribe, B (otra persona) lo reemplaza con motivo.
   await abrirSeccion(a, 'producto');
-  const campoA = a.getByLabel('Descripción según factura');
+  const campoA = a.getByLabel('Nombre comercial');
   await campoA.fill('LIMPIADOR VERSION UNO');
   await campoA.blur();
   // El aviso «Guardado» es efimero: se espera a lo duradero, el acceso al historial de ese campo (ya tiene version).
@@ -205,7 +205,7 @@ test('restaurar un valor anterior desde el campo: siempre pide motivo y deja una
 
   await b.goto(`/referencias/${id}`);
   await abrirSeccion(b, 'producto');
-  const campoB = b.getByLabel('Descripción según factura');
+  const campoB = b.getByLabel('Nombre comercial');
   await campoB.fill('LIMPIADOR VERSION DOS');
   await campoB.blur();
   await b.getByLabel(/Motivo|por qué/i).first().fill('Así aparece en la factura');
@@ -221,21 +221,21 @@ test('restaurar un valor anterior desde el campo: siempre pide motivo y deja una
   await expect(versiones.getByTestId('entrada-historial')).toHaveCount(2, { timeout: 60_000 });
   await expect(versiones).toContainText('LIMPIADOR VERSION UNO');
   await expect(versiones).toContainText('Motivo: Así aparece en la factura');
-  await versiones.getByRole('button', { name: /Restaurar «Descripción según factura» a la versión 1/ }).click();
+  await versiones.getByRole('button', { name: /Restaurar «Nombre comercial» a la versión 1/ }).click();
 
   const dialogo = b.getByRole('dialog', { name: /Restaurar/ });
   const confirmar = dialogo.getByRole('button', { name: 'Restaurar este valor' });
   await expect(confirmar).toBeDisabled(); // sin motivo no se puede
   await dialogo.getByLabel('Motivo').fill('Era el texto correcto de la factura');
   await confirmar.click();
-  await expect(b.getByText('Restauraste «Descripción según factura»', { exact: true })).toBeVisible({ timeout: 60_000 });
+  await expect(b.getByText('Restauraste «Nombre comercial»', { exact: true })).toBeVisible({ timeout: 60_000 });
 
   // Quedo una version NUEVA (3), con su motivo, y nada se borro.
   await b.getByRole('button', { name: 'Historial y comentarios' }).first().click();
   const panel = b.getByRole('dialog', { name: 'Actividad de la referencia' });
   await expect(panel.getByText('restauraste un valor anterior').first()).toBeVisible({ timeout: 60_000 });
   await expect(panel.getByText('Motivo: Era el texto correcto de la factura')).toBeVisible();
-  await expect(panel.getByTestId('entrada-historial').filter({ hasText: 'Descripción según factura' })).toHaveCount(3);
+  await expect(panel.getByTestId('entrada-historial').filter({ hasText: 'Nombre comercial' })).toHaveCount(3);
   await b.keyboard.press('Escape');
   expect(errores.B, errores.B.join('\n')).toEqual([]);
 });

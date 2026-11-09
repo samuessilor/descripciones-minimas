@@ -27,6 +27,7 @@ const DATOS: Array<[string, unknown]> = [
   ['pais_origen', 'FR'],
   ['fabricante', 'Fabricante Demo SA'],
   ['proveedor', 'Proveedor Demo SA'],
+  ['reembolsable', 'No'],
   ['tipo_empaque', 'Unidad'],
   // `requiere_rim` lo responde la aduana (reunion 2026-11): la ficha de desarrollo llega sin responder.
   // Obligatoria para repuesto y equipo (D5); en los demas tipos no aplica y se salta.

@@ -141,9 +141,9 @@ describe('R1 en el servidor: diligenciar y deshacer vuelve a pendiente', () => {
   it('proveedor «el mismo fabricante»: cuenta como diligenciado; quitarlo vuelve a pendiente', async () => {
     const id = await fichaEnAduana(e, { llena: true });
     await escribir(e, e.edward, id, 'proveedor', { mismo_fabricante: true });
-    expect((await vistaFicha(e.db, e.edward, id, new Date())).completitud.secciones.detalle.faltan).toBe(0);
+    expect((await vistaFicha(e.db, e.edward, id, new Date())).completitud.secciones.producto.faltan).toBe(0);
     await escribir(e, e.edward, id, 'proveedor', null);
-    expect((await vistaFicha(e.db, e.edward, id, new Date())).completitud.secciones.detalle.faltantes).toEqual(['proveedor']);
+    expect((await vistaFicha(e.db, e.edward, id, new Date())).completitud.secciones.producto.faltantes).toEqual(['proveedor']);
   });
 
   it('RIM: lo responde la aduana; sin respuesta queda pendiente de la aduana y el area no puede escribirlo', async () => {

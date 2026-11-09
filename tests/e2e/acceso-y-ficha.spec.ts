@@ -45,7 +45,7 @@ test('ficha: guarda al salir del campo, muestra autor y fecha y conserva al reca
 
   await abrirSeccion(page, 'producto'); // las secciones arrancan plegadas
   const valor = `Uso escrito por la prueba ${Date.now()}`;
-  const campo = page.getByLabel(/^Uso$/);
+  const campo = page.getByLabel(/^Uso del producto$/);
   await campo.fill(valor);
   await expect(page.getByText('Sin guardar').first()).toBeVisible();
   await campo.blur();
@@ -54,7 +54,7 @@ test('ficha: guarda al salir del campo, muestra autor y fecha y conserva al reca
 
   await page.reload();
   await abrirSeccion(page, 'producto');
-  await expect(page.getByLabel(/^Uso$/)).toHaveValue(valor);
+  await expect(page.getByLabel(/^Uso del producto$/)).toHaveValue(valor);
 
   expect(errores, errores.join('\n')).toEqual([]);
 });
@@ -67,7 +67,7 @@ test('dos navegadores en el mismo campo: choque con las tres salidas, sin perder
       await p.goto('/referencias');
       await p.getByRole('link', { name: /TEST-0003/ }).click();
       await expect(p.getByRole('heading', { name: 'Filtro de aire (ejemplo)' })).toBeVisible();
-      await abrirSeccion(p, 'detalle');
+      await abrirSeccion(p, 'producto');
     }
     const etiqueta = /^Fabricante/;
     const marca = Date.now();

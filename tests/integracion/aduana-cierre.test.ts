@@ -93,7 +93,7 @@ describe('finalizar: advertencias A1-A3 y "cerrar de todos modos"', () => {
     expect(err.codigo).toBe('FALTA_MOTIVO');
     const adv = (err.detalle as { advertencias: Array<{ regla: string; detalle: string[] }> }).advertencias;
     const a1 = adv.find((a) => a.regla === 'A1');
-    expect(a1?.detalle).toContain('Descripción según factura');
+    expect(a1?.detalle).toContain('Nombre comercial');
     // El RIM ya no es del area: lo responde la aduana y su falta es una guarda dura (G7), no un campo del area.
     expect(a1?.detalle).not.toContain('¿Requiere registro de importación (RIM)?');
     expect(adv.find((a) => a.regla === 'A2')).toMatchObject({ mensaje: 'Las descripciones mínimas adicionales están vacías' });
@@ -108,7 +108,7 @@ describe('finalizar: advertencias A1-A3 y "cerrar de todos modos"', () => {
     const fin = await historialDe(e, id, 'clasificacion_finalizada');
     expect(fin[0]).toMatchObject({ valor: 'SI', tipoEvento: 'sistema', autorId: e.brian.usuarioId });
     expect(fin[0]?.motivo).toContain('Cerrada de todos modos');
-    expect(fin[0]?.motivo).toContain('Descripción según factura');
+    expect(fin[0]?.motivo).toContain('Nombre comercial');
     expect(fin[0]?.motivo).toContain('Las descripciones mínimas adicionales están vacías');
     expect(fin[0]?.motivo).toContain('La agencia ya lo despachó');
   });

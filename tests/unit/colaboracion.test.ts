@@ -6,6 +6,7 @@ import {
   esAsignacionActiva,
   inicioDiaBogota,
   nombreSinMarca,
+  partesDeAsignacion,
   pedidoCompatible,
   pedidoPorDefecto,
   pedidosPermitidos,
@@ -148,5 +149,16 @@ describe('describirFalta: la frase de «Para mí» para la aduana', () => {
     expect(describirFalta(sinPartida, 'clasificar', 'EN_GESTION')).toBe('Falta 1 dato de la aduana');
     const esperando = calcularCompletitud({ tipo: 'INSUMO', valores: { ...completa, descripciones_minimas: '¿AC o DC?' } });
     expect(describirFalta(esperando, 'clasificar', 'EN_GESTION')).toBe('Esperando la respuesta del área');
+  });
+});
+
+describe('partesDeAsignacion: asignaciones antiguas de Detalle tras mover pais, fabricante y proveedor a Producto', () => {
+  it('una asignacion que solo dice «detalle» tambien cubre Producto; el resto queda igual', () => {
+    expect(partesDeAsignacion('detalle', 'solicitante')).toEqual(['producto', 'detalle']);
+    expect(partesDeAsignacion('producto,detalle', 'solicitante')).toEqual(['producto', 'detalle']);
+    expect(partesDeAsignacion('producto', 'solicitante')).toEqual(['producto']);
+    expect(partesDeAsignacion('especificaciones', 'solicitante')).toEqual(['especificaciones']);
+    expect(partesDeAsignacion(null, 'solicitante')).toEqual(['producto', 'detalle', 'especificaciones']);
+    expect(partesDeAsignacion('detalle', 'aduana')).toEqual(['aduana']);
   });
 });

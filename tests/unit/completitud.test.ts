@@ -17,6 +17,7 @@ const VALOR_DE_EJEMPLO: Record<string, unknown> = {
   pais_origen: 'FR',
   fabricante: 'Fabrica SA',
   proveedor: 'Proveedor SA',
+  reembolsable: 'No',
   tipo_empaque: 'Unidad',
   maquina_destino: 'Biseladora X',
 };
@@ -81,6 +82,7 @@ describe('semaforo por seccion (D-13, D-26, 8.2)', () => {
         proveedor: { mismo_fabricante: true },
       }),
     });
+    expect(c.secciones.producto.estado).toBe('verde');
     expect(c.secciones.detalle.estado).toBe('verde');
     expect(c.secciones.especificaciones.estado).toBe('verde');
   });
@@ -148,8 +150,18 @@ describe('R1: diligenciar y luego borrar, desmarcar o cambiar vuelve a pendiente
 
   it('desmarcar «El proveedor es el mismo fabricante» vuelve a pendiente', () => {
     const vinculado = llenar('INSUMO', { proveedor: { mismo_fabricante: true } });
-    expect(calcularCompletitud({ tipo: 'INSUMO', valores: vinculado }).secciones.detalle.estado).toBe('verde');
-    expect(calcularCompletitud({ tipo: 'INSUMO', valores: { ...vinculado, proveedor: null } }).secciones.detalle.faltantes).toEqual(['proveedor']);
+    expect(calcularCompletitud({ tipo: 'INSUMO', valores: vinculado }).secciones.producto.estado).toBe('verde');
+    expect(calcularCompletitud({ tipo: 'INSUMO', valores: { ...vinculado, proveedor: null } }).secciones.producto.faltantes).toEqual(['proveedor']);
+  });
+
+  it('«Reembolsable» sin elegir deja Producto pendiente en los cinco tipos; «No aplica» ya cuenta como respuesta', () => {
+    for (const tipo of TIPOS_PRODUCTO) {
+      const sin = calcularCompletitud({ tipo, valores: llenar(tipo, { reembolsable: null }) });
+      expect(sin.secciones.producto, tipo).toMatchObject({ estado: 'amarillo', faltan: 1, faltantes: ['reembolsable'] });
+      for (const r of ['Sí', 'No', 'No aplica']) {
+        expect(calcularCompletitud({ tipo, valores: llenar(tipo, { reembolsable: r }) }).secciones.producto.estado, `${tipo}/${r}`).toBe('verde');
+      }
+    }
   });
 
   it('RIM: lo responde la aduana; sin elegir falta, «No» o «Sí» bastan y no tiñen las secciones del area', () => {

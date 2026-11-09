@@ -146,6 +146,10 @@ describe('listarPagina', () => {
     await llenar('funciones', 'Z');
     await llenar('unidad_medida', 'Kilogramos');
     await llenar('area_responsable', 'Mantenimiento');
+    await llenar('pais_origen', 'FR');
+    await llenar('fabricante', 'Fabricante Demo SA');
+    await llenar('proveedor', 'Proveedor Demo SA');
+    await llenar('reembolsable', 'No');
     const despues = (await listarPagina(e.db, e.edward, filtros({ q: 'SEC-1' }), new Date())).filas[0]!;
     expect(despues.pendiente?.seccion).toBe('detalle');
   });
