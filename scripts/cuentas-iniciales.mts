@@ -6,8 +6,8 @@
  *   - UNA cuenta general por empresa de aduana (su propia organizacion tipo agencia), rol aduana,
  *   - lectores (opcional).
  * Formato: ver `cuentas.ejemplo.json`. Convencion de usuarios: `<cuenta>.essilorluxottica` (areas), `administrador.<nombre>`
- * y `<empresa>.aduana`. La contrasena INICIAL es `clave` si el archivo la trae; si no, `<cuenta>12345` (la parte del usuario antes
- * del primer punto). Es una clave de entrega: cada cuenta queda marcada para cambiarla en su primer ingreso y no puede usar
+ * y `<empresa>.aduana`. La contrasena INICIAL es `clave` si el archivo la trae; si no, una ALEATORIA (XXXX-XXXX-XXXX) que se escribe en el archivo de salida (nunca una
+ * contrasena predecible: el repositorio puede ser publico). Es una clave de entrega: cada cuenta queda marcada para cambiarla en su primer ingreso y no puede usar
  * nada mas hasta hacerlo.
  *
  * La lista usuario/contrasena sale en consola o en el archivo de `--salida` (FUERA del repositorio); en la base solo queda el
@@ -24,7 +24,7 @@ import { account, organizacion, usuario } from '../src/db/esquema/identidad';
 import { crearConexion } from '../src/db/conexion';
 import { esArea } from '../src/dominio/areas';
 import { correoSinCorreo, normalizarUsuario, validarUsuario } from '../src/dominio/credenciales';
-import { hashearClave } from '../src/server/claves';
+import { generarClave, hashearClave } from '../src/server/claves';
 import { cargarConfig } from '../src/server/config';
 
 const ORG_INTERNA = 'EssilorLuxottica';
@@ -32,7 +32,7 @@ const ORG_INTERNA = 'EssilorLuxottica';
 interface Cuenta {
   usuario: string;
   nombre: string;
-  /** Contrasena inicial; si falta, `<cuenta>12345`. */
+  /** Contrasena inicial; si falta, se genera una aleatoria. */
   clave?: string;
   /** Solo en las cuentas de area: quien las lleva hoy. La cuenta sigue siendo del area. */
   encargado?: string;
@@ -110,7 +110,7 @@ async function cuenta(cu: Cuenta, rol: 'admin' | 'solicitante' | 'aduana' | 'lec
     console.log(`  = ${username} ya existe; no se cambia`);
     return;
   }
-  const clave = cu.clave ?? `${username.split('.')[0]}12345`;
+  const clave = cu.clave ?? generarClave();
   const hash = await hashearClave(clave);
   const [u] = await db
     .insert(usuario)
