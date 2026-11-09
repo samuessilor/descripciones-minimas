@@ -1,8 +1,10 @@
 /**
- * Presencia y sondeo (D-17, 12.4): sin websockets (Vercel). Al enfocar un campo el cliente envia un
- * latido cada ~20 s (`edicion_activa.hasta = ahora + 45 s`); la ficha abierta consulta `estadoFicha` (intervalos en sondeo.ts)
- * cada ~30 s y, si cambio `version`, refresca los campos modificados. Es un AVISO, no un candado:
- * el conflicto real lo cubre `versionEsperada`.
+ * Presencia y sondeo (D-17, 12.4): sin websockets (Vercel). Al enfocar un campo el cliente envia un latido
+ * (`edicion_activa.hasta = ahora + VIGENCIA_LATIDO_MS`); la ficha abierta consulta `estadoFicha` y, si cambio `version`,
+ * refresca los campos modificados. Los intervalos de ambos viven en un solo sitio: `componentes/colaboracion/sondeo.ts`
+ * (`SONDEO.estadoFicha`, `LATIDO_EDICION_MS`). Es un AVISO, no un candado: el conflicto real lo cubre `versionEsperada`.
+ *
+ * Las dos consultas son las mas repetidas de la app: leen solo columnas ligeras de la ficha (`cargarReferenciaLigera`).
  */
 import { and, asc, desc, eq, gt, inArray, lt, ne } from 'drizzle-orm';
 import { z } from 'zod';
@@ -11,11 +13,18 @@ import type { TipoOrganizacion } from '@/dominio/permisos';
 import { autorVisible, puedeEscribirCampo } from '@/dominio/permisos';
 import { getCampo } from '@/dominio/campos';
 import { ahoraDe, type Contexto } from '../politicas/actor';
-import { cargarReferenciaVisible, NOMBRE_OTRA_AGENCIA } from '../politicas/referencias';
+import { cargarReferenciaLigera, NOMBRE_OTRA_AGENCIA } from '../politicas/referencias';
 import { ErrorAccion } from './resultado';
 import { parsear } from './validacion';
 
-export const VIGENCIA_LATIDO_MS = 45_000;
+/**
+ * Cuanto dura un latido. Debe superar con margen a `LATIDO_EDICION_MS` (40 s, sondeo.ts) para que perder un latido no
+ * borre la marca de «escribiendo»: 0, 40, 80 < 90.
+ */
+export const VIGENCIA_LATIDO_MS = 90_000;
+
+/** Probabilidad de que un latido barra los vencidos de TODA la tabla (como `limite-tasa.ts`): no hace falta cada vez. */
+const PROBABILIDAD_LIMPIEZA = 0.05;
 
 /**
  * Tope de campos que una persona puede tener marcados como "editando" a la vez en una ficha. Quien teclea
@@ -29,8 +38,6 @@ export interface EstadoFicha {
   version: number;
   estado: string;
   actualizadaEn: string;
-  /** Version de cada campo con valor: el cliente compara con la suya para ver que cambio. */
-  camposVersion: Record<string, number>;
   /** Otras personas editando ahora (sin contar al propio actor). */
   editando: Array<{ campo: string; usuario: string; hasta: string }>;
 }
@@ -42,7 +49,7 @@ export async function estadoFicha(ctx: Contexto, entrada: unknown): Promise<Esta
   const { referenciaId } = parsear(entradaFicha, entrada);
   const ahora = ahoraDe(ctx);
   const actor = ctx.actor;
-  const ficha = await cargarReferenciaVisible(ctx.db, actor, referenciaId, ahora);
+  const ficha = await cargarReferenciaLigera(ctx.db, actor, referenciaId, ahora);
 
   const activos = await ctx.db
     .select({
@@ -73,14 +80,10 @@ export async function estadoFicha(ctx: Contexto, entrada: unknown): Promise<Esta
     : [];
   const porId = new Map(autores.map((a) => [a.id, a]));
 
-  const camposVersion: Record<string, number> = {};
-  for (const [clave, e] of Object.entries(ficha.datos ?? {})) camposVersion[clave] = e.n;
-
   return {
     version: ficha.version,
     estado: ficha.estado,
     actualizadaEn: ficha.actualizadaEn.toISOString(),
-    camposVersion,
     editando: activos.map((a) => {
       const u = porId.get(a.usuarioId);
       const nombre = !u
@@ -99,7 +102,7 @@ export async function latidoEdicion(ctx: Contexto, entrada: unknown): Promise<{ 
   const e = parsear(entradaLatido, entrada);
   const ahora = ahoraDe(ctx);
   const actor = ctx.actor;
-  const ficha = await cargarReferenciaVisible(ctx.db, actor, e.referenciaId, ahora);
+  const ficha = await cargarReferenciaLigera(ctx.db, actor, e.referenciaId, ahora);
 
   const campo = getCampo(e.campo);
   if (!campo) throw new ErrorAccion('VALIDACION', 'Campo desconocido.');
@@ -130,8 +133,9 @@ export async function latidoEdicion(ctx: Contexto, entrada: unknown): Promise<{ 
       .delete(edicionActiva)
       .where(and(eq(edicionActiva.referenciaId, ficha.id), eq(edicionActiva.usuarioId, actor.usuarioId), inArray(edicionActiva.campo, sobran)));
   }
-  // Limpieza oportunista de latidos vencidos de esta ficha.
-  await ctx.db.delete(edicionActiva).where(and(eq(edicionActiva.referenciaId, ficha.id), lt(edicionActiva.hasta, ahora)));
+  // Limpieza oportunista de latidos vencidos de TODA la tabla, de vez en cuando: las filas de fichas que se abandonaron
+  // nunca volverian a recibir un latido y quedarian ahi (para los lectores ya no cuentan: filtran por `hasta`).
+  if (Math.random() < PROBABILIDAD_LIMPIEZA) await ctx.db.delete(edicionActiva).where(lt(edicionActiva.hasta, ahora));
   return { hasta: hasta.toISOString() };
 }
 

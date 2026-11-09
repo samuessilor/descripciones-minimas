@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { EVENTO_FICHA_CAMBIADA, leerUnaVez, MARGEN_ORDEN_MS } from './api';
-import { EVENTO_PRESENCIA, presente } from './presencia';
+import { EVENTO_PRESENCIA, sondearConBackoff } from './presencia';
 
 export type EstadoLectura<T> = { tipo: 'cargando' } | { tipo: 'ok'; data: T } | { tipo: 'error'; mensaje: string };
 
@@ -10,9 +10,10 @@ export type EstadoLectura<T> = { tipo: 'cargando' } | { tipo: 'ok'; data: T } | 
 const VENTANA_ACCION_MS = 500;
 
 /**
- * Lee una URL GET (con `leer`) y la mantiene al dia: recarga si cambia la URL, cada `intervaloMs` mientras
- * la pestana esta visible y en uso (presencia.ts) y cuando otro componente avisa que la ficha cambio. Conserva el ultimo dato bueno
- * mientras recarga (nada parpadea) y solo muestra el error si nunca hubo datos.
+ * Lee una URL GET (con `leer`) y la mantiene al dia: recarga si cambia la URL, cada `intervaloMs` (valores en
+ * sondeo.ts) mientras la pestana esta visible y en uso (presencia.ts) y cuando otro componente avisa que la ficha cambio.
+ * Si varios tics seguidos no traen nada nuevo y nadie toca la pantalla, espacia los tics (backoff, ver `sondearConBackoff`).
+ * Conserva el ultimo dato bueno mientras recarga (nada parpadea) y solo muestra el error si nunca hubo datos.
  *
  * Nunca hay dos lecturas a la vez: si llega otra orden mientras una viaja, se anota y se repite al terminar.
  * (Cancelar la lectura en vuelo en cada tic haria que, con un servidor lento, ninguna llegara jamas.)
@@ -37,6 +38,8 @@ export function useLectura<T>(
   const montado = useRef(true);
   const pararRef = useRef(parar);
   const detenido = useRef(false);
+  /** Lo ultimo leido, serializado: un tic de reloj que lee lo mismo cuenta como «sin cambios» para el backoff. */
+  const huella = useRef<string | null>(null);
   const soloReloj = useRef(false);
   /** Instante de la ultima orden NO de reloj (accion propia, montaje): una respuesta de antes no sirve para ella. */
   const ordenDesde = useRef(0);
@@ -55,13 +58,15 @@ export function useLectura<T>(
     };
   }, []);
 
-  const cargar = useCallback(async (reloj = false) => {
+  /** Devuelve `true` si lo leido es distinto de la lectura anterior. */
+  const cargar = useCallback(async (reloj = false): Promise<boolean> => {
     if (!reloj) ordenDesde.current = Date.now() - MARGEN_ORDEN_MS;
     if (enVuelo.current) {
       repetir.current = true;
       if (!reloj) soloReloj.current = false;
-      return;
+      return false;
     }
+    let cambio = false;
     enVuelo.current = true;
     soloReloj.current = reloj;
     try {
@@ -73,12 +78,17 @@ export function useLectura<T>(
         const r = soloReloj.current
           ? await leerUnaVez<T>(u, ventanaReloj.current)
           : await leerUnaVez<T>(u, VENTANA_ACCION_MS, ordenDesde.current);
-        if (!montado.current) return;
+        if (!montado.current) return false;
         // Una respuesta de una URL anterior ya no interesa: la lectura se repite con la actual.
         if (u === urlActual.current) {
           urlCargada.current = u;
           if (r.ok) {
             setEstado({ tipo: 'ok', data: r.data });
+            const nueva = JSON.stringify(r.data);
+            if (nueva !== huella.current) {
+              huella.current = nueva;
+              cambio = true;
+            }
             detenido.current = pararRef.current?.(r.data) ?? false;
           }
           else if (r.mensaje) setEstado((previo) => (previo.tipo === 'ok' ? previo : { tipo: 'error', mensaje: r.mensaje }));
@@ -88,6 +98,7 @@ export function useLectura<T>(
       enVuelo.current = false;
       if (montado.current) setRecargando(false);
     }
+    return cambio;
   }, []);
 
   useEffect(() => {
@@ -102,10 +113,7 @@ export function useLectura<T>(
 
   useEffect(() => {
     if (!url || !activo || !intervaloMs) return;
-    const t = setInterval(() => {
-      if (presente() && !detenido.current) void cargar(true);
-    }, intervaloMs);
-    return () => clearInterval(t);
+    return sondearConBackoff(intervaloMs, () => (detenido.current ? false : cargar(true)));
   }, [url, activo, intervaloMs, cargar]);
 
   // Al volver tras una ausencia (el sondeo estaba detenido) se lee en el acto, igual que el resto de la pantalla.

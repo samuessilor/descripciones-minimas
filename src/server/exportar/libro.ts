@@ -173,13 +173,17 @@ export async function escribirLibro(
   if (datos.historial) {
     const h = await datos.historial();
     const tope = h.tope.toLocaleString('es-CO');
+    // «los 50.000 más recientes de 114.035»: la persona sabe cuánto falta, no solo que falta algo.
+    const deTotal = h.total !== undefined ? ` de ${h.total.toLocaleString('es-CO')}` : '';
     const aviso = h.recortado
-      ? `Aviso: hay más cambios de los que caben en esta hoja. Se muestran solo los ${tope} más recientes. Filtra la lista y descarga por partes para ver el resto.`
+      ? `Aviso: hay más cambios de los que caben en esta hoja. Se muestran solo los ${tope} más recientes${deTotal}. Filtra la lista y descarga por partes para ver el resto.`
       : undefined;
     escribirTabla(libro, 'Historial', COLUMNAS_HISTORIAL, h.filas, aviso ? { aviso } : {});
     textoHistorial = h.recortado
-      ? `Incompleto: solo los ${tope} cambios más recientes`
+      ? `Incompleto: solo los ${tope} cambios más recientes${deTotal}`
       : `${h.filas.length.toLocaleString('es-CO')} cambios de campo, del más reciente al más antiguo`;
+    // Una agencia recibe el historial de su zona: que no se lea como el registro completo de la referencia.
+    if (h.limitado) textoHistorial += '. Historial limitado a la zona de aduana';
   }
 
   // ---- Leyenda -------------------------------------------------------------------------------------------

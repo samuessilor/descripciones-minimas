@@ -11,11 +11,10 @@ import { Esqueleto, EsqueletoZona } from '@/componentes/ui/esqueleto';
 import { Insignia } from '@/componentes/ui/insignia';
 import { useAvisos } from '@/componentes/ui/toast';
 import { cn } from '@/lib/utils';
-import type { EntradaHistorialFicha, HistorialFicha, ResumenCampo } from '@/server/politicas/colaboracion';
+import type { EntradaHistorialFicha, HistorialFicha, ResumenCampo, ResumenCampos } from '@/server/politicas/colaboracion';
 import { PopoverEnPortal, useEnCliente } from './PopoverEnPortal';
-import { abrirActividad, avisarCambioDeFicha, EVENTO_FICHA_CAMBIADA, fechaHora, hace, leer } from './api';
-import { EVENTO_PRESENCIA, presente } from './presencia';
-import { SONDEO } from './sondeo';
+import { abrirActividad, avisarCambioDeFicha, EVENTO_CAMPO_GUARDADO, EVENTO_FICHA_CAMBIADA, fechaHora, hace, leer, type DetalleCampoGuardado } from './api';
+import { alVolverDePestana, EVENTO_PRESENCIA } from './presencia';
 import { useLectura } from './usar-lectura';
 
 // ---- Restaurar un valor (siempre con motivo) ----------------------------------------------------------------
@@ -190,19 +189,38 @@ interface EstadoResumen {
   cargado: boolean;
   version: number;
   campos: Map<string, ResumenCampo>;
+  /** Historial parcial (agencia): no se cuentan versiones ni se ofrece el panel completo. */
+  limitado: boolean;
   error: string | null;
 }
 
+/**
+ * Sin reloj propio: se lee al montar, cuando el sondeo de la ficha ve una version nueva (`EVENTO_FICHA_CAMBIADA`), al
+ * volver a la pestana tras una ausencia y tras una accion propia. Un guardado propio no relee: aplica la respuesta.
+ */
 class AlmacenResumen {
-  private estado: EstadoResumen = { cargado: false, version: 0, campos: new Map(), error: null };
+  private estado: EstadoResumen = { cargado: false, version: 0, campos: new Map(), limitado: false, error: null };
   private suscriptores = new Set<() => void>();
-  private temporizador: ReturnType<typeof setInterval> | null = null;
+  private dejarDeEscucharPestana: (() => void) | null = null;
   private baja: ReturnType<typeof setTimeout> | null = null;
   private ultimaCarga = 0;
   private enCurso = false;
+  /** Instante del ultimo guardado propio aplicado: una lectura que salio antes puede no incluirlo. */
+  private guardadoLocalEn = 0;
   private alCambiarFicha = () => void this.cargar();
-  /** Al volver tras una ausencia el sondeo estaba detenido: se lee en el acto. */
+  /** Al volver tras una ausencia no se estuvo mirando: se lee en el acto. */
   private alVolver = () => void this.cargar();
+  /** Guardado propio: se aplica lo que respondio el servidor, sin releer. */
+  private alGuardarCampo = (e: Event) => {
+    const d = (e as CustomEvent<DetalleCampoGuardado>).detail;
+    if (d?.referenciaId !== this.referenciaId) return;
+    const campos = new Map(this.estado.campos);
+    if (d.vacio) campos.delete(d.campo);
+    else campos.set(d.campo, { clave: d.campo, autor: 'Tú', propio: true, instante: new Date().toISOString(), version: d.version });
+    this.guardadoLocalEn = Date.now();
+    this.estado = { ...this.estado, campos };
+    for (const cb of this.suscriptores) cb();
+  };
 
   constructor(private readonly referenciaId: string) {}
 
@@ -215,18 +233,18 @@ class AlmacenResumen {
     if (this.suscriptores.size === 1) {
       // Los datos recientes se reutilizan (no una lectura por cada montaje del campo).
       if (!this.estado.cargado || Date.now() - this.ultimaCarga > 15_000) void this.cargar();
-      this.temporizador = setInterval(() => {
-        if (presente()) void this.cargar();
-      }, SONDEO.historial);
+      this.dejarDeEscucharPestana = alVolverDePestana(this.alVolver);
       window.addEventListener(EVENTO_FICHA_CAMBIADA, this.alCambiarFicha);
+      window.addEventListener(EVENTO_CAMPO_GUARDADO, this.alGuardarCampo);
       window.addEventListener(EVENTO_PRESENCIA, this.alVolver);
     }
     return () => {
       this.suscriptores.delete(cb);
       if (this.suscriptores.size === 0) {
-        if (this.temporizador) clearInterval(this.temporizador);
-        this.temporizador = null;
+        this.dejarDeEscucharPestana?.();
+        this.dejarDeEscucharPestana = null;
         window.removeEventListener(EVENTO_FICHA_CAMBIADA, this.alCambiarFicha);
+        window.removeEventListener(EVENTO_CAMPO_GUARDADO, this.alGuardarCampo);
         window.removeEventListener(EVENTO_PRESENCIA, this.alVolver);
         // Se conserva unos segundos: un remontaje inmediato (cambio de seccion, modo estricto) no vuelve a leer.
         this.baja = setTimeout(() => almacenes.delete(this.referenciaId), 8000);
@@ -239,11 +257,14 @@ class AlmacenResumen {
   async cargar(): Promise<void> {
     if (this.enCurso) return;
     this.enCurso = true;
-    const r = await leer<{ version: number; campos: ResumenCampo[] }>(`/api/colaboracion/ficha/${this.referenciaId}/campos`);
+    const salida = Date.now();
+    const r = await leer<ResumenCampos>(`/api/colaboracion/ficha/${this.referenciaId}/campos`);
     this.enCurso = false;
+    // Un guardado propio llego mientras esta lectura viajaba: pudo salir antes de escribirse, asi que se repite.
+    if (r.ok && this.guardadoLocalEn >= salida) return this.cargar();
     if (r.ok) {
       this.ultimaCarga = Date.now();
-      this.estado = { cargado: true, version: r.data.version, campos: new Map(r.data.campos.map((c) => [c.clave, c])), error: null };
+      this.estado = { cargado: true, version: r.data.version, campos: new Map(r.data.campos.map((c) => [c.clave, c])), limitado: r.data.historialLimitado, error: null };
     } else if (r.mensaje) {
       this.estado = { ...this.estado, cargado: true, error: r.mensaje };
     } else return;
@@ -252,7 +273,7 @@ class AlmacenResumen {
 }
 
 const almacenes = new Map<string, AlmacenResumen>();
-const VACIO: EstadoResumen = { cargado: false, version: 0, campos: new Map(), error: null };
+const VACIO: EstadoResumen = { cargado: false, version: 0, campos: new Map(), limitado: false, error: null };
 
 function almacenDe(id: string): AlmacenResumen {
   let a = almacenes.get(id);
@@ -280,7 +301,8 @@ export function HistorialCampoCliente({ referenciaId, campo }: { referenciaId: s
   const [objetivo, setObjetivo] = useState<ObjetivoRestaurar | null>(null);
   const dato = resumen.campos.get(campo);
   if (!dato) return null;
-  const nVersiones = dato.version;
+  // Con el historial parcial (agencia) `version` cuenta tambien versiones que no se ven: no se muestra el numero.
+  const nVersiones = resumen.limitado ? null : dato.version;
   const ultima = `${dato.propio ? 'Tú' : dato.autor}, ${hace(dato.instante)}`;
   return (
     <span className="inline-flex items-center" data-testid={`historial-${campo}`}>
@@ -293,14 +315,14 @@ export function HistorialCampoCliente({ referenciaId, campo }: { referenciaId: s
             type="button"
             title={`Última versión: ${ultima}`}
             className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-1.5 text-sm font-semibold text-azul-500 hover:bg-azul-50 hover:underline pointer-coarse:min-h-11"
-            aria-label={`Ver el historial de este campo (${plural(nVersiones)}). Última versión: ${ultima}`}
+            aria-label={`Ver el historial de este campo${nVersiones === null ? '' : ` (${plural(nVersiones)})`}. Última versión: ${ultima}`}
           >
             <History aria-hidden className="size-4" />
-            Historial{nVersiones > 1 ? ` (${nVersiones})` : ''}
+            Historial{nVersiones !== null && nVersiones > 1 ? ` (${nVersiones})` : ''}
           </button>
         )}
       >
-        {({ cerrar }) => <VersionesDelCampo referenciaId={referenciaId} campo={campo} onRestaurar={setObjetivo} cerrar={cerrar} />}
+        {({ cerrar }) => <VersionesDelCampo referenciaId={referenciaId} campo={campo} onRestaurar={setObjetivo} cerrar={cerrar} panelCompleto={!resumen.limitado} />}
       </PopoverEnPortal>
       <DialogoRestaurar enPortal objetivo={objetivo} onCerrar={() => setObjetivo(null)} onHecho={() => setObjetivo(null)} />
     </span>
@@ -316,11 +338,14 @@ function VersionesDelCampo({
   campo,
   onRestaurar,
   cerrar,
+  panelCompleto,
 }: {
   referenciaId: string;
   campo: string;
   onRestaurar: (o: ObjetivoRestaurar) => void;
   cerrar: () => void;
+  /** El panel lateral muestra el historial de toda la ficha: una agencia no lo tiene. */
+  panelCompleto: boolean;
 }) {
   const lectura = useLectura<HistorialFicha>(`/api/colaboracion/ficha/${referenciaId}/historial?campo=${encodeURIComponent(campo)}`, { referenciaId });
 
@@ -359,18 +384,20 @@ function VersionesDelCampo({
           />
         )}
       </div>
-      <div className={cn('flex items-center justify-between gap-2 border-t border-borde-suave bg-superficie-2 px-4 py-2.5')}>
-        <Boton
-          variante="terciario"
-          tamano="sm"
-          onClick={() => {
-            cerrar();
-            abrirActividad({ referenciaId, pestana: 'historial', campo });
-          }}
-        >
-          Ver en el panel completo
-        </Boton>
-      </div>
+      {panelCompleto ? (
+        <div className={cn('flex items-center justify-between gap-2 border-t border-borde-suave bg-superficie-2 px-4 py-2.5')}>
+          <Boton
+            variante="terciario"
+            tamano="sm"
+            onClick={() => {
+              cerrar();
+              abrirActividad({ referenciaId, pestana: 'historial', campo });
+            }}
+          >
+            Ver en el panel completo
+          </Boton>
+        </div>
+      ) : null}
     </div>
   );
 }

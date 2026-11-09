@@ -31,11 +31,13 @@ import { diasEnGestion } from '@/dominio/dias-gestion';
 import { colorFicha, type ColorFicha, type EstadoFicha } from '@/dominio/estado';
 import { textoDeValor } from '@/dominio/mostrar-valor';
 import { normalizarTexto } from '@/dominio/normalizacion';
-import { autorVisible, comentarioVisible, motivoVisible, puedeEscribirCampo, type Rol, type TipoOrganizacion } from '@/dominio/permisos';
+import { autorVisible, campoConHistorialVisible, comentarioVisible, historialLimitado, motivoVisible, puedeEscribirCampo, type Rol, type TipoOrganizacion } from '@/dominio/permisos';
 import { nombreDeArea } from '@/dominio/areas';
 import { agenciasConAcceso, idsPermitidosParaAduana } from '../acciones/asignaciones';
+import { ErrorAccion } from '../acciones/resultado';
 import { cargarPerfiles, configAvisos, type Perfil } from '../colaboracion/comun';
 import type { Actor } from './actor';
+import { condicionHistorialVisible } from './historial-visible';
 import {
   NOMBRE_OTRA_AGENCIA,
   cargarReferenciaVisible,
@@ -130,9 +132,55 @@ export interface FilaPendiente {
   falta: string | null;
 }
 
-/** Asignaciones `pendiente`/`en_curso` hacia el actor; primero las que mas dias llevan en gestion (S-09). */
-export async function pendientesDe(ej: Ejecutor, actor: Actor, ahora: Date): Promise<FilaPendiente[]> {
-  const filas = await ej
+/** Cuantas filas muestra cada lista de Inicio antes de mandar a Referencias a ver el resto. */
+export const TOPE_PARA_MI = 50;
+export const TOPE_ESPERANDO = 100;
+
+/**
+ * Dias en gestion calculados en la base, con la misma cuenta que `diasEnGestion` (calendario de Bogota, sin contar la
+ * pausa): sirve para ORDENAR y recortar en SQL con el mismo criterio con que se muestra la lista (S-09).
+ */
+function diasEnGestionSql(ahora: Date) {
+  return sql`greatest(0, ((coalesce(${referencia.clasificadaEn}, ${ahora.toISOString()}::timestamptz) at time zone 'America/Bogota')::date - ${referencia.fechaSolicitud} - ${referencia.diasPausa}))`;
+}
+
+/** Condicion de las asignaciones abiertas hacia el actor sobre fichas no archivadas (una sola para la lista y el total). */
+function condicionAsignadasAMi(actor: Actor) {
+  return and(eq(asignacion.aUsuarioId, actor.usuarioId), inArray(asignacion.estado, ['pendiente', 'en_curso']), isNull(referencia.archivadaEn));
+}
+
+/** Condicion de «Esperando a otros» (una sola para la lista y el total). */
+function condicionEsperando(actor: Actor, ahora: Date) {
+  const veTodas = actor.rol === 'lector' || actor.rol === 'admin';
+  return and(
+    inArray(asignacion.estado, ['pendiente', 'en_curso']),
+    isNull(referencia.archivadaEn),
+    condicionVisible(actor, ahora),
+    veTodas ? sql`true` : eq(asignacion.deUsuarioId, actor.usuarioId),
+    // Lo que me enviaron a mi va en "Para mi", no aqui.
+    sql`${asignacion.aUsuarioId} <> ${actor.usuarioId}`,
+  );
+}
+
+export interface BandejaParaMi {
+  /** Las `limite` primeras, con mas dias en gestion primero (S-09). */
+  filas: FilaPendiente[];
+  /** Total real (asignadas + del area), para «mostrando N de TOTAL» y el contador de Inicio. */
+  total: number;
+}
+
+/**
+ * Lo que el actor tiene pendiente: asignaciones `pendiente`/`en_curso` hacia el, mas lo de su area que nadie tiene en
+ * la mano (C1). Primero las que mas dias llevan en gestion (S-09). Solo lee la ficha completa (`datos`) de las
+ * `limite` que muestra; el total se cuenta aparte.
+ */
+export async function bandejaParaMiDe(ej: Ejecutor, actor: Actor, ahora: Date, limite: number = TOPE_PARA_MI): Promise<BandejaParaMi> {
+  const [asignadas] = await ej
+    .select({ n: sql<number>`count(*)::int` })
+    .from(asignacion)
+    .innerJoin(referencia, eq(referencia.id, asignacion.referenciaId))
+    .where(condicionAsignadasAMi(actor));
+  const consulta = ej
     .select({
       asignacionId: asignacion.id,
       referenciaId: referencia.id,
@@ -153,8 +201,10 @@ export async function pendientesDe(ej: Ejecutor, actor: Actor, ahora: Date): Pro
     })
     .from(asignacion)
     .innerJoin(referencia, eq(referencia.id, asignacion.referenciaId))
-    .where(and(eq(asignacion.aUsuarioId, actor.usuarioId), inArray(asignacion.estado, ['pendiente', 'en_curso']), isNull(referencia.archivadaEn)))
-    .orderBy(asc(asignacion.creadaEn));
+    .where(condicionAsignadasAMi(actor))
+    .orderBy(desc(diasEnGestionSql(ahora)), asc(asignacion.creadaEn), asc(asignacion.id));
+  // `limite` 0 = solo interesa el total (contador de Inicio): no se lee ninguna ficha.
+  const filas = limite <= 0 ? [] : await (Number.isFinite(limite) ? consulta.limit(limite) : consulta);
 
   const remitentes = await cargarPerfiles(ej, filas.map((f) => f.deId));
 
@@ -183,7 +233,8 @@ export async function pendientesDe(ej: Ejecutor, actor: Actor, ahora: Date): Pro
     };
   });
   // Las de su area que nadie tiene en la mano (C1): salen aunque nadie se las haya enviado.
-  for (const p of await pendientesDelArea(ej, actor, ahora)) {
+  const delArea = await pendientesDelArea(ej, actor, ahora, limite);
+  for (const p of delArea.filas) {
     resultado.push({
       asignacionId: null,
       delArea: p.area,
@@ -203,7 +254,14 @@ export async function pendientesDe(ej: Ejecutor, actor: Actor, ahora: Date): Pro
       falta: p.falta,
     });
   }
-  return resultado.sort((a, b) => b.diasEnGestion - a.diasEnGestion || a.desde.localeCompare(b.desde));
+  // Cada fuente ya viene recortada a `limite` en este mismo orden, asi que las `limite` primeras de la union son las correctas.
+  resultado.sort((a, b) => b.diasEnGestion - a.diasEnGestion || a.desde.localeCompare(b.desde));
+  return { filas: resultado.slice(0, limite), total: (asignadas?.n ?? 0) + delArea.total };
+}
+
+/** Todas las asignaciones y lo del area del actor, sin tope (quien necesite la lista completa; Inicio usa `bandejaParaMiDe`). */
+export async function pendientesDe(ej: Ejecutor, actor: Actor, ahora: Date): Promise<FilaPendiente[]> {
+  return (await bandejaParaMiDe(ej, actor, ahora, Number.POSITIVE_INFINITY)).filas;
 }
 
 // ---- Esperando a otros -----------------------------------------------------------------------------------
@@ -234,10 +292,10 @@ export interface FilaEsperando {
 
 /**
  * Asignaciones abiertas que el actor espera de otros. Quien lleva el proceso (`lector`) y el admin ven las
- * de cualquier persona (C-17); los demas, las que ellos enviaron.
+ * de cualquier persona (C-17); los demas, las que ellos enviaron. Mas dias en gestion primero (S-09): si hay mas que
+ * `limite`, las que quedan fuera son las de menos dias (el total real lo da `resumenInicioDe().esperandoAOtros`).
  */
-export async function esperandoDe(ej: Ejecutor, actor: Actor, ahora: Date, limite = 100): Promise<FilaEsperando[]> {
-  const ve_todas = actor.rol === 'lector' || actor.rol === 'admin';
+export async function esperandoDe(ej: Ejecutor, actor: Actor, ahora: Date, limite = TOPE_ESPERANDO): Promise<FilaEsperando[]> {
   const filas = await ej
     .select({
       asignacionId: asignacion.id,
@@ -259,17 +317,9 @@ export async function esperandoDe(ej: Ejecutor, actor: Actor, ahora: Date, limit
     })
     .from(asignacion)
     .innerJoin(referencia, eq(referencia.id, asignacion.referenciaId))
-    .where(
-      and(
-        inArray(asignacion.estado, ['pendiente', 'en_curso']),
-        isNull(referencia.archivadaEn),
-        condicionVisible(actor, ahora),
-        ve_todas ? sql`true` : eq(asignacion.deUsuarioId, actor.usuarioId),
-        // Lo que me enviaron a mi va en "Para mi", no aqui.
-        sql`${asignacion.aUsuarioId} <> ${actor.usuarioId}`,
-      ),
-    )
-    .orderBy(asc(asignacion.creadaEn))
+    .where(condicionEsperando(actor, ahora))
+    // El recorte va en el mismo orden con que se muestra: lo que queda fuera es lo de menos dias, no lo mas nuevo al azar.
+    .orderBy(desc(diasEnGestionSql(ahora)), asc(asignacion.creadaEn), asc(asignacion.id))
     .limit(limite);
 
   const perfiles = await cargarPerfiles(ej, filas.flatMap((f) => [f.deId, f.aId]));
@@ -302,8 +352,7 @@ export async function esperandoDe(ej: Ejecutor, actor: Actor, ahora: Date, limit
         puedeRecordar,
         puedeGestionar: actor.rol === 'admin' || (esMia && (actor.rol === 'solicitante' || actor.rol === 'aduana')),
       };
-    })
-    .sort((a, b) => b.diasEnGestion - a.diasEnGestion || a.desde.localeCompare(b.desde));
+    });
 }
 
 // ---- Recientes y resumen -------------------------------------------------------------------------------
@@ -362,26 +411,17 @@ export interface ResumenInicio {
   sinResponsable: number | null;
 }
 
-export async function resumenInicioDe(ej: Ejecutor, actor: Actor, ahora: Date): Promise<ResumenInicio> {
-  const [para] = await ej
-    .select({ n: sql<number>`count(*)::int` })
-    .from(asignacion)
-    .innerJoin(referencia, eq(referencia.id, asignacion.referenciaId))
-    .where(and(eq(asignacion.aUsuarioId, actor.usuarioId), inArray(asignacion.estado, ['pendiente', 'en_curso']), isNull(referencia.archivadaEn)));
+/**
+ * `pendientesParaMi` ya calculado: quien arma Inicio lo trae de `bandejaParaMiDe().total`, y asi no se evalua dos veces
+ * la completitud de las abiertas del area en la misma carga. Sin el, se calcula aqui.
+ */
+export async function resumenInicioDe(ej: Ejecutor, actor: Actor, ahora: Date, pendientesParaMi?: number): Promise<ResumenInicio> {
   const veTodas = actor.rol === 'lector' || actor.rol === 'admin';
   const [esperando] = await ej
     .select({ n: sql<number>`count(*)::int` })
     .from(asignacion)
     .innerJoin(referencia, eq(referencia.id, asignacion.referenciaId))
-    .where(
-      and(
-        inArray(asignacion.estado, ['pendiente', 'en_curso']),
-        isNull(referencia.archivadaEn),
-        condicionVisible(actor, ahora),
-        veTodas ? sql`true` : eq(asignacion.deUsuarioId, actor.usuarioId),
-        sql`${asignacion.aUsuarioId} <> ${actor.usuarioId}`,
-      ),
-    );
+    .where(condicionEsperando(actor, ahora));
   const [listas] = await ej
     .select({ n: sql<number>`count(*)::int` })
     .from(referencia)
@@ -394,8 +434,8 @@ export async function resumenInicioDe(ej: Ejecutor, actor: Actor, ahora: Date): 
       .where(and(isNull(referencia.archivadaEn), condicionSinResponsable()));
     sinResponsable = s?.n ?? 0;
   }
-  const delArea = (await pendientesDelArea(ej, actor, ahora)).length;
-  return { pendientesParaMi: (para?.n ?? 0) + delArea, esperandoAOtros: esperando?.n ?? 0, listas: listas?.n ?? 0, sinResponsable };
+  const paraMi = pendientesParaMi ?? (await bandejaParaMiDe(ej, actor, ahora, 0)).total;
+  return { pendientesParaMi: paraMi, esperandoAOtros: esperando?.n ?? 0, listas: listas?.n ?? 0, sinResponsable };
 }
 
 // ---- Notificaciones ---------------------------------------------------------------------------------------
@@ -563,6 +603,8 @@ export interface ContextoEnvio {
   puedeComentar: boolean;
   /** La aduana solo escribe comentarios visibles para todos (RV-29). */
   comentaSoloParaTodos: boolean;
+  /** Historial parcial (agencia): el panel de actividad no muestra la pestana de historial de la ficha. */
+  historialLimitado: boolean;
   /** Mi asignacion activa en esta ficha ("Listo por mi parte" se ofrece solo si existe). */
   miAsignacion: { id: string; pedido: Pedido | null; deNombre: string } | null;
   /** Agencia que hoy tiene la ficha (para el aviso de la segunda agencia). */
@@ -604,6 +646,7 @@ export async function contextoEnvioDe(ej: Ejecutor, actor: Actor, referenciaId: 
     puedeEnviar,
     puedeComentar: actor.rol !== 'lector' && !ficha.archivadaEn,
     comentaSoloParaTodos: actor.rol === 'aduana',
+    historialLimitado: historialLimitado(actor),
     miAsignacion: mia ? { id: mia.id, pedido: (mia.pedido as Pedido | null) ?? null, deNombre: personaVista(actor, de).nombre } : null,
     agenciaActual: agencias[0] && actor.organizacionTipo !== 'agencia' ? nombreSinMarca(agencias[0].nombre) : null,
   };
@@ -738,8 +781,14 @@ export async function historialDeFichaDe(
   opciones: { campo?: string | null; antes?: number | null; limite?: number } = {},
 ): Promise<HistorialFicha> {
   const ficha = await cargarReferenciaVisible(ej, actor, referenciaId, ahora);
+  // Una agencia solo ve el historial de su zona de aduana: pedir el de un campo del area responde como si no existiera.
+  if (opciones.campo && !campoConHistorialVisible(actor, opciones.campo)) {
+    throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos el historial de ese campo.');
+  }
   const limite = Math.min(Math.max(opciones.limite ?? 40, 1), 100);
+  const visible = condicionHistorialVisible(actor);
   const condiciones = [eq(campoHistorial.referenciaId, ficha.id)];
+  if (visible) condiciones.push(visible);
   if (opciones.campo) condiciones.push(eq(campoHistorial.campo, opciones.campo));
   if (opciones.antes) condiciones.push(lt(campoHistorial.id, opciones.antes));
 
@@ -792,7 +841,7 @@ export async function historialDeFichaDe(
   const camposFilas = await ej
     .selectDistinct({ campo: campoHistorial.campo })
     .from(campoHistorial)
-    .where(eq(campoHistorial.referenciaId, ficha.id));
+    .where(and(eq(campoHistorial.referenciaId, ficha.id), visible));
   const campos = camposFilas
     .map((c) => ({ clave: c.campo, etiqueta: etiquetaDeCampo(c.campo) }))
     .sort((a, b) => a.etiqueta.localeCompare(b.etiqueta, 'es'));
@@ -811,9 +860,31 @@ export interface ResumenCampo {
   version: number;
 }
 
-export async function resumenCamposDe(ej: Ejecutor, actor: Actor, referenciaId: string, ahora: Date): Promise<{ version: number; campos: ResumenCampo[] }> {
+export interface ResumenCampos {
+  version: number;
+  campos: ResumenCampo[];
+  /** El historial del actor es parcial (agencia): la interfaz no cuenta versiones ni ofrece el panel completo. */
+  historialLimitado: boolean;
+}
+
+export async function resumenCamposDe(ej: Ejecutor, actor: Actor, referenciaId: string, ahora: Date): Promise<ResumenCampos> {
   const ficha = await cargarReferenciaVisible(ej, actor, referenciaId, ahora);
-  const datos = ficha.datos ?? {};
+  let datos = ficha.datos ?? {};
+  const limitado = historialLimitado(actor);
+  if (limitado) {
+    // Una agencia solo recibe el acceso al historial de los campos donde su organizacion dejo huella: de los campos del
+    // area no se ofrece historial ni se cuenta cuantas versiones tienen. (El valor VIGENTE de la ficha si muestra su
+    // autor y fecha: es la ficha tal como se ve, no el historial; decision de producto, 2026-11-09.)
+    const propios = new Set(
+      (
+        await ej
+          .selectDistinct({ campo: campoHistorial.campo })
+          .from(campoHistorial)
+          .where(and(eq(campoHistorial.referenciaId, ficha.id), condicionHistorialVisible(actor)))
+      ).map((f) => f.campo),
+    );
+    datos = Object.fromEntries(Object.entries(datos).filter(([clave]) => propios.has(clave)));
+  }
   const perfiles = await cargarPerfiles(ej, Object.values(datos).map((e) => e.a));
   const campos = Object.entries(datos)
     .filter(([, e]) => e.v !== null && e.v !== undefined)
@@ -822,9 +893,10 @@ export async function resumenCamposDe(ej: Ejecutor, actor: Actor, referenciaId: 
       autor: personaVista(actor, perfiles.get(e.a)).nombre,
       propio: e.a === actor.usuarioId,
       instante: e.t,
-      version: e.n,
+      // Con historial limitado el contador incluiria versiones ocultas (de otras personas u organizaciones): no se revela.
+      version: limitado ? 1 : e.n,
     }));
-  return { version: ficha.version, campos };
+  return { version: ficha.version, campos, historialLimitado: limitado };
 }
 
 // ---- Comentarios --------------------------------------------------------------------------------------------

@@ -4,13 +4,14 @@ import { useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
 import { Pestanas } from '@/componentes/ui/pestanas';
 import { EVENTO_AVISOS_NUEVOS } from './api';
-import { EVENTO_PRESENCIA, presente } from './presencia';
+import { alVolverDePestana, EVENTO_PRESENCIA, presente } from './presencia';
 import { SONDEO } from './sondeo';
 
 /**
  * Pestañas del inicio: «Para mí · Esperando a otros · Recientes» (F7). El contenido de cada una llega ya
- * dibujado desde el servidor; aqui solo se cambia de pestaña. Tambien refresca la bandeja sola cada ~45 s mientras
- * la pestaña del navegador esta visible y en uso, y al volver a ella: asi un aviso nuevo aparece sin recargar a mano.
+ * dibujado desde el servidor; aqui solo se cambia de pestaña. Tambien refresca la bandeja sola cada `SONDEO.bandeja`
+ * mientras la pestaña del navegador esta visible y en uso, y al volver a ella tras una ausencia: asi un aviso nuevo
+ * aparece sin recargar a mano.
  */
 export function BandejaTabs({
   inicial,
@@ -40,12 +41,13 @@ export function BandejaTabs({
     const t = setInterval(() => {
       if (presente()) router.refresh();
     }, SONDEO.bandeja);
-    document.addEventListener('visibilitychange', refrescar);
+    // Cambiar de pestana un instante no renderiza Inicio de nuevo: solo si estuvo oculta mas de `OCULTA_MIN_MS`.
+    const dejarDeEscuchar = alVolverDePestana(refrescar);
     window.addEventListener(EVENTO_PRESENCIA, refrescar);
     window.addEventListener(EVENTO_AVISOS_NUEVOS, refrescar);
     return () => {
       clearInterval(t);
-      document.removeEventListener('visibilitychange', refrescar);
+      dejarDeEscuchar();
       window.removeEventListener(EVENTO_PRESENCIA, refrescar);
       window.removeEventListener(EVENTO_AVISOS_NUEVOS, refrescar);
     };

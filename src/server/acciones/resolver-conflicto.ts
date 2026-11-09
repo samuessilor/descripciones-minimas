@@ -7,6 +7,7 @@
  *  - `combinar`: igual que `usar_mio` pero solo para campos de texto (el cliente rellena el campo
  *    con ambos textos y el usuario edita).
  */
+import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { textoDescartado } from '@/db/esquema';
 import { ahoraDe, type Contexto } from '../politicas/actor';
@@ -58,14 +59,30 @@ export async function resolverConflicto(ctx: Contexto, entrada: unknown): Promis
     if (e.opcion === 'dejar') {
       const texto = comoTexto(e.valor);
       if (texto.trim() === '') throw new ErrorAccion('VALIDACION', 'No hay texto que conservar.');
-      await tx.insert(textoDescartado).values({
-        referenciaId: prep.ficha.id,
-        campo: e.campo,
-        usuarioId: actor.usuarioId,
-        texto,
-        motivoDescarte: 'conflicto_dejar_el_otro',
-        creadoEn: ahora,
-      });
+      // La tabla es de solo escritura (nadie la borra): repetir «Dejar el otro» con el MISMO texto (doble clic, otra
+      // pestana) no agrega otra copia, porque el texto ya esta conservado. Corre con la ficha bloqueada.
+      const [yaGuardado] = await tx
+        .select({ id: textoDescartado.id })
+        .from(textoDescartado)
+        .where(
+          and(
+            eq(textoDescartado.referenciaId, prep.ficha.id),
+            eq(textoDescartado.campo, e.campo),
+            eq(textoDescartado.usuarioId, actor.usuarioId),
+            eq(textoDescartado.texto, texto),
+          ),
+        )
+        .limit(1);
+      if (!yaGuardado) {
+        await tx.insert(textoDescartado).values({
+          referenciaId: prep.ficha.id,
+          campo: e.campo,
+          usuarioId: actor.usuarioId,
+          texto,
+          motivoDescarte: 'conflicto_dejar_el_otro',
+          creadoEn: ahora,
+        });
+      }
       return { opcion: 'dejar', version: versionVigente, textoConservado: true, versionFicha: prep.ficha.version };
     }
 

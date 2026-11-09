@@ -1,6 +1,7 @@
 /**
  * `POST /api/referencias/[id]/latido` con `{ campo, terminar? }`: presencia (D-17). Al enfocar un campo se envia un
- * latido cada 15 s (`edicion_activa.hasta = ahora + 45 s`); `terminar: true` lo retira al salir del campo sin
+ * primer latido corto y luego uno cada `LATIDO_EDICION_MS` (`edicion_activa.hasta = ahora + VIGENCIA_LATIDO_MS`, ver
+ * sondeo.ts y estado-ficha.ts: las cifras viven alli); `terminar: true` lo retira al salir del campo sin
  * haber escrito. Es un AVISO, no un candado. Va por `fetch` para no esperar detras de los guardados.
  */
 import { latidoEdicion, terminarEdicion } from '@/server/acciones/estado-ficha';

@@ -36,7 +36,8 @@ type IdPestana = 'historial' | 'comentarios' | 'envios';
 /**
  * Panel lateral de la ficha (10.2): Historial (linea de tiempo por campo con restaurar), Comentarios (con
  * alcance) y Envios (a quien esta enviada, desde cuando, si ya la abrio, recordar). Es un cajon
- * superpuesto: no ensancha el formulario; en movil es una hoja inferior.
+ * superpuesto: no ensancha el formulario; en movil es una hoja inferior. Una cuenta de agencia no recibe la pestana
+ * Historial (solo Comentarios y Envios): el historial de sus campos de aduana se abre desde cada campo.
  *
  * Al montarse tambien registra que la persona abrio la ficha (`pendiente` -> `en_curso`) y marca leidos
  * los avisos de esa ficha. Se puede abrir desde fuera con el evento `dm:abrir-actividad`
@@ -106,14 +107,28 @@ function ContenidoPanel({
 }) {
   const envios = useLectura<SeguimientoAsignacion[]>(`/api/colaboracion/ficha/${referenciaId}/seguimiento`, { referenciaId, intervaloMs: SONDEO.seguimiento });
   const activas = envios.estado.tipo === 'ok' ? envios.estado.data.filter((s) => s.activa).length : undefined;
+  // El contexto dice si el historial de esta persona es parcial. Hasta saberlo no se pide el historial: asi una agencia
+  // nunca dispara la lectura de la pestana que no va a ver (el servidor igual la filtra).
+  const contexto = useLectura<ContextoEnvio>(`/api/colaboracion/ficha/${referenciaId}/contexto`, { referenciaId });
+  if (contexto.estado.tipo === 'cargando') {
+    return (
+      <EsqueletoZona etiqueta="Cargando la actividad…" className="space-y-3">
+        <Esqueleto className="h-10" />
+        <Esqueleto className="h-20" />
+      </EsqueletoZona>
+    );
+  }
+  const sinHistorial = contexto.estado.tipo === 'ok' && contexto.estado.data.historialLimitado;
 
   return (
     <Pestanas
       etiqueta="Actividad"
-      valor={pestana}
+      valor={sinHistorial && pestana === 'historial' ? 'comentarios' : pestana}
       onCambio={(id) => onPestana(id as IdPestana)}
       items={[
-        { id: 'historial', etiqueta: 'Historial', contenido: <PestanaHistorial referenciaId={referenciaId} campo={campo} onCampo={onCampo} /> },
+        ...(sinHistorial
+          ? []
+          : [{ id: 'historial', etiqueta: 'Historial', contenido: <PestanaHistorial referenciaId={referenciaId} campo={campo} onCampo={onCampo} /> }]),
         { id: 'comentarios', etiqueta: 'Comentarios', contenido: <PestanaComentarios referenciaId={referenciaId} campo={campo} onCampo={onCampo} /> },
         {
           id: 'envios',

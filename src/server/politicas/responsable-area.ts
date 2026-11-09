@@ -12,14 +12,14 @@
  */
 import { and, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import { asignacion, organizacion, referencia, usuario } from '@/db/esquema';
+import type { Datos } from '@/db/esquema/nucleo';
 import type { Ejecutor } from '@/db/tipos';
 import { esArea } from '@/dominio/areas';
-import { ETIQUETA_SECCION, SECCIONES, type Seccion, type TipoProducto } from '@/dominio/campos';
+import { ETIQUETA_SECCION, SECCIONES, TIPOS_PRODUCTO, camposObligatoriosCliente, type Seccion, type TipoProducto } from '@/dominio/campos';
 import { listaHumana, plural } from '@/dominio/colaboracion';
 import { calcularCompletitud, type Completitud } from '@/dominio/completitud';
 import { diasEnGestion } from '@/dominio/dias-gestion';
 import { colorFicha, type EstadoFicha } from '@/dominio/estado';
-import type { Datos } from '@/db/esquema/nucleo';
 import type { Actor } from './actor';
 import { responsablesPorParte, type ResponsablesPorParte } from './tablero';
 
@@ -84,21 +84,63 @@ export interface PendienteDelArea {
 }
 
 /**
+ * Claves de `datos` de las que depende lo que esta lista pregunta: las secciones del area con campos por llenar
+ * (`calcularCompletitud` solo mira los obligatorios del cliente y los campos que los condicionan con `soloSi`). El
+ * resto de la ficha (≈50 campos con autor, fecha y version) no hace falta para saber que le falta al area.
+ */
+const CLAVES_COMPLETITUD_AREA: readonly string[] = (() => {
+  const claves = new Set<string>();
+  for (const tipo of TIPOS_PRODUCTO) {
+    for (const c of camposObligatoriosCliente(tipo)) {
+      claves.add(c.clave);
+      if (c.soloSi) claves.add(c.soloSi.clave);
+    }
+  }
+  return [...claves];
+})();
+
+/**
+ * Valor vigente (`v`) solo de esas claves, armado en la base con operadores jsonb: cada carga de Inicio deja de traer y
+ * parsear el jsonb completo de cada ficha abierta del area. Una clave ausente queda en `null`, que para la completitud
+ * es lo mismo que vacia.
+ */
+const valoresParaCompletitudArea = sql<Record<string, unknown>>`jsonb_build_object(${sql.join(
+  CLAVES_COMPLETITUD_AREA.flatMap((clave) => [sql`${clave}::text`, sql`${referencia.datos} -> ${clave}::text -> 'v'`]),
+  sql`, `,
+)})`;
+
+export interface PendientesDelArea {
+  /** Las `limite` primeras en el orden de la bandeja (mas dias en gestion primero). */
+  filas: PendienteDelArea[];
+  /** Cuantas son en total, para decir «mostrando N de TOTAL» y para el contador de Inicio. */
+  total: number;
+}
+
+/**
  * Lo que el area del actor tiene pendiente sin que nadie se lo haya enviado: referencias abiertas (no clasificadas
  * ni archivadas) cuya area responsable es la suya, con secciones del area pendientes sin persona asignada. No repite
  * las que el actor ya tiene asignadas (esas salen como pendiente normal).
+ *
+ * Para saber cuales cuentan hay que evaluar la completitud de todas las abiertas del area (el contador lo necesita),
+ * pero eso se hace sobre los valores minimos (`valoresParaCompletitudArea`) y solo se arma la fila completa de las
+ * `limite` que se van a mostrar.
  */
-export async function pendientesDelArea(ej: Ejecutor, actor: Actor, ahora: Date): Promise<PendienteDelArea[]> {
+export async function pendientesDelArea(
+  ej: Ejecutor,
+  actor: Actor,
+  ahora: Date,
+  limite: number = Number.POSITIVE_INFINITY,
+): Promise<PendientesDelArea> {
   const area = actor.area;
-  if (actor.organizacionTipo !== 'interna' || actor.rol === 'lector' || !esArea(area)) return [];
-  const filas = await ej
+  if (actor.organizacionTipo !== 'interna' || actor.rol === 'lector' || !esArea(area)) return { filas: [], total: 0 };
+  const abiertas = await ej
     .select({
       id: referencia.id,
       codigo: referencia.codigo,
       nombreProducto: referencia.nombreProducto,
       tipoProducto: referencia.tipoProducto,
       estado: referencia.estado,
-      datos: referencia.datos,
+      valores: valoresParaCompletitudArea,
       creadaEn: referencia.creadaEn,
       fechaSolicitud: referencia.fechaSolicitud,
       clasificadaEn: referencia.clasificadaEn,
@@ -114,17 +156,25 @@ export async function pendientesDelArea(ej: Ejecutor, actor: Actor, ahora: Date)
               and a.estado in ('pendiente','en_curso'))`,
       ),
     );
-  if (filas.length === 0) return [];
-  const quien = await responsablesPorParte(ej, actor, filas.map((f) => f.id), ahora);
-  const resultado: PendienteDelArea[] = [];
-  for (const f of filas) {
-    const valores: Record<string, unknown> = {};
-    for (const [clave, e] of Object.entries(f.datos ?? {})) valores[clave] = e.v;
-    const c = calcularCompletitud({ tipo: f.tipoProducto as TipoProducto, valores });
-    const secciones = seccionesSinDueno(c, quien.get(f.id));
-    if (secciones.length === 0) continue;
+  // Primero lo barato: solo las que aun tienen algo por llenar necesitan saber quien las tiene en la mano.
+  const conFaltantes = abiertas
+    .map((f) => ({ f, c: calcularCompletitud({ tipo: f.tipoProducto as TipoProducto, valores: f.valores ?? {} }) }))
+    .filter(({ c }) => SECCIONES.some((s) => c.secciones[s].estado === 'amarillo' && c.secciones[s].faltan > 0));
+  if (conFaltantes.length === 0) return { filas: [], total: 0 };
+  const quien = await responsablesPorParte(ej, actor, conFaltantes.map(({ f }) => f.id), ahora);
+  const candidatas = conFaltantes
+    .map(({ f, c }) => ({
+      f,
+      c,
+      secciones: seccionesSinDueno(c, quien.get(f.id)),
+      dias: diasEnGestion({ fechaSolicitud: f.fechaSolicitud, clasificadaEn: f.clasificadaEn, ahora, diasPausa: f.diasPausa }),
+    }))
+    .filter((x) => x.secciones.length > 0)
+    // Mismo orden que la bandeja (S-09): mas dias en gestion primero y, a igual dias, la mas antigua.
+    .sort((a, b) => b.dias - a.dias || a.f.creadaEn.getTime() - b.f.creadaEn.getTime());
+  const filas = candidatas.slice(0, limite).map(({ f, c, secciones, dias }): PendienteDelArea => {
     const faltan = secciones.reduce((n, s) => n + c.secciones[s].faltan, 0);
-    resultado.push({
+    return {
       referenciaId: f.id,
       codigo: f.codigo,
       nombreProducto: f.nombreProducto,
@@ -132,10 +182,10 @@ export async function pendientesDelArea(ej: Ejecutor, actor: Actor, ahora: Date)
       area,
       secciones,
       desde: f.creadaEn.toISOString(),
-      diasEnGestion: diasEnGestion({ fechaSolicitud: f.fechaSolicitud, clasificadaEn: f.clasificadaEn, ahora, diasPausa: f.diasPausa }),
+      diasEnGestion: dias,
       color: colorFicha(f.estado as EstadoFicha),
       falta: `Falta: ${listaHumana(secciones.map((s) => ETIQUETA_SECCION[s]))} (${plural(faltan, 'campo', 'campos')})`,
-    });
-  }
-  return resultado;
+    };
+  });
+  return { filas, total: candidatas.length };
 }

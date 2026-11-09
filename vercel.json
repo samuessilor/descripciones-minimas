@@ -5,5 +5,11 @@
     "deploymentEnabled": {
       "main": true
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/retencion",
+      "schedule": "0 19 * * 1-5"
+    }
+  ]
 }

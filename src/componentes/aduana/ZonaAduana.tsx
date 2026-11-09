@@ -3,9 +3,9 @@
 import { Check, ChevronDown, Landmark } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { avisarCambioDeFicha, EVENTO_FICHA_CAMBIADA } from '@/componentes/colaboracion/api';
-import { EVENTO_PRESENCIA, presente } from '@/componentes/colaboracion/presencia';
-import { SONDEO } from '@/componentes/colaboracion/sondeo';
+import { alVolverDePestana, EVENTO_PRESENCIA } from '@/componentes/colaboracion/presencia';
 import { pedirVistaAduana } from '@/componentes/ficha/api-cliente';
+import { EVENTO_CIERRE_CAMBIADO } from '@/componentes/ficha/cierre-aduana';
 import { Estado } from '@/componentes/Estado';
 import { Aviso } from '@/componentes/ui/aviso';
 import { Boton } from '@/componentes/ui/button';
@@ -20,8 +20,6 @@ import { BloqueRestricciones } from './BloqueRestricciones';
 import { BloqueRim } from './BloqueRim';
 import { diligenciado, sinTexto } from './comun';
 
-const SONDEO_MS = SONDEO.aduana;
-
 /**
  * ZONA DE LA ADUANA: el cuarto bloque de la ficha. En el formato de la agencia lo amarillo es lo que completa la
  * aduana; aqui esa idea se conserva con una zona propia (cabecera azul profundo con las lentes de la marca) que se
@@ -35,7 +33,7 @@ export function ZonaAduana({ referenciaId }: { referenciaId: string }) {
   const previo = useRef<VistaAduana | null>(null);
 
   const cargar = useCallback(
-    async (silencioso = false) => {
+    async (silencioso = false, avisar = true) => {
       const r = await pedirVistaAduana(referenciaId);
       if (!r.ok) {
         if (!silencioso) setError(r.mensaje);
@@ -46,8 +44,10 @@ export function ZonaAduana({ referenciaId }: { referenciaId: string }) {
       if (antes && antes.estado !== 'CLASIFICADA' && r.data.estado === 'CLASIFICADA') setPulso(true);
       previo.current = r.data;
       // Cerrar, reabrir, archivar o guardar aqui cambia la ficha entera (sello, semaforo, solo lectura): se avisa
-      // para que la cabecera y «Siguiente paso» no esperen al sondeo de la ficha.
+      // para que la cabecera y «Siguiente paso» no esperen al sondeo de la ficha. Si la lectura la pidio ese mismo
+      // aviso (`avisar = false`) no se repite: la ficha y los demas ya lo estan releyendo.
       if (
+        avisar &&
         antes &&
         (antes.versionFicha !== r.data.versionFicha || antes.estado !== r.data.estado || antes.archivada !== r.data.archivada)
       ) {
@@ -63,27 +63,28 @@ export function ZonaAduana({ referenciaId }: { referenciaId: string }) {
     void cargar();
   }, [cargar]);
 
-  // Sondeo suave: si otra persona cambia algo, la zona se actualiza sin recargar (sin websockets, D-17).
+  // Sin reloj propio (los tiempos de sondeo viven en sondeo.ts): si otra persona cambia algo, el sondeo de la ficha ve una
+  // version nueva y avisa con `EVENTO_FICHA_CAMBIADA`; tambien se relee al volver a la pestana tras una ausencia y cuando
+  // un guardado propio cambia lo que falta para cerrar (`EVENTO_CIERRE_CAMBIADO`).
   useEffect(() => {
-    const t = setInterval(() => {
-      if (presente()) void cargar(true);
-    }, SONDEO_MS);
     const alVolver = () => {
       if (document.visibilityState === 'visible') void cargar(true);
     };
     // Restaurar un valor desde el historial (u otro cambio de la ficha) avisa con un evento: se vuelve a leer ya.
-    // Si la lectura trae una version nueva, `cargar` vuelve a avisar y la siguiente lectura ya no cambia nada.
     const alCambiarFicha = (e: Event) => {
-      if ((e as CustomEvent<{ referenciaId?: string }>).detail?.referenciaId === referenciaId) void cargar(true);
+      if ((e as CustomEvent<{ referenciaId?: string }>).detail?.referenciaId === referenciaId) void cargar(true, false);
     };
-    document.addEventListener('visibilitychange', alVolver);
+    const dejarDeEscuchar = alVolverDePestana(alVolver);
     window.addEventListener(EVENTO_PRESENCIA, alVolver);
     window.addEventListener(EVENTO_FICHA_CAMBIADA, alCambiarFicha);
+    // Un guardado propio de la ficha se aplica en local (no relee nada) pero movio lo que falta para cerrar: el resumen de
+    // cierre de esta zona (advertencia A1) se calcula en el servidor, asi que se relee. Mismo manejo que un cambio de ficha.
+    window.addEventListener(EVENTO_CIERRE_CAMBIADO, alCambiarFicha);
     return () => {
-      clearInterval(t);
-      document.removeEventListener('visibilitychange', alVolver);
+      dejarDeEscuchar();
       window.removeEventListener(EVENTO_PRESENCIA, alVolver);
       window.removeEventListener(EVENTO_FICHA_CAMBIADA, alCambiarFicha);
+      window.removeEventListener(EVENTO_CIERRE_CAMBIADO, alCambiarFicha);
     };
   }, [cargar, referenciaId]);
 

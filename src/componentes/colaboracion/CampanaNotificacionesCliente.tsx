@@ -13,15 +13,15 @@ import { cn } from '@/lib/utils';
 import type { ListaNotificaciones, NotificacionVista } from '@/server/politicas/colaboracion';
 import { EVENTO_AVISOS_LEIDOS, EVENTO_AVISOS_NUEVOS, hace, leerUnaVez, MARGEN_ORDEN_MS } from './api';
 import { IconoAviso } from './piezas';
-import { EVENTO_PRESENCIA, presente } from './presencia';
-import { SONDEO } from './sondeo';
+import { alVolverDePestana, EVENTO_PRESENCIA, sondearConBackoff } from './presencia';
+import { OCULTA_MIN_MS, SONDEO } from './sondeo';
 
 const SONDEO_MS = SONDEO.campana;
 
 /**
  * Campana de la barra superior: contador de no leidas, desplegable con las ultimas, marcar leidas y
- * enlace a la pagina completa. Se actualiza por sondeo (cada minuto mientras la pestana esta visible y en uso, y al
- * volver a ella): sin websockets, que Vercel no sostiene. Si hay mas de una campana en pantalla (barra de escritorio y de
+ * enlace a la pagina completa. Se actualiza por sondeo (cada `SONDEO.campana` mientras la pestana esta visible y en uso, y al
+ * volver a ella tras una ausencia): sin websockets, que Vercel no sostiene. Si hay mas de una campana en pantalla (barra de escritorio y de
  * movil) comparten la lectura. Cuando llegan avisos nuevos avisa a Inicio para que renueve sus listas. Sobre fondo
  * OSCURO (barra azul).
  */
@@ -31,14 +31,22 @@ export function CampanaCliente() {
   const [anuncio, setAnuncio] = useState('');
   const [, setLatido] = useState(0);
   const previo = useRef<number | null>(null);
+  /** Huella de lo ultimo leido y cuando se leyo: el sondeo la usa para saber si hubo cambios y el foco para no releer de mas. */
+  const huella = useRef('');
+  const ultimaLectura = useRef(0);
 
-  const cargar = useCallback(async (reloj = false) => {
+  /** Devuelve `true` si lo leido cambio respecto a la lectura anterior (el backoff del sondeo lo necesita). */
+  const cargar = useCallback(async (reloj = false): Promise<boolean> => {
     const url = '/api/colaboracion/notificaciones?limite=8';
+    ultimaLectura.current = Date.now();
     const r = reloj ? await leerUnaVez<ListaNotificaciones>(url, Math.round(SONDEO_MS * 0.7)) : await leerUnaVez<ListaNotificaciones>(url, 500, Date.now() - MARGEN_ORDEN_MS);
     if (!r.ok) {
       if (r.mensaje) setError(r.mensaje);
-      return;
+      return false;
     }
+    const nueva = JSON.stringify(r.data);
+    const cambio = nueva !== huella.current;
+    huella.current = nueva;
     setError(null);
     setDatos(r.data);
     setLatido((n) => n + 1);
@@ -49,19 +57,22 @@ export function CampanaCliente() {
       window.dispatchEvent(new Event(EVENTO_AVISOS_NUEVOS));
     }
     previo.current = r.data.noLeidas;
+    return cambio;
   }, []);
 
   useEffect(() => {
     // La primera lectura corre fuera del cuerpo del efecto para no encadenar renders sincronos.
     const inicio = setTimeout(() => void cargar(), 0);
-    const cadaVez = setInterval(() => {
-      if (presente()) void cargar(true);
-    }, SONDEO_MS);
+    const detenerSondeo = sondearConBackoff(SONDEO_MS, () => cargar(true));
     const alVolver = () => {
       if (document.visibilityState === 'visible') void cargar();
     };
-    document.addEventListener('visibilitychange', alVolver);
-    window.addEventListener('focus', alVolver);
+    // Cambiar de ventana o de pestana un instante no consulta: solo tras una ausencia de mas de `OCULTA_MIN_MS`.
+    const alEnfocar = () => {
+      if (Date.now() - ultimaLectura.current > OCULTA_MIN_MS) alVolver();
+    };
+    const dejarDeEscuchar = alVolverDePestana(alVolver);
+    window.addEventListener('focus', alEnfocar);
     window.addEventListener(EVENTO_PRESENCIA, alVolver);
     // Marcar avisos como leidos en la pagina de notificaciones: recontar ya, o `previo` quedaria alto y un aviso nuevo
     // posterior no se anunciaria.
@@ -69,9 +80,9 @@ export function CampanaCliente() {
     window.addEventListener(EVENTO_AVISOS_LEIDOS, alLeer);
     return () => {
       clearTimeout(inicio);
-      clearInterval(cadaVez);
-      document.removeEventListener('visibilitychange', alVolver);
-      window.removeEventListener('focus', alVolver);
+      detenerSondeo();
+      dejarDeEscuchar();
+      window.removeEventListener('focus', alEnfocar);
       window.removeEventListener(EVENTO_PRESENCIA, alVolver);
       window.removeEventListener(EVENTO_AVISOS_LEIDOS, alLeer);
     };

@@ -1,4 +1,7 @@
-/** `GET /api/referencias/[id]/estado`: version, quien edita y version de cada campo (D-17). `no-store`. */
+/**
+ * `GET /api/referencias/[id]/estado`: version de la ficha y quien esta escribiendo (D-17). Lectura ligera: no devuelve la
+ * version de cada campo (el cliente relee los campos cuando cambia `version`). `no-store`.
+ */
 import { estadoFicha } from '@/server/acciones/estado-ficha';
 import { json, respuestaDeError } from '@/server/http';
 import { contextoDeAccion } from '@/server/sesion';

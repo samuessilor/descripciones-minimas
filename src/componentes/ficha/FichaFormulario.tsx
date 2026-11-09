@@ -2,8 +2,8 @@
 
 import { Copy, EllipsisVertical, Lock, Pencil, TriangleAlert, CircleCheck, WifiOff } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { EVENTO_FICHA_CAMBIADA } from '@/componentes/colaboracion/api';
-import { EVENTO_PRESENCIA, presente } from '@/componentes/colaboracion/presencia';
+import { avisarCambioDeFicha, avisarCampoGuardado, EVENTO_FICHA_CAMBIADA } from '@/componentes/colaboracion/api';
+import { alVolverDePestana, EVENTO_PRESENCIA, sondearConBackoff } from '@/componentes/colaboracion/presencia';
 import { SONDEO } from '@/componentes/colaboracion/sondeo';
 import { Estado } from '@/componentes/Estado';
 import { PanelActividad } from '@/componentes/slots/PanelActividad';
@@ -40,10 +40,18 @@ import type { FichaVista } from '@/server/politicas/referencias';
 import { CampoFicha, FASES_PENDIENTES, type FaseCampo, type OpcionesCatalogo } from './CampoFicha';
 import { CorregirCodigo } from './CorregirCodigo';
 import { pedirEstado, pedirFicha } from './api-cliente';
+import { avisarCierreCambiado, cambiaElResumenDeCierre, PAUSA_AVISO_CIERRE_MS } from './cierre-aduana';
+import { aplicarGuardado, type GuardadoCampo } from './guardado-local';
 import { FotosFicha } from './FotosFicha';
 import { SiguientePaso } from './SiguientePaso';
 
 const SONDEO_MS = SONDEO.estadoFicha;
+
+/**
+ * Cuando un guardado no se puede aplicar en pantalla solo (alguien mas escribio, o toca una columna que mantiene el
+ * servidor), la ficha se relee tras esta pausa: una rafaga de guardados seguidos pide UNA lectura, no una por campo.
+ */
+const PAUSA_REFRESCO_MS = 1_500;
 
 /** Campos que la ficha no pinta como campo de formulario (van en la cabecera, en su propio bloque o los calcula el sistema). */
 const NO_ES_CAMPO: ReadonlySet<string> = new Set(['calculado', 'codigo']);
@@ -87,7 +95,13 @@ export function FichaFormulario({
   const [ultimoGuardado, setUltimoGuardado] = useState<number | null>(null);
   const [anuncio, setAnuncio] = useState('');
   const versionConocida = useRef(inicial.version);
+  // Espejo de `ficha` para decidir un guardado sin esperar al siguiente render (dos guardados seguidos).
+  const fichaRef = useRef(ficha);
+  useEffect(() => {
+    fichaRef.current = ficha;
+  });
   const temporizadorRefresco = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const temporizadorCierre = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const tipo = ficha.tipoProducto;
   const cerrada = ficha.estado === 'CLASIFICADA' || ficha.archivada;
@@ -95,60 +109,91 @@ export function FichaFormulario({
   // ---- Refresco de la ficha (semaforo, progreso, valores ajenos) -------------------------------------
   const refrescar = useCallback(async () => {
     const r = await pedirFicha(inicial.id).catch(() => null);
-    if (r?.ok) {
+    // Una respuesta anterior a un guardado propio ya aplicado en pantalla es vieja: pisaria lo mas nuevo.
+    if (r?.ok && r.data.ficha.version >= versionConocida.current) {
       versionConocida.current = r.data.ficha.version;
       setFicha(r.data.ficha);
       setAdjuntos(r.data.adjuntos);
     }
   }, [inicial.id]);
 
-  const alGuardar = useCallback(() => {
-    setUltimoGuardado(Date.now());
-    if (temporizadorRefresco.current) clearTimeout(temporizadorRefresco.current);
-    temporizadorRefresco.current = setTimeout(() => void refrescar(), 350);
-  }, [refrescar]);
+  /**
+   * Un campo se guardo. Si la respuesta basta (nadie mas escribio y el campo no toca nada que calcule solo el servidor)
+   * se aplica aqui, sin pedir la ficha otra vez. Si no (o si no hay respuesta que aplicar), se relee tras una pausa
+   * avisando a toda la pantalla (`EVENTO_FICHA_CAMBIADA`): ficha, quien puso cada campo, zona de la aduana.
+   * Si se aplica aqui, la zona de la aduana (sin reloj) no se entera: se le avisa aparte, y solo si el guardado cambio
+   * lo que falta para cerrar (ver `cierre-aduana.ts`).
+   */
+  const alGuardar = useCallback(
+    (guardado?: GuardadoCampo) => {
+      setUltimoGuardado(Date.now());
+      if (guardado) {
+        // El resumen «quien lo puso y cuantas versiones» se actualiza en el acto, vaya o no vaya a releerse la ficha.
+        avisarCampoGuardado({ referenciaId: inicial.id, campo: guardado.campo, version: guardado.version, vacio: estaVacio(guardado.valor) });
+        const nueva = aplicarGuardado(fichaRef.current, versionConocida.current, guardado);
+        if (nueva) {
+          if (cambiaElResumenDeCierre(fichaRef.current.completitud, nueva.completitud)) {
+            if (temporizadorCierre.current) clearTimeout(temporizadorCierre.current);
+            temporizadorCierre.current = setTimeout(() => avisarCierreCambiado(inicial.id), PAUSA_AVISO_CIERRE_MS);
+          }
+          fichaRef.current = nueva;
+          versionConocida.current = nueva.version;
+          setFicha(nueva);
+          return;
+        }
+      }
+      if (temporizadorRefresco.current) clearTimeout(temporizadorRefresco.current);
+      temporizadorRefresco.current = setTimeout(() => avisarCambioDeFicha(inicial.id), PAUSA_REFRESCO_MS);
+    },
+    [inicial.id],
+  );
 
-  // ---- Sondeo (D-17): cada ~15 s, quien escribe y si cambio la version ---------------------------------
+  // ---- Sondeo (D-17): quien esta escribiendo y si cambio la version (intervalo: SONDEO.estadoFicha) -----------
   useEffect(() => {
     let vivo = true;
-    const tick = async () => {
-      if (document.visibilityState === 'hidden') return;
+    /** Devuelve `true` si la version cambio (el backoff vuelve al ritmo base). */
+    const tick = async (): Promise<boolean> => {
+      if (document.visibilityState === 'hidden') return false;
       let e;
       try {
         e = await pedirEstado(inicial.id);
       } catch {
         if (vivo) setProblemaSondeo('red');
-        return;
+        return false;
       }
-      if (!vivo) return;
+      if (!vivo) return false;
       if (!e.ok) {
         setProblemaSondeo((e.detalle as { sesionVencida?: boolean } | undefined)?.sesionVencida ? 'sesion' : 'red');
-        return;
+        return false;
       }
       setProblemaSondeo(null);
       setEditando(e.data.editando);
-      if (e.data.version !== versionConocida.current) await refrescar();
+      if (e.data.version === versionConocida.current) return false;
+      // Otra persona cambio la ficha. El aviso hace que TODO lo que la muestra se relea (esta ficha, quien puso cada
+      // campo, zona de la aduana, contexto): ninguno de ellos tiene reloj propio.
+      avisarCambioDeFicha(inicial.id);
+      return true;
     };
     // Solo mientras alguien usa la pestana (presencia.ts): una ficha abierta y desatendida no mantiene la base despierta
-    const t = setInterval(() => {
-      if (presente()) void tick();
-    }, SONDEO_MS);
+    const detenerSondeo = sondearConBackoff(SONDEO_MS, tick);
     // Un primer vistazo a los pocos segundos: sin el, quien abre la ficha no veria quien esta escribiendo hasta el primer tic.
     const primero = setTimeout(() => void tick(), 3000);
     const alVolver = () => {
       if (document.visibilityState === 'visible') void tick();
     };
-    document.addEventListener('visibilitychange', alVolver);
+    // Al volver de otra pestana solo se consulta si estuvo oculta un rato (OCULTA_MIN_MS).
+    const dejarDeEscuchar = alVolverDePestana(alVolver);
     window.addEventListener(EVENTO_PRESENCIA, alVolver);
     return () => {
       vivo = false;
-      clearInterval(t);
+      detenerSondeo();
       clearTimeout(primero);
-      document.removeEventListener('visibilitychange', alVolver);
+      dejarDeEscuchar();
       window.removeEventListener(EVENTO_PRESENCIA, alVolver);
       if (temporizadorRefresco.current) clearTimeout(temporizadorRefresco.current);
+      if (temporizadorCierre.current) clearTimeout(temporizadorCierre.current);
     };
-  }, [inicial.id, refrescar]);
+  }, [inicial.id]);
 
   // Una accion propia en otro bloque (cerrar o reabrir la clasificacion, enviar, restaurar) se ve al instante:
   // no espera al sondeo, que es para los cambios de otras personas.

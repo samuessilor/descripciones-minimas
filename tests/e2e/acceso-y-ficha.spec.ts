@@ -126,18 +126,9 @@ test('P-12: desactivar a un usuario con sesion abierta la cierra en su siguiente
     // La persona entra con el usuario y la contrasena que se le entregaron.
     const persona = await contextoAutenticado(browser, request, usuario, clave);
     try {
-      // Con la contrasena de entrega, el servidor solo la deja en «Mi cuenta» hasta que la cambie.
+      // Con la contrasena de entrega ya usa la app: cambiarla es voluntario, nada la manda a «Mi cuenta».
       await persona.page.goto('/referencias');
-      await expect(persona.page).toHaveURL(/\/cuenta$/);
-      await expect(persona.page.getByTestId('cambiar-clave-obligatorio')).toBeVisible();
-      const nueva = `Nueva-${Date.now().toString(36)}-clave`;
-      await persona.page.getByLabel('Contraseña actual').fill(clave);
-      await persona.page.getByLabel('Contraseña nueva', { exact: true }).fill(nueva);
-      await persona.page.getByLabel('Repite la contraseña nueva').fill(nueva);
-      await pulsarHidratado(persona.page.getByRole('button', { name: 'Cambiar contraseña' }));
-      await expect(persona.page).toHaveURL(/\/$/);
-
-      await persona.page.goto('/referencias');
+      await expect(persona.page).toHaveURL(/\/referencias$/);
       await expect(persona.page.getByRole('heading', { name: 'Referencias' })).toBeVisible();
 
       // El administrador desactiva desde la ficha de la persona (pide confirmacion).

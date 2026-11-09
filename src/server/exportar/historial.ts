@@ -5,11 +5,13 @@
  * Costo (plan gratuito de Vercel): UNA sola consulta agrupada para todas las referencias, sin consultas por
  * referencia ni por campo. El valor anterior sale de unir cada fila con la version previa del mismo campo
  * (`version_campo - 1`, por la llave unica), asi que no hay que cargar el historial entero para reconstruirlo. Tope de
- * `TOPE_HISTORIAL` filas (las mas recientes): si hay mas, el libro lo avisa en la hoja y en la leyenda.
+ * `TOPE_HISTORIAL` filas (las mas recientes): si hay mas, el libro lo avisa en la hoja y en la leyenda, con el total
+ * real (una segunda consulta de conteo, solo cuando hay recorte).
  *
  * Permisos: se aplica la MISMA condicion de visibilidad y de filtros que a la hoja Base (la consulta recibe esa
  * condicion), los autores se enmascaran igual que en la ficha (una agencia ve «Otra agencia») y el motivo se oculta
- * donde la ficha lo oculta (PA-38).
+ * donde la ficha lo oculta (PA-38). Un usuario de agencia recibe ademas el historial LIMITADO: solo los campos de su zona
+ * de aduana y hechos por su organizacion (`condicionHistorialVisible`), tambien en el conteo y en el valor anterior.
  */
 import { desc, eq, and, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
@@ -17,12 +19,18 @@ import { campoHistorial, referencia } from '@/db/esquema';
 import type { Ejecutor } from '@/db/tipos';
 import { CAMPOS, getCampo } from '@/dominio/campos';
 import { textoDeValor } from '@/dominio/mostrar-valor';
-import { motivoVisible } from '@/dominio/permisos';
+import { eventoDeHistorialVisible, historialLimitado, motivoVisible } from '@/dominio/permisos';
 import type { Actor } from '../politicas/actor';
+import { condicionHistorialVisible } from '../politicas/historial-visible';
 import { fechaHoraBogota, type NombresUsuarios, type ValorCelda } from './filas';
 
-/** Filas maximas de la hoja Historial. 20.000 cambios caben de sobra en un libro en streaming y acotan la consulta. */
-export const TOPE_HISTORIAL = 20_000;
+/**
+ * Filas maximas de la hoja Historial. Medido con 5.000 fichas y 120.000 cambios (PGlite, mas lento que Neon): 20.000
+ * filas = 20 s y +60 MB; 114.000 filas = 45 s y +190 MB. El costo es casi todo ExcelJS (~30.000 celdas por segundo), asi
+ * que sube lineal con las filas. 50.000 cubre la base objetivo (1.500 fichas x ~25 cambios = ~37.000) en ~15 a 25 s y
+ * ~120 a 160 MB, muy por debajo de la funcion de Vercel Hobby (300 s, ~2 GB), y acota el tiempo de CPU activa de cada descarga.
+ */
+export const TOPE_HISTORIAL = 50_000;
 
 export interface FilaHistorial {
   valores: Record<string, ValorCelda>;
@@ -33,6 +41,10 @@ export interface HistorialExportado {
   /** Habia mas cambios que el tope: solo van los mas recientes. */
   recortado: boolean;
   tope: number;
+  /** Cuantos cambios hay en total para esas referencias (solo se calcula cuando hay recorte). */
+  total?: number;
+  /** Historial parcial por rol (agencia): la Leyenda lo dice para que nadie lo tome por el registro completo. */
+  limitado?: boolean;
 }
 
 const CLAVES_ACTIVAS: ReadonlySet<string> = new Set(CAMPOS.map((c) => c.clave));
@@ -74,6 +86,7 @@ export async function cargarHistorial(
       valor: campoHistorial.valor,
       hayPrevio: sql<boolean>`${previo.id} is not null`,
       anterior: previo.valor,
+      anteriorOrganizacionId: previo.organizacionId,
       motivo: campoHistorial.motivo,
       autorId: campoHistorial.autorId,
       organizacionId: campoHistorial.organizacionId,
@@ -89,7 +102,7 @@ export async function cargarHistorial(
         eq(previo.versionCampo, sql`${campoHistorial.versionCampo} - 1`),
       ),
     )
-    .where(donde)
+    .where(and(donde, condicionHistorialVisible(actor)))
     .orderBy(desc(campoHistorial.creadoEn), desc(campoHistorial.id))
     .limit(tope + 1);
 
@@ -97,12 +110,27 @@ export async function cargarHistorial(
   const lote = recortado ? filas.slice(0, tope) : filas;
   await nombres.cargar(ej, lote.map((f) => f.autorId));
 
+  // Con recorte, el aviso dice de cuantos cambios se muestran los mas recientes: no se recorta en silencio.
+  let total: number | undefined;
+  if (recortado) {
+    const [c] = await ej
+      .select({ n: sql<number>`count(*)::int` })
+      .from(campoHistorial)
+      .innerJoin(referencia, eq(referencia.id, campoHistorial.referenciaId))
+      .where(and(donde, condicionHistorialVisible(actor)));
+    total = c?.n;
+  }
+
   return {
     recortado,
     tope,
+    ...(total !== undefined ? { total } : {}),
+    ...(historialLimitado(actor) ? { limitado: true } : {}),
     filas: lote.map((f): FilaHistorial => {
       const def = getCampo(f.campo) ?? null;
       const verMotivo = motivoVisible(actor, { organizacionId: f.organizacionId, organizacionTipo: nombres.tipoOrganizacion(f.autorId) });
+      // El valor anterior es de una version que el actor puede no ver (la escribio otra organizacion): no se revela.
+      const anteriorVisible = f.hayPrevio && eventoDeHistorialVisible(actor, { campo: f.campo, organizacionId: f.anteriorOrganizacionId ?? f.organizacionId });
       const evento = f.tipoEvento === 'fijar' && f.hayPrevio ? 'Cambio' : f.tipoEvento === 'fijar' ? 'Primer valor' : (EVENTO[f.tipoEvento] ?? f.tipoEvento);
       return {
         valores: {
@@ -110,7 +138,7 @@ export async function cargarHistorial(
           nombre: f.nombre,
           campo: etiquetaDeCampoHistorial(f.campo),
           evento,
-          anterior: f.hayPrevio ? textoDeValor(def, f.anterior) : null,
+          anterior: f.hayPrevio ? (anteriorVisible ? textoDeValor(def, f.anterior) : 'No visible para tu rol') : null,
           nuevo: textoDeValor(def, f.valor),
           quien: nombres.nombre(f.autorId),
           cuando: fechaHoraBogota(f.creadoEn),

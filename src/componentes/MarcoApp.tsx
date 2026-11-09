@@ -9,7 +9,8 @@ import type { Actor } from '@/server/politicas/actor';
 /**
  * Armazon autenticado (10.1): barra superior fija (logo, buscador, campana, usuario); menu lateral desde
  * 1024 px y barra inferior de tres destinos debajo; contenido con pie discreto. Lo usan los dos grupos de rutas con
- * sesion: `(app)` (todo) y `(app-clave)` (solo «Mi cuenta» y «Ayuda», lo unico que ve quien aun tiene la contrasena inicial).
+ * sesion: `(app)` (todo) y `(app-clave)` (solo «Mi cuenta» y «Ayuda», lo unico que veria una cuenta con la guardia
+ * `debeCambiarClave` activa; hoy no se activa por defecto).
  *
  * Anchos: la ficha usa `ContenedorLectura` (720 px) y los listados `ContenedorAncho` (ver `ui/pagina`).
  * El `<main>` no impone ancho: lo decide cada pantalla.

@@ -53,6 +53,7 @@ export function SelectorPersonas({
   onAlternar,
   onAgregarGrupo,
   unico = false,
+  agentesPrimero = false,
 }: {
   candidatos: CandidatoDestino[];
   seleccion: ReadonlySet<string>;
@@ -61,12 +62,22 @@ export function SelectorPersonas({
   onAlternar: (c: CandidatoDestino) => void;
   onAgregarGrupo?: (lista: CandidatoDestino[]) => void;
   unico?: boolean;
+  /** Los agentes aduaneros van antes que las areas (la ficha ya tiene las tres secciones del area completas). */
+  agentesPrimero?: boolean;
 }) {
   const visibles = useMemo(() => candidatos.filter((c) => coincide(c, q)), [candidatos, q]);
+  // Dos bloques con encabezado: cada agente es una cuenta de su empresa (el nombre de la empresa, bajo el de la cuenta, los
+  // distingue entre si; el encabezado ya dice que es una agencia); las areas son las personas de EssilorLuxottica.
+  const bloques = useMemo(() => {
+    const agentes = { clave: 'agentes', titulo: 'Agentes aduaneros', lista: visibles.filter((c) => c.esAgencia) };
+    const areas = { clave: 'areas', titulo: 'Áreas de EssilorLuxottica', lista: visibles.filter((c) => !c.esAgencia) };
+    return (agentesPrimero ? [agentes, areas] : [areas, agentes]).filter((b) => b.lista.length > 0);
+  }, [visibles, agentesPrimero]);
   const grupos = useMemo(() => {
     const mapa = new Map<string, CandidatoDestino[]>();
     for (const c of candidatos) {
-      if (c.noDisponible) continue;
+      // «Agregar a todos» es solo para las areas: a la agencia se le envia a UNA cuenta, la que se elige.
+      if (c.noDisponible || c.esAgencia) continue;
       mapa.set(c.organizacionId, [...(mapa.get(c.organizacionId) ?? []), c]);
     }
     return [...mapa.values()].filter((g) => g.length >= 2 && g.some((c) => !seleccion.has(c.id)));
@@ -118,29 +129,42 @@ export function SelectorPersonas({
               : `No encontramos a «${q}». Revisa cómo lo escribiste o prueba con una parte del nombre.`}
           </p>
         ) : (
-          <ul>
-            {visibles.map((c) => {
-              const marcado = seleccion.has(c.id);
-              return (
-                <li key={c.id}>
-                  <Casilla
-                    checked={marcado}
-                    disabled={!!c.noDisponible && !marcado}
-                    onChange={() => onAlternar(c)}
-                    aria-label={`${c.nombre}, ${c.organizacion}`}
-                    etiqueta={
-                      <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <Persona nombre={c.nombre} organizacion={c.organizacion} detalle={c.area ? (c.encargado ? `${c.area} · encargado: ${c.encargado}` : c.area) : undefined} tamano="sm" />
-                        {c.esAgencia ? <Insignia variante="contorno">Agencia de aduana</Insignia> : null}
-                        {c.yaTiene ? <Insignia variante="azul">Ya la tiene pendiente</Insignia> : null}
-                      </span>
-                    }
-                    descripcion={c.noDisponible ?? undefined}
-                  />
-                </li>
-              );
-            })}
-          </ul>
+          <div className="space-y-1">
+            {bloques.map((b) => (
+              <section key={b.clave} aria-labelledby={`bloque-destino-${b.clave}`}>
+                <h3 id={`bloque-destino-${b.clave}`} className="px-3 pb-0.5 pt-2 text-xs font-bold uppercase tracking-wide text-tinta-suave">
+                  {b.titulo}
+                </h3>
+                <ul>
+                  {b.lista.map((c) => {
+                    const marcado = seleccion.has(c.id);
+                    return (
+                      <li key={c.id}>
+                        <Casilla
+                          checked={marcado}
+                          disabled={!!c.noDisponible && !marcado}
+                          onChange={() => onAlternar(c)}
+                          aria-label={`${c.nombre}, ${c.organizacion}`}
+                          etiqueta={
+                            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                              <Persona
+                                nombre={c.nombre}
+                                organizacion={c.organizacion}
+                                detalle={c.area ? (c.encargado ? `${c.area} · encargado: ${c.encargado}` : c.area) : undefined}
+                                tamano="sm"
+                              />
+                              {c.yaTiene ? <Insignia variante="azul">Ya la tiene pendiente</Insignia> : null}
+                            </span>
+                          }
+                          descripcion={c.noDisponible ?? undefined}
+                        />
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -195,6 +219,9 @@ function ContenidoEnviarA({ referenciaIds, abierto, onCerrar, onEnviado, seccion
         ? contexto.seccionesPendientes
         : [...SECCIONES]);
   const ofrecePartes = !lote && seleccionados.some((c) => c.rol !== 'aduana');
+  // Con las tres secciones del area completas lo que sigue es clasificar: los agentes aduaneros van primero. Si falta algo,
+  // lo siguiente es completar: primero las areas. (Un lote no tiene una sola ficha que mirar: areas primero.)
+  const agentesPrimero = contexto !== null && contexto.seccionesPendientes.length === 0;
 
   function alternar(c: CandidatoDestino) {
     setSel((s) => {
@@ -357,6 +384,7 @@ function ContenidoEnviarA({ referenciaIds, abierto, onCerrar, onEnviado, seccion
               onQ={setQ}
               onAlternar={alternar}
               onAgregarGrupo={agregarGrupo}
+              agentesPrimero={agentesPrimero}
             />
           )}
 
@@ -370,7 +398,10 @@ function ContenidoEnviarA({ referenciaIds, abierto, onCerrar, onEnviado, seccion
                     className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-borde-suave bg-superficie-2 px-3 py-2"
                   >
                     <Avatar nombre={c.nombre} tamano="sm" />
-                    <span className="min-w-0 flex-1 basis-32 truncate text-sm font-semibold text-tinta">{nombreVisible(c.nombre)}</span>
+                    <span className="min-w-0 flex-1 basis-32 truncate text-sm font-semibold text-tinta">
+                      {nombreVisible(c.nombre)}
+                      {c.esAgencia ? <span className="font-normal text-tinta-suave"> · {c.organizacion}</span> : null}
+                    </span>
                     <label className="sr-solo" htmlFor={`pedido-${c.id}`}>
                       Qué le pides a {nombreVisible(c.nombre)}
                     </label>

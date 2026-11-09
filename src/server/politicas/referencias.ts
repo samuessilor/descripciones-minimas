@@ -15,9 +15,10 @@ import { nombreSinMarca } from '@/dominio/colaboracion';
 import { calcularCompletitud, type Completitud } from '@/dominio/completitud';
 import { diasEnGestion } from '@/dominio/dias-gestion';
 import { colorFicha, etiquetaFicha, type ColorFicha, type EstadoFicha, type EtiquetaFicha } from '@/dominio/estado';
-import { autorVisible, motivoVisible, type OrigenAutor, type TipoOrganizacion } from '@/dominio/permisos';
+import { autorVisible, campoConHistorialVisible, motivoVisible, type OrigenAutor, type TipoOrganizacion } from '@/dominio/permisos';
 import { ErrorAccion } from '../acciones/resultado';
 import type { Actor } from './actor';
+import { condicionHistorialVisible } from './historial-visible';
 import { fueReabierta } from './reapertura';
 
 export type FilaReferencia = typeof referencia.$inferSelect;
@@ -39,7 +40,7 @@ export function condicionVisible(actor: Actor, ahora: Date): SQL {
   ))`;
 }
 
-async function tieneAcceso(ej: Ejecutor, actor: Actor, fila: FilaReferencia, ahora: Date): Promise<boolean> {
+async function tieneAcceso(ej: Ejecutor, actor: Actor, fila: Pick<FilaReferencia, 'id' | 'archivadaEn'>, ahora: Date): Promise<boolean> {
   if (actor.rol !== 'aduana') return true;
   if (fila.archivadaEn) return false;
   const r = await ej
@@ -69,6 +70,28 @@ export function errorNoEncontrado(actor: Actor): ErrorAccion {
 /** Lee una ficha visible para el actor (sin bloquear). 404 si no existe o no la ve. */
 export async function cargarReferenciaVisible(ej: Ejecutor, actor: Actor, id: string, ahora: Date): Promise<FilaReferencia> {
   const [fila] = await ej.select().from(referencia).where(eq(referencia.id, id)).limit(1);
+  if (!fila || !(await tieneAcceso(ej, actor, fila, ahora))) throw errorNoEncontrado(actor);
+  return fila;
+}
+
+/**
+ * Columnas que necesitan los sondeos (estado de la ficha, latido de edicion): NUNCA `datos` ni `texto_busqueda`, que son
+ * el grueso de la fila (varios KB) y se pagan como red de Neon en cada consulta.
+ */
+const COLUMNAS_LIGERAS = {
+  id: referencia.id,
+  version: referencia.version,
+  estado: referencia.estado,
+  actualizadaEn: referencia.actualizadaEn,
+  archivadaEn: referencia.archivadaEn,
+  creadaPor: referencia.creadaPor,
+};
+
+export type FilaReferenciaLigera = Pick<FilaReferencia, keyof typeof COLUMNAS_LIGERAS>;
+
+/** Igual que `cargarReferenciaVisible`, pero solo con las columnas ligeras: para lo que se consulta una y otra vez. */
+export async function cargarReferenciaLigera(ej: Ejecutor, actor: Actor, id: string, ahora: Date): Promise<FilaReferenciaLigera> {
+  const [fila] = await ej.select(COLUMNAS_LIGERAS).from(referencia).where(eq(referencia.id, id)).limit(1);
   if (!fila || !(await tieneAcceso(ej, actor, fila, ahora))) throw errorNoEncontrado(actor);
   return fila;
 }
@@ -235,10 +258,12 @@ export async function historialDeCampo(
   ahora: Date,
 ): Promise<EntradaHistorialVista[]> {
   await cargarReferenciaVisible(ej, actor, referenciaId, ahora);
+  // Una agencia solo ve el historial de su zona de aduana (y lo de su organizacion): del resto responde como si no existiera.
+  if (!campoConHistorialVisible(actor, campo)) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos el historial de ese campo.');
   const filas = await ej
     .select()
     .from(campoHistorial)
-    .where(and(eq(campoHistorial.referenciaId, referenciaId), eq(campoHistorial.campo, campo)))
+    .where(and(eq(campoHistorial.referenciaId, referenciaId), eq(campoHistorial.campo, campo), condicionHistorialVisible(actor)))
     .orderBy(desc(campoHistorial.versionCampo));
   const autores = await cargarAutores(ej, filas.map((f) => f.autorId));
   return filas.map((f) => {

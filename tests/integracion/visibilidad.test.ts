@@ -173,23 +173,21 @@ describe('identidades y motivos ocultos (A5, RV-29, PA-38)', () => {
     await guardarCampo(e.ctx(e.brian), { referenciaId: f, campo: 'observaciones_aduana', valor: 'Nota de A', versionEsperada: 0 });
     await guardarCampo(e.ctx(e.brianB), { referenciaId: f, campo: 'observaciones_aduana', valor: 'Nota de B', versionEsperada: 1, motivo: 'Motivo de la agencia B' });
 
-    // Historial del campo de la aduana visto por A: Brenda aparece como "Otra agencia" y su motivo no se ve.
+    // Historial del campo de la aduana: cada agencia ve SOLO lo de su organizacion (lo de la otra no llega, ni con
+    // nombre enmascarado ni con motivo).
     const hA = await historialDeCampo(e.db, e.brian, f, 'observaciones_aduana', ahora);
-    expect(hA.map((x) => x.autor)).toEqual(['Otra agencia', 'Brian']);
-    expect(hA[0]!.motivo).toBeNull();
-    expect(hA[0]!.hayMotivoOculto).toBe(true);
-    // Visto por B: Brian es "Otra agencia".
+    expect(hA.map((x) => x.autor)).toEqual(['Brian']);
+    expect(JSON.stringify(hA)).not.toContain('Motivo de la agencia B');
     const hB = await historialDeCampo(e.db, e.brianB, f, 'observaciones_aduana', ahora);
-    expect(hB.map((x) => x.autor)).toEqual(['Brenda', 'Otra agencia']);
+    expect(hB.map((x) => x.autor)).toEqual(['Brenda']);
     expect(hB[0]!.motivo).toBe('Motivo de la agencia B');
     // Un interno ve los nombres y los motivos de ambas.
     const hI = await historialDeCampo(e.db, e.admin, f, 'observaciones_aduana', ahora);
     expect(hI.map((x) => x.autor)).toEqual(['Brenda', 'Brian']);
     expect(hI[0]!.motivo).toBe('Motivo de la agencia B');
 
-    // El motivo de un reemplazo INTERNO no llega a la aduana (PA-38), pero el nombre del interno si.
-    const usoA = await historialDeCampo(e.db, e.brian, f, 'uso', ahora);
-    expect(usoA[0]).toMatchObject({ autor: 'Charles', motivo: null, hayMotivoOculto: true });
+    // El historial de un campo del area (y su motivo, PA-38) no llega a la agencia: responde como si no existiera.
+    expect(await codigoDe(historialDeCampo(e.db, e.brian, f, 'uso', ahora))).toBe('NO_ENCONTRADO');
     const usoI = await historialDeCampo(e.db, e.admin, f, 'uso', ahora);
     expect(usoI[0]).toMatchObject({ autor: 'Charles', motivo: 'Motivo interno confidencial' });
 

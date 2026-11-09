@@ -13,7 +13,10 @@ export interface Actor extends ActorLike {
   username?: string | null;
   email: string;
   area: string | null;
-  /** Tiene una contrasena inicial: debe cambiarla antes de usar la plataforma. */
+  /**
+   * Guardia latente: si es true, solo puede usar «Mi cuenta» y «Ayuda» hasta cambiar la contrasena. YA NO se activa por
+   * defecto (crear o restablecer una cuenta lo deja en false); queda por si hiciera falta forzar un cambio a mano.
+   */
   debeCambiarClave?: boolean;
   organizacionNombre: string;
   /** Sesion con la que llega (nula en scripts y pruebas de nucleo). */

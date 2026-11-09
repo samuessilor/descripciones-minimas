@@ -36,7 +36,9 @@ export type AccionAuditada =
   | 'guardar_catalogo'
   | 'guardar_restriccion'
   | 'guardar_partida'
-  | 'actualizar_preferencias';
+  | 'actualizar_preferencias'
+  // Depuracion diaria de tablas operativas (cron de retencion); sin usuario.
+  | 'retencion';
 
 export interface EntradaAuditoria {
   usuarioId: string | null;

@@ -34,6 +34,13 @@ const esquema = z.object({
   BLOB_READ_WRITE_TOKEN: texto(),
   UPLOADS_DIR: z.preprocess(vacioComoAusente, z.string().default('.data/uploads')),
 
+  /**
+   * Secreto del cron de retencion (Vercel lo envia como `Authorization: Bearer`). Sin definir, o con menos de 16
+   * caracteres, la ruta responde 503. La longitud NO se valida aqui a proposito: esta configuracion la lee toda la
+   * aplicacion, y un secreto opcional mal pegado no debe tumbar el login ni las fichas; solo apaga la retencion.
+   */
+  CRON_SECRET: texto(),
+
   CONTACTO_ADMIN: z.preprocess(vacioComoAusente, z.string().default('el administrador de la plataforma')),
 
   RECORDATORIO_MANUAL_MAX_DIA: entero(1),

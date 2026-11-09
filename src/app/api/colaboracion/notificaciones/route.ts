@@ -1,7 +1,9 @@
 /**
  * `GET /api/colaboracion/notificaciones?limite=8&soloNoLeidas=1&antes=<cursor>`: la bandeja del actor.
- * Es un GET (no una Server Action) a proposito: la campana lo consulta cada ~30 s y las Server Actions se
- * ejecutan de una en una, asi que un sondeo no debe hacer cola delante de un guardado.
+ * Es un GET (no una Server Action) a proposito: la campana lo consulta con el intervalo `SONDEO.campana` (sondeo.ts) y las
+ * Server Actions se ejecutan de una en una, asi que un sondeo no debe hacer cola delante de un guardado.
+ * La campana es tambien la unica via por la que llegan los cambios que no suben `referencia.version` (asignaciones,
+ * solicitud de reapertura, comentarios): ver la limitacion aceptada en el encabezado de sondeo.ts.
  */
 import { listarNotificaciones } from '@/server/acciones/comentarios-y-bandeja';
 import { json, respuestaDeError } from '@/server/http';

@@ -11,7 +11,7 @@ export interface EstadoCuenta {
   mensaje?: string;
   /** Errores por campo (clave = nombre del campo del formulario). */
   errores?: Record<string, string>;
-  /** Ruta a la que ir tras el exito (tras cambiar la contrasena inicial). */
+  /** Ruta a la que ir tras el exito (solo si la cuenta tenia la guardia `debeCambiarClave` activa, hoy no por defecto). */
   irA?: string;
   marca?: number;
 }

@@ -10,7 +10,7 @@ Este repositorio contiene **solo la aplicación**. La especificación, los insum
 
 Producto funcionando de punta a punta **en local**, en su versión básica (se mejora a medida que se aprueba):
 
-1. se entra con **usuario y contraseña** (sin correo): las cuentas las crea un administrador, una por área (con un «encargado» opcional) y una por agencia de aduana; la contraseña de entrega se cambia obligatoriamente en el primer ingreso;
+1. se entra con **usuario y contraseña** (sin correo): las cuentas las crea un administrador, una por área (con un «encargado» opcional) y una por agencia de aduana; la contraseña de entrega es la de uso (cambiarla en «Mi cuenta» es opcional; mínimo 7 caracteres);
 2. se crea una referencia y se llena la ficha (autoguardado por campo, historial por campo, nadie borra lo de otra persona);
 3. «Enviar a…» una persona o un área: le queda como pendiente con aviso en la campana y en «Para mí» (no hay correo);
 4. la aduana pone la partida (se copia su restricción), pide lo que le falte saber en «Descripciones mínimas adicionales» (le llega al área responsable como pendiente «Responder» y esta contesta en la misma zona), completa restricciones y observaciones y finaliza: la ficha pasa a verde;
@@ -219,7 +219,7 @@ despierta.
    $env:DATABASE_URL = '<url de Neon>'; $env:DATABASE_URL_UNPOOLED = '<url directa de Neon>'
    # No definas NODE_ENV=production aquí: en ese modo los scripts exigen también el token de Blob, que se crea después.
    # $env:BETTER_AUTH_SECRET = '<32+ caracteres>'   # solo si este equipo no tiene .env.local
-   npm run db:migrate                             # aplica todas las migraciones de drizzle/ (hoy 0000-0009)
+   npm run db:migrate                             # aplica todas las migraciones de drizzle/ (hoy 0000-0011)
    npm run seed -- --solo-maestros                # solo catálogos, restricciones y partidas (sin usuarios ni fichas [DESARROLLO])
    npm run cuentas:iniciales -- ..\datos\cuentas.json --salida ..\datos\claves-entregables.txt   # administrador, una cuenta por area y por agencia (formato: cuentas.ejemplo.json)
    # Contraseña inicial: la de cada cuenta en el archivo (o, sin ella, la convención de docs/DESPLIEGUE-VERCEL.md); se cambia al primer ingreso.
@@ -230,7 +230,7 @@ despierta.
 
 6. **Desplegar** y entrar en `APP_URL/entrar` con ese usuario y contraseña. Las demás cuentas se crean desde
    *Administración → Usuarios → Crear cuenta*, o ya quedaron creadas con `cuentas:iniciales`; las contraseñas se
-   entregan a mano y el primer ingreso obliga a cambiarla en «Mi cuenta». Límites de los planes gratuitos y qué vigilar:
+   entregan a mano y cambiarla en «Mi cuenta» es opcional. Límites de los planes gratuitos y qué vigilar:
    `docs/DESPLIEGUE-VERCEL.md` (sección «Costo cero»). Si configuraste fotos, sube una a una ficha y ábrela una vez: así compruebas el
    almacén privado de Blob.
 

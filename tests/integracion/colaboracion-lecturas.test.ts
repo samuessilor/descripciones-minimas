@@ -349,13 +349,12 @@ describe('historial de la ficha: autor, motivo oculto a la aduana (PA-38) y rest
     expect(h.items[1]).toMatchObject({ vigente: false, restaurable: true, autor: 'Edward', autorEsPropio: true, valor: 'NAGA' });
     expect(h.campos.map((c) => c.etiqueta)).toContain('Marca');
 
-    // La aduana ve que hubo un cambio, quien y cuando, pero NO el porque.
-    const paraAduana = await historialDeFichaDe(e.db, e.brian, id, T0, { campo: 'marca' });
-    expect(paraAduana.items[0]?.motivo).toBeNull();
-    expect(paraAduana.items[0]?.hayMotivoOculto).toBe(true);
-    expect(JSON.stringify(paraAduana)).not.toContain('factura');
-    // Y no puede restaurar un campo del grupo cliente.
-    expect(paraAduana.items.every((x) => !x.restaurable)).toBe(true);
+    // La aduana (agencia) ya no ve el historial de los campos del area: responde como si no existiera, ni con el
+    // filtro por campo ni en la lista global (alli ni el campo ni su motivo aparecen). Ver agencia-historial.test.ts.
+    expect(await codigo(historialDeFichaDe(e.db, e.brian, id, T0, { campo: 'marca' }))).toBe('NO_ENCONTRADO');
+    const global = await historialDeFichaDe(e.db, e.brian, id, T0);
+    expect(global.items).toEqual([]);
+    expect(JSON.stringify(global)).not.toContain('factura');
   });
 
   it('restaurar repone el valor con un hecho nuevo, pide motivo y avisa al autor; el historial no pierde nada', async () => {

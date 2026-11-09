@@ -180,7 +180,8 @@ export async function crearCuenta(ctx: Contexto, entrada: unknown): Promise<Resu
           // Una cuenta de agencia es de una empresa de aduana, no de un area interna (C3).
           area: tipo === 'agencia' ? null : e.area,
           encargado: e.encargado || null,
-          debeCambiarClave: true,
+          // Cambiar la contrasena de entrega ya no es obligatorio: la cuenta entra y usa la app de una vez.
+          debeCambiarClave: false,
           creadoPor: ctx.actor.usuarioId,
           creadoEn: ahora,
           actualizadoEn: ahora,
@@ -233,7 +234,8 @@ export async function restablecerClave(ctx: Contexto, entrada: unknown): Promise
     } else {
       await tx.insert(account).values({ accountId: u.id, providerId: 'credential', userId: u.id, password: hash, createdAt: ahora, updatedAt: ahora });
     }
-    await tx.update(usuario).set({ debeCambiarClave: true, actualizadoEn: ahora }).where(eq(usuario.id, u.id));
+    // Ya no se obliga a cambiarla; se apaga el indicador por si la cuenta lo traia activo de antes de esta politica.
+    await tx.update(usuario).set({ debeCambiarClave: false, actualizadoEn: ahora }).where(eq(usuario.id, u.id));
     const sesionesCerradas = await revocarSesionesDeUsuario(tx, u.id);
     await auditar(tx, {
       usuarioId: ctx.actor.usuarioId,

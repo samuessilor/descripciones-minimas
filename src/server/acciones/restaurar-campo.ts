@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { campoHistorial } from '@/db/esquema';
 import { auditar } from '../auditoria';
 import { ahoraDe, type Contexto } from '../politicas/actor';
+import { condicionHistorialVisible } from '../politicas/historial-visible';
 import { aplicarEscritura, ConflictoDeVersion } from './escritura';
 import { conflictoComoError } from './guardar-campo';
 import { prepararEscritura } from './preparar';
@@ -50,6 +51,9 @@ export async function restaurarCampo(ctx: Contexto, entrada: unknown): Promise<R
             eq(campoHistorial.id, e.historialId),
             eq(campoHistorial.referenciaId, prep.ficha.id),
             eq(campoHistorial.campo, e.campo),
+            // Una cuenta de agencia solo ve (y por tanto solo puede restaurar) eventos de su propia organizacion en
+            // campos de aduana: sin esto, un id adivinado devolveria el texto que el historial le oculta.
+            condicionHistorialVisible(actor),
           ),
         )
         .limit(1);

@@ -41,7 +41,7 @@ export function CredencialesEntrega({ secreto }: { secreto: SecretoEntrega }) {
   return (
     <div className="space-y-4" data-testid="credenciales-entrega">
       <Aviso tipo="aviso" titulo="Cópialas ahora: no se vuelven a mostrar">
-        Entrega estos datos a {secreto.nombre}. Al entrar por primera vez tendrá que cambiarla en «Mi cuenta». Si se pierde, la restableces desde la ficha de la cuenta.
+        Entrega estos datos a {secreto.nombre}. Si se pierde, la restableces desde la ficha de la cuenta.
       </Aviso>
       <Fila etiqueta="Usuario" valor={secreto.usuario} />
       <Fila etiqueta="Contraseña" valor={secreto.clave} />

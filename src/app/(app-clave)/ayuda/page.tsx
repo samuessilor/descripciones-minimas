@@ -28,8 +28,8 @@ export default async function Ayuda() {
               No hay registro ni correo: si no tienes cuenta o olvidaste la contraseña, consulta con quien administra.
             </li>
             <li>
-              La primera vez te pedirá <b>cambiar la contraseña</b> de entrega en <b>Mi cuenta</b> (menú de arriba a la derecha); hasta hacerlo no
-              puedes usar el resto. Después puedes cambiarla cuando quieras. Si es una cuenta de área que usan varias personas, avisen al cambiarla.
+              Si quieres, puedes cambiar la contraseña en <b>Mi cuenta</b> (menú de arriba a la derecha); debe tener al menos 7 caracteres. Si es una cuenta
+              de área que usan varias personas, avisen al cambiarla.
             </li>
             <li>La sesión se cierra sola tras 8 horas sin usarla. «Cerrar sesión» está en el mismo menú.</li>
           </ul>

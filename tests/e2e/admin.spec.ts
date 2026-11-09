@@ -13,7 +13,7 @@
  */
 import AxeBuilder from '@axe-core/playwright';
 import { expect as expectBase, test, type Locator, type Page } from '@playwright/test';
-import { CLAVE_EJEMPLO, cambiarClaveInicial, contextoAutenticado, entrarComo, vigilarErrores } from './ayudas';
+import { CLAVE_EJEMPLO, contextoAutenticado, entrarComo, verUsoSinCambiarClave, vigilarErrores } from './ayudas';
 
 test.describe.configure({ mode: 'serial' });
 test.beforeEach(() => {
@@ -129,7 +129,8 @@ test('admin crea una cuenta, quien la recibe entra con usuario y contrasena, se 
 
   // Marta entra con lo que se le entrego; con otra contrasena, no.
   const marta = await contextoAutenticado(browser, request, MARTA.usuario, clave);
-  await cambiarClaveInicial(marta.page, clave); // con la clave de entrega solo ve «Mi cuenta» hasta cambiarla
+  await verUsoSinCambiarClave(marta.page); // con la clave de entrega usa la app de una vez: cambiarla es voluntario
+  await marta.page.goto('/');
   await expect(marta.page.getByRole('heading', { name: /Hola, Marta/ })).toBeVisible();
   await marta.page.goto('/admin/usuarios');
   await expect(marta.page.getByRole('heading', { name: 'No tienes permiso para ver esto' })).toBeVisible(); // solicitante: sin administracion
@@ -164,7 +165,8 @@ test('admin crea una cuenta, quien la recibe entra con usuario y contrasena, se 
   await expect(vieja.getByText('Usuario o contraseña incorrectos.')).toBeVisible();
   await vieja.context().close();
   const conNueva = await contextoAutenticado(browser, request, MARTA.usuario, nueva);
-  await cambiarClaveInicial(conNueva.page, nueva); // la restablecida tambien es de entrega
+  await verUsoSinCambiarClave(conNueva.page); // la restablecida tampoco obliga a cambiarla
+  await conNueva.page.goto('/');
   await expect(conNueva.page.getByRole('heading', { name: /Hola, Marta/ })).toBeVisible();
   await conNueva.contexto.close();
 
@@ -356,10 +358,10 @@ test('mi cuenta: cambio de contrasena, preferencias que persisten y cierre de la
   await pulsar(page.getByRole('button', { name: 'Cambiar contraseña' }));
   await expect(page.getByText('La contraseña actual no es correcta.').first()).toBeVisible();
   await page.getByLabel('Contraseña actual').fill(CLAVE_EJEMPLO);
-  await page.getByLabel('Contraseña nueva', { exact: true }).fill('corta');
-  await page.getByLabel('Repite la contraseña nueva').fill('corta');
+  await page.getByLabel('Contraseña nueva', { exact: true }).fill('corta1'); // 6 caracteres: una menos que el minimo
+  await page.getByLabel('Repite la contraseña nueva').fill('corta1');
   await pulsar(page.getByRole('button', { name: 'Cambiar contraseña' }));
-  await expect(page.getByText('La contraseña debe tener al menos 10 caracteres.').first()).toBeVisible();
+  await expect(page.getByText('La contraseña debe tener al menos 7 caracteres.').first()).toBeVisible();
 
   await page.getByRole('switch', { name: /Atajo «\/»/ }).uncheck();
   await pulsar(page.getByRole('button', { name: 'Guardar preferencias' }));

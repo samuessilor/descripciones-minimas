@@ -6,7 +6,8 @@
 /** 3 a 40 caracteres, en minusculas; empieza con letra o numero. Ej.: `consumibles`, `aduana-a`, `ana.perez`. */
 export const USUARIO_REGEX = /^[a-z0-9][a-z0-9._-]{2,39}$/;
 
-export const CLAVE_MIN = 10;
+/** Minimo de la contrasena (decision del dueno: 7). Better Auth lo lee de aqui, asi interfaz, acciones y libreria coinciden. */
+export const CLAVE_MIN = 7;
 export const CLAVE_MAX = 128;
 
 /** Lleva lo que se escribio al formato guardado: sin espacios en los bordes y en minusculas. */

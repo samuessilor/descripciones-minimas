@@ -14,6 +14,9 @@ import { contextoDeAccion } from '@/server/sesion';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+// Hobby: 60 s es el maximo seguro de una funcion, con o sin Fluid Compute (el defecto clasico son 10 s). La descarga completa
+// de 1.500 fichas con su historial mide 15-25 s: sin esto un corte a mitad del streaming entregaria un xlsx truncado.
+export const maxDuration = 60;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

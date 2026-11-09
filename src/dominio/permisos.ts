@@ -4,7 +4,7 @@
  * La capa de politicas del servidor aplica las mismas reglas en SQL y las pruebas de integracion
  * las cruzan contra estas funciones.
  */
-import { getCampo, type CampoDef } from './campos';
+import { CAMPOS, getCampo, type CampoDef } from './campos';
 import type { EstadoFicha } from './estado';
 
 export const ROLES = ['admin', 'solicitante', 'aduana', 'lector'] as const;
@@ -204,4 +204,36 @@ export function motivoVisible(actor: ActorLike, autor: OrigenAutor): boolean {
 /** RV-29: los comentarios `interno` solo los ven usuarios de organizacion interna. */
 export function comentarioVisible(actor: ActorLike, visibilidad: 'interno' | 'todos'): boolean {
   return visibilidad === 'todos' || actor.organizacionTipo === 'interna';
+}
+
+// ---- Historial limitado de la aduana (cuentas de agencia) -------------------------------------------------
+
+/**
+ * Claves de los campos del grupo aduana (los que la agencia escribe). Es lo unico cuyo historial ve un usuario de
+ * agencia: el de los campos que llena el area (producto, detalle, especificaciones) nunca le llega. Sale del catalogo,
+ * asi que un campo nuevo del grupo A entra solo; uno retirado queda fuera (ante la duda, se oculta).
+ */
+export const CLAVES_HISTORIAL_ADUANA: readonly string[] = CAMPOS.filter((c) => c.grupo === 'A').map((c) => c.clave);
+
+/** El actor ve el historial recortado (solo su zona de aduana). Admin, solicitante y lector lo ven completo. */
+export function historialLimitado(actor: Pick<ActorLike, 'rol'>): boolean {
+  return actor.rol === 'aduana';
+}
+
+/** Puede consultar el historial de ESTE campo (si no, el servidor responde como si no existiera). */
+export function campoConHistorialVisible(actor: Pick<ActorLike, 'rol'>, clave: string): boolean {
+  return !historialLimitado(actor) || CLAVES_HISTORIAL_ADUANA.includes(clave);
+}
+
+/**
+ * Un evento del historial es visible para el actor si el campo es de su zona y el hecho lo hizo su propia organizacion.
+ * Lo de otra agencia (D-29) y lo que hizo un interno en esos campos se oculta, incluidos los eventos del sistema: la
+ * agencia ya ve el valor vigente y el estado de la ficha, y ante la duda (PA-38, A5) se oculta.
+ */
+export function eventoDeHistorialVisible(
+  actor: Pick<ActorLike, 'rol' | 'organizacionId'>,
+  evento: { campo: string; organizacionId: string },
+): boolean {
+  if (!historialLimitado(actor)) return true;
+  return CLAVES_HISTORIAL_ADUANA.includes(evento.campo) && evento.organizacionId === actor.organizacionId;
 }

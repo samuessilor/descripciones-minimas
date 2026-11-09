@@ -43,20 +43,16 @@ export async function contextoAutenticado(browser: Browser, request: APIRequestC
 }
 
 /**
- * Una cuenta recien creada (o restablecida) solo puede ver «Mi cuenta» hasta cambiar la contrasena de entrega.
- * Comprueba ese bloqueo, hace el cambio y devuelve la contrasena nueva.
+ * Una cuenta recien creada (o restablecida) usa la app de una vez con la contrasena de entrega: cambiarla es voluntario.
+ * Comprueba que `/referencias` abre sin pasar por «Mi cuenta» y sin ningun aviso de cambio.
  */
-export async function cambiarClaveInicial(page: Page, actual: string): Promise<string> {
+export async function verUsoSinCambiarClave(page: Page): Promise<void> {
   await page.goto('/referencias');
-  await expect(page).toHaveURL(/\/cuenta$/);
-  await expect(page.getByTestId('cambiar-clave-obligatorio')).toBeVisible();
-  const nueva = `Nueva-${Date.now().toString(36)}-clave`;
-  await page.getByLabel('Contraseña actual').fill(actual);
-  await page.getByLabel('Contraseña nueva', { exact: true }).fill(nueva);
-  await page.getByLabel('Repite la contraseña nueva').fill(nueva);
-  await pulsarHidratado(page.getByRole('button', { name: 'Cambiar contraseña' }));
-  await expect(page).toHaveURL(/\/$/);
-  return nueva;
+  await expect(page).toHaveURL(/\/referencias$/);
+  await expect(page.getByRole('heading', { name: 'Referencias' })).toBeVisible();
+  await page.goto('/cuenta');
+  await expect(page.getByRole('heading', { level: 1, name: 'Mi cuenta' })).toBeVisible();
+  await expect(page.getByText(/Cambia tu contraseña|Debes actualizar tu contraseña/)).toHaveCount(0);
 }
 
 /** Recoge errores de consola y de pagina (incluye violaciones de CSP). */

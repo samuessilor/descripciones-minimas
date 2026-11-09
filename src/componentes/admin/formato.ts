@@ -101,6 +101,7 @@ export const ETIQUETA_ACCION: Record<string, string> = {
   cambiar_partida: 'Cambió una partida',
   marcar_listo: 'Marcó su parte como lista',
   cancelar_asignacion: 'Canceló un pendiente',
+  retencion: 'Limpieza automática',
 };
 
 export function etiquetaAccion(accion: string): string {

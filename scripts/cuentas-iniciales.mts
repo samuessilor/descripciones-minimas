@@ -7,8 +7,8 @@
  *   - lectores (opcional).
  * Formato: ver `cuentas.ejemplo.json`. Convencion de usuarios: `<cuenta>.essilorluxottica` (areas), `administrador.<nombre>`
  * y `<empresa>.aduana`. La contrasena INICIAL es `clave` si el archivo la trae; si no, una ALEATORIA (XXXX-XXXX-XXXX) que se escribe en el archivo de salida (nunca una
- * contrasena predecible: el repositorio puede ser publico). Es una clave de entrega: cada cuenta queda marcada para cambiarla en su primer ingreso y no puede usar
- * nada mas hasta hacerlo.
+ * contrasena predecible: el repositorio puede ser publico). Cambiarla es voluntario (en «Mi cuenta»): la cuenta entra y usa la app sin
+ * tener que hacerlo.
  *
  * La lista usuario/contrasena sale en consola o en el archivo de `--salida` (FUERA del repositorio); en la base solo queda el
  * hash. Con esa lista el implementador entrega usuario y contrasena a quien corresponda.
@@ -114,7 +114,7 @@ async function cuenta(cu: Cuenta, rol: 'admin' | 'solicitante' | 'aduana' | 'lec
   const hash = await hashearClave(clave);
   const [u] = await db
     .insert(usuario)
-    .values({ nombre: cu.nombre.trim(), username, email: correoSinCorreo(username), organizacionId: o.id, organizacionTipo: o.tipo, rol, area, encargado: cu.encargado?.trim() || null, debeCambiarClave: true })
+    .values({ nombre: cu.nombre.trim(), username, email: correoSinCorreo(username), organizacionId: o.id, organizacionTipo: o.tipo, rol, area, encargado: cu.encargado?.trim() || null, debeCambiarClave: false })
     .returning({ id: usuario.id });
   await db.insert(account).values({ accountId: u!.id, providerId: 'credential', userId: u!.id, password: hash });
   creadas++;
@@ -135,7 +135,7 @@ try {
       writeFileSync(salida, `${cuerpo}\n`, { encoding: 'utf8' });
       console.log(`  Usuarios y contraseñas iniciales guardados en ${salida}. Entrégalos y bórralo después: la base solo guarda su hash.`);
     } else {
-      console.log(`\n${cuerpo}\n\nCada cuenta debe cambiar su contraseña en el primer ingreso. Entrega la lista y bórrala.`);
+      console.log(`\n${cuerpo}\n\nEntrega la lista y bórrala.`);
     }
   }
 } finally {

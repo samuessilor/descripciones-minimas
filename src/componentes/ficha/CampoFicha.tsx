@@ -3,7 +3,7 @@
 import { CircleAlert, Lock, LoaderCircle, Check, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { presente } from '@/componentes/colaboracion/presencia';
-import { LATIDO_EDICION_MS } from '@/componentes/colaboracion/sondeo';
+import { LATIDO_EDICION_MS, LATIDO_PRIMERO_MS } from '@/componentes/colaboracion/sondeo';
 import { nombreVisible } from '@/componentes/ui/avatar';
 import { Boton } from '@/componentes/ui/button';
 import { Combobox } from '@/componentes/ui/combobox';
@@ -19,6 +19,7 @@ import { formatearPartida } from '@/dominio/partida';
 import type { CampoVista } from '@/server/politicas/referencias';
 import { cn } from '@/lib/utils';
 import { enviarLatido, guardarCampoApi, resolverConflictoApi, terminarLatido } from './api-cliente';
+import type { GuardadoCampo } from './guardado-local';
 import { EntradaComposicion } from './EntradaComposicion';
 import {
   BORRADOR_VACIO,
@@ -67,8 +68,11 @@ export interface PropsCampo {
   /** Campos con valor que dejarian de mostrarse si el tipo cambiara a otro (solo `tipo_producto`). */
   ocultosAlCambiarTipo?: (nuevo: TipoProducto) => string[];
   alCambiarFase: (clave: string, fase: FaseCampo, etiqueta: string) => void;
-  /** Se guardo algo: la ficha debe refrescar semaforo y progreso. */
-  alGuardar: () => void;
+  /**
+   * Se guardo algo: la ficha actualiza semaforo y progreso. Recibe lo que respondio el servidor para aplicarlo sin
+   * releer; sin el (un choque que resulto ser el mismo texto, una ficha ya cerrada) la ficha se relee.
+   */
+  alGuardar: (guardado?: GuardadoCampo) => void;
 }
 
 const LATIDO_MS = LATIDO_EDICION_MS;
@@ -146,6 +150,10 @@ export function CampoFicha(props: PropsCampo) {
   const temporizadorReintento = useRef<ReturnType<typeof setTimeout> | null>(null);
   const temporizadorGuardado = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latido = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** El primer latido espera un momento tras el foco: quien solo pasa de largo no avisa a nadie. */
+  const primerLatido = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Ya se envio algun latido en este foco: solo entonces hace falta avisar que se dejo el campo. */
+  const latidoEnviado = useRef(false);
   const contenedor = useRef<HTMLDivElement>(null);
   const zonaEdicion = useRef<HTMLDivElement>(null);
 
@@ -245,7 +253,7 @@ export function CampoFicha(props: PropsCampo) {
         guardarBorradorLocal(referenciaId, def.clave, null);
         if (temporizadorGuardado.current) clearTimeout(temporizadorGuardado.current);
         temporizadorGuardado.current = setTimeout(() => setFaseInterna((f) => (f === 'guardado' ? 'limpio' : f)), 4_000);
-        alGuardar();
+        alGuardar({ campo: def.clave, ...r.data });
         return;
       }
       if (r.codigo === 'CONFLICTO') {
@@ -336,35 +344,53 @@ export function CampoFicha(props: PropsCampo) {
     return guardar(b);
   }
 
-  // ---- Presencia (D-17): latido cada 15 s mientras el campo tiene el foco.
+  // ---- Presencia (D-17): «estoy escribiendo aqui» mientras el campo tiene el foco (tiempos en sondeo.ts).
   function alEnfocar() {
-    if (!puedeEditar) return;
-    void enviarLatido(referenciaId, def.clave).catch(() => undefined);
-    latido.current ??= setInterval(() => {
-      // Si el campo ya no tiene el foco (p. ej. se quito del DOM la franja donde estaba), no se sigue avisando.
-      if (!contenedor.current?.contains(document.activeElement)) {
-        if (latido.current) clearInterval(latido.current);
-        latido.current = null;
-        void terminarLatido(referenciaId, def.clave).catch(() => undefined);
-        return;
+    if (!puedeEditar || primerLatido.current || latido.current) return;
+    primerLatido.current = setTimeout(() => {
+      primerLatido.current = null;
+      // El foco se fue antes de tiempo (tabulador, clic de paso): no hay nada que avisar.
+      if (!contenedor.current?.contains(document.activeElement)) return;
+      if (presente()) {
+        latidoEnviado.current = true;
+        void enviarLatido(referenciaId, def.clave).catch(() => undefined);
       }
-      // Una ficha desatendida (PC bloqueado con el cursor en el campo) no avisa ni mantiene viva la sesion: el aviso vence solo.
-      if (!presente()) return;
-      void enviarLatido(referenciaId, def.clave).catch(() => undefined);
-    }, LATIDO_MS);
+      latido.current ??= setInterval(() => {
+        // Si el campo ya no tiene el foco (p. ej. se quito del DOM la franja donde estaba), no se sigue avisando.
+        if (!contenedor.current?.contains(document.activeElement)) {
+          if (latido.current) clearInterval(latido.current);
+          latido.current = null;
+          if (latidoEnviado.current) void terminarLatido(referenciaId, def.clave).catch(() => undefined);
+          latidoEnviado.current = false;
+          return;
+        }
+        // Una ficha desatendida (PC bloqueado con el cursor en el campo) no avisa ni mantiene viva la sesion: el aviso vence solo.
+        if (!presente()) return;
+        latidoEnviado.current = true;
+        void enviarLatido(referenciaId, def.clave).catch(() => undefined);
+      }, LATIDO_MS);
+    }, LATIDO_PRIMERO_MS);
+  }
+  function detenerLatido() {
+    if (primerLatido.current) clearTimeout(primerLatido.current);
+    primerLatido.current = null;
+    if (latido.current) clearInterval(latido.current);
+    latido.current = null;
   }
   function alDesenfocar(e: React.FocusEvent<HTMLDivElement>) {
     const hacia = e.relatedTarget as Node | null;
     if (zonaEdicion.current?.contains(hacia)) return; // sigue editando este campo (control, motivo, choque)
     const salioDelCampo = !contenedor.current?.contains(hacia);
-    if (salioDelCampo && latido.current) {
-      clearInterval(latido.current);
-      latido.current = null;
+    const avisoPresencia = latidoEnviado.current;
+    if (salioDelCampo) {
+      detenerLatido();
+      latidoEnviado.current = false;
     }
     if (ref.current.fase === 'sin_guardar') {
       // Guardar ya retira la marca de «escribiendo» (en la misma transaccion): no hace falta otra llamada.
       void pedirGuardar(ref.current.borrador);
-    } else if (salioDelCampo && puedeEditar) {
+    } else if (salioDelCampo && puedeEditar && avisoPresencia) {
+      // Solo si algun latido llego a salir: quien paso de largo antes de tiempo no dejo marca que retirar.
       void terminarLatido(referenciaId, def.clave).catch(() => undefined);
     }
   }
@@ -377,6 +403,7 @@ export function CampoFicha(props: PropsCampo) {
     document.addEventListener('visibilitychange', alOcultar);
     return () => {
       document.removeEventListener('visibilitychange', alOcultar);
+      if (primerLatido.current) clearTimeout(primerLatido.current);
       if (latido.current) clearInterval(latido.current);
       if (temporizadorReintento.current) clearTimeout(temporizadorReintento.current);
       if (temporizadorGuardado.current) clearTimeout(temporizadorGuardado.current);

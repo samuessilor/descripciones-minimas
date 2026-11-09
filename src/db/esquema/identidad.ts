@@ -53,7 +53,11 @@ export const usuario = pgTable(
     /** Quien lleva hoy la cuenta de un area (ej. «Edgar»). Es solo un dato: la cuenta sigue siendo del area. */
     encargado: text('encargado'),
     activo: boolean('activo').notNull().default(true),
-    /** Entrega con contrasena inicial (o restablecida): hasta que la cambie, solo puede entrar a «Mi cuenta». */
+    /**
+     * Guardia latente: si es true, hasta que cambie la contrasena solo puede entrar a «Mi cuenta». YA NO se activa por
+     * defecto (la contrasena entregada o restablecida se puede conservar); se deja la columna y la guardia por si hiciera
+     * falta forzar un cambio a mano.
+     */
     debeCambiarClave: boolean('debe_cambiar_clave').notNull().default(false),
     /** Permite desactivar el atajo "/" (WCAG 2.1.4, RV-42). */
     atajosTeclado: boolean('atajos_teclado').notNull().default(true),

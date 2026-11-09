@@ -146,7 +146,6 @@ describe('P-01 en Postgres real: rol app (CA-13, D-31)', () => {
       'delete from referencia',
       'delete from usuario',
       'delete from asignacion',
-      'delete from notificacion',
       'truncate referencia cascade',
       'truncate usuario cascade',
     ]) {
@@ -158,6 +157,7 @@ describe('P-01 en Postgres real: rol app (CA-13, D-31)', () => {
     expect((await sqlComo(r.urlApp, 'delete from session')).codigo).toBe('OK');
     expect((await sqlComo(r.urlApp, 'delete from limite_tasa')).codigo).toBe('OK');
     expect((await sqlComo(r.urlApp, 'delete from edicion_activa')).codigo).toBe('OK');
+    expect((await sqlComo(r.urlApp, 'delete from notificacion')).codigo).toBe('OK'); // retencion diaria (migracion 0011)
   });
 
   it('la aplicacion funciona completa como app (los permisos alcanzan para el nucleo)', async () => {

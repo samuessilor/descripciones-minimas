@@ -6,7 +6,6 @@ import { BotonAccion, FormularioAccion } from '@/componentes/admin/acciones';
 import { CampoAdmin } from '@/componentes/admin/campos';
 import { describirNavegador, fechaHora, formatearIp, hace } from '@/componentes/admin/formato';
 import { Dato, Datos, InsigniaRol, InsigniaTipoOrg, Seccion } from '@/componentes/admin/piezas';
-import { Aviso } from '@/componentes/ui/aviso';
 import { Avatar, nombreVisible } from '@/componentes/ui/avatar';
 import { Boton } from '@/componentes/ui/button';
 import { Interruptor } from '@/componentes/ui/casilla';
@@ -26,15 +25,6 @@ export default async function Cuenta() {
   return (
     <ContenedorLectura>
       <EncabezadoPagina titulo="Mi cuenta" descripcion="Tus datos, tu contraseña y dónde tienes abierta la plataforma." />
-
-      {actor.debeCambiarClave ? (
-        <div className="mb-6" data-testid="cambiar-clave-obligatorio">
-          <Aviso tipo="aviso" titulo="Cambia tu contraseña para empezar">
-            Entraste con la contraseña inicial que te entregaron. Elige una propia (mínimo 10 caracteres); hasta entonces no puedes usar el resto de la
-            plataforma.
-          </Aviso>
-        </div>
-      ) : null}
 
       <div className="space-y-6">
         <Seccion id="datos" titulo="Tus datos" descripcion="Si algo está mal, pídele el cambio a un administrador.">
@@ -65,7 +55,7 @@ export default async function Cuenta() {
           <FormularioAccion accion={cambiarMiClaveAccion} enviar="Cambiar contraseña" enviando="Cambiando…" variante="secundario" className="space-y-5" reiniciar>
             <div className="grid gap-5 sm:max-w-sm">
               <CampoAdmin nombre="actual" etiqueta="Contraseña actual" control="clave" autoComplete="current-password" required />
-              <CampoAdmin nombre="nueva" etiqueta="Contraseña nueva" ayuda="Mínimo 10 caracteres." control="clave" autoComplete="new-password" required />
+              <CampoAdmin nombre="nueva" etiqueta="Contraseña nueva" ayuda="Mínimo 7 caracteres." control="clave" autoComplete="new-password" required />
               <CampoAdmin nombre="repetir" etiqueta="Repite la contraseña nueva" control="clave" autoComplete="new-password" required />
             </div>
           </FormularioAccion>

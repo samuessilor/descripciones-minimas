@@ -80,6 +80,26 @@ export function avisarCambioDeFicha(referenciaId: string): void {
   window.dispatchEvent(new CustomEvent(EVENTO_FICHA_CAMBIADA, { detail: { referenciaId } }));
 }
 
+/**
+ * La persona guardo un campo: «quien lo puso y cuantas versiones tiene» se actualiza con lo que respondio el guardado,
+ * sin pedirle nada al servidor (a diferencia de `EVENTO_FICHA_CAMBIADA`, que hace releer todo).
+ */
+export const EVENTO_CAMPO_GUARDADO = 'dm:campo-guardado';
+
+export interface DetalleCampoGuardado {
+  referenciaId: string;
+  campo: string;
+  /** Version del campo tras guardar. */
+  version: number;
+  /** El campo quedo sin valor. */
+  vacio: boolean;
+}
+
+export function avisarCampoGuardado(detalle: DetalleCampoGuardado): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(EVENTO_CAMPO_GUARDADO, { detail: detalle }));
+}
+
 export function abrirActividad(detalle: DetalleAbrirActividad): void {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent(EVENTO_ABRIR_ACTIVIDAD, { detail: detalle }));

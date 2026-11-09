@@ -6,7 +6,7 @@
 import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { account, auditoria, limiteTasa, organizacion, session, usuario } from '@/db/esquema';
-import { cambiarMiClave } from '@/server/acciones/cuenta';
+import { actualizarPreferencias, cambiarMiClave } from '@/server/acciones/cuenta';
 import { desactivarUsuario, crearCuenta, restablecerClave } from '@/server/acciones/usuarios';
 import { actorDesdeCabeceras, iniciarSesion, type DepsAcceso } from '@/server/acceso';
 import { crearAuth } from '@/server/auth';
@@ -284,15 +284,30 @@ describe('cuentas: sin registro abierto; las crea un administrador', () => {
     expect(fila?.password).toBeTruthy();
     expect(fila?.password).not.toContain(nueva.claveTemporal);
     const [u] = await e.db.select().from(usuario).where(eq(usuario.id, nueva.id));
-    expect(u).toMatchObject({ username: 'area.prueba', area: 'Consumibles', email: 'area.prueba@sin-correo.invalid', debeCambiarClave: true, encargado: 'Edgar' });
+    expect(u).toMatchObject({ username: 'area.prueba', area: 'Consumibles', email: 'area.prueba@sin-correo.invalid', debeCambiarClave: false, encargado: 'Edgar' });
     const aud = await e.db.select().from(auditoria).where(and(eq(auditoria.accion, 'crear_cuenta'), eq(auditoria.entidadId, nueva.id)));
     expect(JSON.stringify(aud[0]?.detalle)).not.toContain(nueva.claveTemporal);
 
     const { headers } = await entrar('area.prueba', nueva.claveTemporal);
     const actorNuevo = await actorDesdeCabeceras(deps, headers);
-    expect(actorNuevo).toMatchObject({ rol: 'solicitante', area: 'Consumibles', debeCambiarClave: true });
+    // Cambiar la contrasena de entrega ya no es obligatorio: entra sin indicador de cambio pendiente y opera de una vez.
+    expect(actorNuevo).toMatchObject({ rol: 'solicitante', area: 'Consumibles', debeCambiarClave: false });
+    const ctxNuevo = e.ctx({ ...actorNuevo!, sesionId: actorNuevo!.sesionId! });
+    await expect(actualizarPreferencias(ctxNuevo, { atajosTeclado: false })).resolves.toEqual({ ok: true });
 
-    // Con la contrasena de entrega solo puede cambiarla: lo demas lo rechaza el servidor.
+    // Cambiarla es voluntario: con 6 caracteres se rechaza y con 7 se acepta.
+    await expect(cambiarMiClave(ctxNuevo, { actual: nueva.claveTemporal, nueva: 'abcdef', repetir: 'abcdef' })).rejects.toMatchObject({ codigo: 'VALIDACION' });
+    const r = await cambiarMiClave(ctxNuevo, { actual: nueva.claveTemporal, nueva: 'abcdefg', repetir: 'abcdefg' });
+    expect(r.eraInicial).toBe(false);
+  });
+
+  it('el mecanismo de guardia sigue vivo: con el indicador activado a mano, cambiar la clave lo apaga', async () => {
+    const nueva = await crearCuenta(e.ctx(e.admin), { nombre: 'Guardia', usuario: 'guardia.prueba', organizacionId: e.orgInterna, rol: 'solicitante', area: 'Consumibles' });
+    await e.db.update(usuario).set({ debeCambiarClave: true }).where(eq(usuario.id, nueva.id));
+    const { headers } = await entrar('guardia.prueba', nueva.claveTemporal);
+    const actorNuevo = await actorDesdeCabeceras(deps, headers);
+    expect(actorNuevo?.debeCambiarClave).toBe(true);
+
     const ctxNuevo = e.ctx({ ...actorNuevo!, sesionId: actorNuevo!.sesionId! });
     const r = await cambiarMiClave(ctxNuevo, { actual: nueva.claveTemporal, nueva: 'clave-propia-2026', repetir: 'clave-propia-2026' });
     expect(r.eraInicial).toBe(true);
@@ -320,7 +335,7 @@ describe('restablecer la contrasena de otra cuenta (admin)', () => {
     expect(r.sesionesCerradas).toBeGreaterThanOrEqual(1);
     expect(r.claveTemporal).not.toBe(CLAVE_PRUEBA);
     const [marcada] = await e.db.select().from(usuario).where(eq(usuario.id, e.charles.usuarioId));
-    expect(marcada?.debeCambiarClave).toBe(true); // la restablecida es de entrega: debe cambiarla al entrar
+    expect(marcada?.debeCambiarClave).toBe(false); // la restablecida es temporal pero ya no se obliga a cambiarla
 
     expect(await actorDesdeCabeceras(deps, viejo.headers)).toBeNull();
     await e.db.delete(limiteTasa);
@@ -330,7 +345,6 @@ describe('restablecer la contrasena de otra cuenta (admin)', () => {
     expect(aud).toHaveLength(1);
     expect(JSON.stringify(aud[0]?.detalle)).not.toContain(r.claveTemporal);
     await conCredenciales(e.db, e.charles.usuarioId, 'charles'); // devuelve la clave de prueba al resto del archivo
-    await e.db.update(usuario).set({ debeCambiarClave: false }).where(eq(usuario.id, e.charles.usuarioId));
   });
 });
 

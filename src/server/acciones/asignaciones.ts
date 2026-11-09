@@ -46,6 +46,7 @@ import {
 } from '../colaboracion/comun';
 import { limitarTasa, REGLAS_TASA } from '../limite-tasa';
 import { avisar } from '../notificaciones/avisar';
+import { crearNotificacion } from '../notificaciones/crear';
 import { ahoraDe, type Actor, type Contexto } from '../politicas/actor';
 import { cargarReferenciaBloqueada, cargarReferenciaVisible, type FilaReferencia } from '../politicas/referencias';
 import { ErrorAccion } from './resultado';
@@ -252,6 +253,11 @@ async function colocarAsignacion(
     ahora: Date;
     /** Texto propio para la notificacion (reasignaciones). */
     titulo?: (pedido: Pedido) => string;
+    /**
+     * Si la asignacion ya existe y cambia, renueva su aviso SIN LEER en vez de crear otro. Lo usa la solicitud de la
+     * aduana, que se reescribe varias veces; «Enviar a…» no lo usa: cada cambio que alguien envia se avisa aparte.
+     */
+    agruparAviso?: boolean;
   },
 ): Promise<ResultadoColocar> {
   const { actor, ficha, destino, ahora } = p;
@@ -281,17 +287,18 @@ async function colocarAsignacion(
       .update(asignacion)
       .set({ pedido: destino.pedido, mensaje: p.mensaje, secciones: destino.secciones })
       .where(eq(asignacion.id, existente.id));
-    const aviso = await avisar(tx, {
-      destino: comoDestino(destino.perfil),
+    const notificacionId = await crearNotificacion(tx, {
+      usuarioId: destino.perfil.id,
       tipo: 'asignacion',
       referenciaId: ficha.id,
       asignacionId: existente.id,
       titulo: p.titulo
         ? p.titulo(destino.pedido)
         : `${nombreSinMarca(actor.nombre)} actualizó lo que te pide en ${ficha.codigo}: ahora es ${paraQue(destino.pedido, destino.secciones)}`,
-      ahora,
+      creadaEn: ahora,
+      agrupar: p.agruparAviso ?? false,
     });
-    return { asignacionId: existente.id, accion: 'actualizada', notificacionId: aviso.notificacionId };
+    return { asignacionId: existente.id, accion: 'actualizada', notificacionId };
   }
 
   const [nueva] = await tx
@@ -947,8 +954,8 @@ export async function destinatariosSolicitudAduana(tx: Ejecutor, ficha: FilaRefe
 /**
  * La aduana escribio (o cambio) su solicitud: el area la recibe como pendiente «Responder» en «Para mí» y un aviso en la
  * campana, con el texto de la solicitud como mensaje. Reutiliza la asignacion de «Enviar a…» (upsert: nunca duplica
- * un pendiente) y no toca el pendiente de la aduana, que sigue con la ficha para clasificar. Sin correo (avisos solo en
- * la app). Corre en la transaccion de `aplicarEscritura`.
+ * un pendiente) y no toca el pendiente de la aduana, que sigue con la ficha para clasificar. Si el area aun no leyo el
+ * aviso de una solicitud anterior, se renueva ese aviso en vez de sumar otro. Sin correo (avisos solo en la app). Corre en la transaccion de `aplicarEscritura`.
  */
 export async function pedirRespuestaAlArea(tx: Tx, actor: Actor, ficha: FilaReferencia, solicitud: string, ahora: Date): Promise<void> {
   const mensaje = mensajeDeSolicitud(solicitud);
@@ -962,6 +969,7 @@ export async function pedirRespuestaAlArea(tx: Tx, actor: Actor, ficha: FilaRefe
       deUsuarioId: actor.usuarioId,
       ahora,
       titulo: () => `${nombreSinMarca(actor.nombre)} pide información adicional en ${ficha.codigo}`,
+      agruparAviso: true,
     });
   }
 }

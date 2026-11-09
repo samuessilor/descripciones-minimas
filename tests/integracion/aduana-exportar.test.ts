@@ -353,20 +353,25 @@ describe('hoja «Historial»', () => {
     expect(new Set(filas(con.libro.getWorksheet('Historial')!).map((f) => f.getCell(1).text))).toContain('TEST-ARCH-X');
   });
 
-  it('una agencia solo ve el historial de lo suyo y no el motivo de cambios hechos fuera de su organizacion', async () => {
+  it('una agencia recibe el historial LIMITADO: solo los campos de su zona de aduana hechos por su organizacion', async () => {
     const a = await descargar(e.brian, { alcance: 'toda' });
     const hojaA = a.libro.getWorksheet('Historial')!;
     expect(new Set(filas(hojaA).map((f) => f.getCell(1).text))).toEqual(new Set(['00123-AB', 'TEST-CLAS-1']));
-    // Charles es de la organizacion interna: Brian (aduana, agencia A) ve el cambio pero no el motivo (PA-38).
-    const [nueva] = cambio(hojaA, '00123-AB', 'Información adicional');
-    expect(nueva!.getCell(colHist('quien')).text).toBe('Charles');
-    expect(nueva!.getCell(colHist('motivo')).text).toBe('Motivo no visible para tu rol');
-    expect(JSON.stringify(a.libro.getWorksheet('Historial')!.getSheetValues())).not.toContain('Así lo dice la ficha técnica');
+    // Lo que escribe el area (con su motivo, PA-38) no llega: ni el cambio de «Información adicional» ni su motivo.
+    expect(cambio(hojaA, '00123-AB', 'Información adicional')).toHaveLength(0);
+    expect(cambio(hojaA, '00123-AB', 'Uso')).toHaveLength(0);
+    const texto = JSON.stringify(hojaA.getSheetValues());
+    expect(texto).not.toContain('Así lo dice la ficha técnica');
+    expect(texto).not.toContain('Versión corregida');
+    // Lo suyo si: la descripcion minima que escribio Brian.
+    const [dm] = cambio(hojaA, '00123-AB', 'Descripciones mínimas adicionales');
+    expect(dm!.getCell(colHist('quien')).text).toBe('Brian');
+    expect(a.libro.getWorksheet('Leyenda')!.getSheetValues().flat().join('|')).toContain('Historial limitado a la zona de aduana');
 
-    // La agencia B no recibe nada de las fichas de la A, y a Edward (interno) lo ve con nombre.
+    // La agencia B no recibe nada de las fichas de la A; en la suya nadie de su organizacion ha escrito aun.
     const b = await descargar(e.brianB, { alcance: 'toda' });
     const hojaB = b.libro.getWorksheet('Historial')!;
-    expect(new Set(filas(hojaB).map((f) => f.getCell(1).text))).toEqual(new Set(['TEST-B-1']));
+    expect(filas(hojaB)).toHaveLength(0);
     expect(JSON.stringify(hojaB.getSheetValues())).not.toContain('bomba de vacío');
   });
 
@@ -403,7 +408,7 @@ describe('hoja «Historial»', () => {
     expect(corto.tope).toBe(5);
     expect(corto.filas).toHaveLength(5);
     expect(corto.filas.map((f) => f.valores.nuevo)).toEqual(todo.filas.slice(0, 5).map((f) => f.valores.nuevo)); // los mas recientes
-    expect(TOPE_HISTORIAL).toBe(20_000);
+    expect(TOPE_HISTORIAL).toBe(50_000);
   });
 
   it('un historial recortado se avisa arriba en la hoja y en la leyenda, y la tabla sigue desde la fila 2', async () => {
@@ -420,7 +425,7 @@ describe('hoja «Historial»', () => {
     await escritura;
     const hoja = libro.getWorksheet('Historial')!;
     expect(hoja.getCell('A1').text).toMatch(/^Aviso: hay más cambios de los que caben/);
-    expect(hoja.getCell('A1').text).toContain('20.000');
+    expect(hoja.getCell('A1').text).toContain('50.000');
     expect(hoja.getCell('A2').text).toBe('Código');
     expect(hoja.views[0]).toMatchObject({ state: 'frozen', ySplit: 2 });
     const t: string[] = [];
