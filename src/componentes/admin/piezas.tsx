@@ -59,12 +59,16 @@ export function InsigniaTipoOrg({ tipo }: { tipo: string }) {
 }
 
 /** Estado de una persona: siempre palabra + icono, nunca solo color. Pueden ir varias a la vez. */
-export function EstadosUsuario({ activo, ultimoIngreso }: { activo: boolean; ultimoIngreso: string | null }) {
+export function EstadosUsuario({ activo, ultimoIngreso, sinClave = false }: { activo: boolean; ultimoIngreso: string | null; sinClave?: boolean }) {
   return (
     <span className="flex flex-wrap items-center gap-1.5">
       {!activo ? (
         <Insignia variante="neutra" icono={<UserX aria-hidden className="size-3" />}>
           Inactivo
+        </Insignia>
+      ) : sinClave ? (
+        <Insignia variante="contorno" icono={<Clock aria-hidden className="size-3" />}>
+          Pendiente de entrega
         </Insignia>
       ) : ultimoIngreso === null ? (
         <Insignia variante="contorno" icono={<Clock aria-hidden className="size-3" />}>

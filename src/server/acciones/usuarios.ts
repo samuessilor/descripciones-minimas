@@ -10,7 +10,9 @@ import type { Tx } from '@/db/tipos';
 import { exigeArea, MENSAJE_AREA_OBLIGATORIA } from '@/dominio/areas';
 import { correoSinCorreo, normalizarUsuario, USUARIO_AYUDA, validarUsuario } from '@/dominio/credenciales';
 import { ROLES, validarRolOrganizacion, type Rol, type TipoOrganizacion } from '@/dominio/permisos';
+import { nombreSinMarca } from '@/dominio/colaboracion';
 import { auditar } from '../auditoria';
+import { crearNotificacion } from '../notificaciones/crear';
 import { generarClave, hashearClave } from '../claves';
 import { avisarAsignacionExistente } from './asignaciones';
 import { revocarSesionesDeUsuario } from '../sesiones';
@@ -130,8 +132,88 @@ export interface ResultadoCrearCuenta {
   nombre: string;
   rol: Rol;
   organizacionTipo: TipoOrganizacion;
-  /** Se muestra UNA vez a quien crea la cuenta; en la base solo queda su hash. */
-  claveTemporal: string;
+  /**
+   * Se muestra UNA vez a quien crea la cuenta; en la base solo queda su hash. Solo el administrador la recibe: si crea
+   * otra persona, el servidor no genera ninguna (`null`) y la cuenta queda sin credencial hasta que el administrador la
+   * restablezca.
+   */
+  claveTemporal: string | null;
+}
+
+interface CuentaNueva {
+  nombre: string;
+  usuario: string;
+  email?: string | null | undefined;
+  organizacion: { id: string; nombre: string; tipo: TipoOrganizacion };
+  rol: Rol;
+  area?: string | null | undefined;
+  encargado?: string | null | undefined;
+}
+
+/**
+ * Inserta la cuenta dentro de la transaccion de quien llama: usuario, su credencial si hay clave (`hash`), auditoria y,
+ * si quien la crea no es administrador, el aviso `cuenta_creada` a todos los administradores activos para que generen y
+ * entreguen la clave. No genera ni devuelve ninguna clave.
+ */
+export async function insertarCuenta(ctx: Contexto, tx: Tx, c: CuentaNueva, hash: string | null, ahora: Date): Promise<string> {
+  // El usuario se revisa primero: sin correo propio el correo reservado `usuario@sin-correo.invalid` choca igual y el
+  // mensaje diria «correo» cuando lo repetido es el usuario.
+  const [yaUsuario] = await tx.select({ id: usuario.id }).from(usuario).where(eq(usuario.username, c.usuario)).limit(1);
+  if (yaUsuario) throw CHOQUE_USUARIO;
+  const [u] = await tx
+    .insert(usuario)
+    .values({
+      nombre: c.nombre,
+      username: c.usuario,
+      email: c.email ? c.email : correoSinCorreo(c.usuario),
+      organizacionId: c.organizacion.id,
+      organizacionTipo: c.organizacion.tipo,
+      rol: c.rol,
+      // Una cuenta de agencia es de una empresa de aduana, no de un area interna (C3).
+      area: c.organizacion.tipo === 'agencia' ? null : (c.area ?? null),
+      encargado: c.encargado || null,
+      // Cambiar la contrasena de entrega ya no es obligatorio: la cuenta entra y usa la app de una vez.
+      debeCambiarClave: false,
+      creadoPor: ctx.actor.usuarioId,
+      creadoEn: ahora,
+      actualizadoEn: ahora,
+    })
+    .returning({ id: usuario.id });
+  if (!u) throw new ErrorAccion('ERROR_INTERNO', 'No se pudo crear la cuenta.');
+  if (hash) await tx.insert(account).values({ accountId: u.id, providerId: 'credential', userId: u.id, password: hash, createdAt: ahora, updatedAt: ahora });
+  await auditar(tx, {
+    usuarioId: ctx.actor.usuarioId,
+    accion: 'crear_cuenta',
+    entidad: 'usuario',
+    entidadId: u.id,
+    detalle: { usuario: c.usuario, rol: c.rol, organizacionId: c.organizacion.id, conClave: hash !== null },
+    ip: ctx.ip,
+    creadoEn: ahora,
+  });
+  if (ctx.actor.rol !== 'admin') {
+    const admins = await tx.select({ id: usuario.id }).from(usuario).where(and(eq(usuario.rol, 'admin'), eq(usuario.activo, true)));
+    for (const a of admins) {
+      await crearNotificacion(tx, {
+        usuarioId: a.id,
+        tipo: 'cuenta_creada',
+        referenciaId: null,
+        cuentaId: u.id,
+        titulo: `${nombreSinMarca(ctx.actor.nombre)} creó la cuenta ${c.usuario} de ${c.organizacion.nombre}: genera y entrega su clave`,
+        creadaEn: ahora,
+      });
+    }
+  }
+  return u.id;
+}
+
+const CHOQUE_USUARIO = new ErrorAccion('DUPLICADO', 'Ya existe una cuenta con ese usuario.');
+
+/** Traduce el choque de unicidad de usuario o correo a un error de accion; deja pasar cualquier otro. */
+export function traducirChoqueCuenta(err: unknown, conCorreoPropio: boolean): unknown {
+  if (esViolacionUnica(err, 'usuario_username_unico')) return CHOQUE_USUARIO;
+  // Con correo reservado (no escribio uno) lo repetido es el usuario; con correo propio, el correo.
+  if (esViolacionUnica(err, 'usuario_email_unico')) return conCorreoPropio ? new ErrorAccion('DUPLICADO', 'Ya existe una cuenta con ese correo.') : CHOQUE_USUARIO;
+  return err;
 }
 
 /**
@@ -139,7 +221,7 @@ export interface ResultadoCrearCuenta {
  * el usuario y la contrasena a quien corresponda (o al area, si es una cuenta general). La contrasena se genera aqui,
  * se guarda solo su hash y vuelve en la respuesta para mostrarla una vez.
  */
-export async function crearCuenta(ctx: Contexto, entrada: unknown): Promise<ResultadoCrearCuenta> {
+export async function crearCuenta(ctx: Contexto, entrada: unknown): Promise<ResultadoCrearCuenta & { claveTemporal: string }> {
   exigir(ctx.actor, 'administrar');
   const e = parsear(entradaCrearCuenta, entrada);
   exigirRolAsignable(ctx.actor, e.rol);
@@ -155,54 +237,13 @@ export async function crearCuenta(ctx: Contexto, entrada: unknown): Promise<Resu
 
   const claveTemporal = generarClave();
   const hash = await hashearClave(claveTemporal);
-  const correo = e.email ? e.email : correoSinCorreo(e.usuario);
-
-  const choqueUsuario = new ErrorAccion('DUPLICADO', 'Ya existe una cuenta con ese usuario.');
   try {
     return await ctx.db.transaction(async (tx) => {
-      // El usuario se revisa primero: sin correo propio el correo reservado `usuario@sin-correo.invalid` choca igual y el
-      // mensaje diria «correo» cuando lo repetido es el usuario.
-      const [yaUsuario] = await tx.select({ id: usuario.id }).from(usuario).where(eq(usuario.username, e.usuario)).limit(1);
-      if (yaUsuario) throw choqueUsuario;
-      const [u] = await tx
-        .insert(usuario)
-        .values({
-          nombre: e.nombre,
-          username: e.usuario,
-          email: correo,
-          organizacionId: org.id,
-          organizacionTipo: tipo,
-          rol: e.rol,
-          // Una cuenta de agencia es de una empresa de aduana, no de un area interna (C3).
-          area: tipo === 'agencia' ? null : e.area,
-          encargado: e.encargado || null,
-          // Cambiar la contrasena de entrega ya no es obligatorio: la cuenta entra y usa la app de una vez.
-          debeCambiarClave: false,
-          creadoPor: ctx.actor.usuarioId,
-          creadoEn: ahora,
-          actualizadoEn: ahora,
-        })
-        .returning({ id: usuario.id });
-      if (!u) throw new ErrorAccion('ERROR_INTERNO', 'No se pudo crear la cuenta.');
-      await tx.insert(account).values({ accountId: u.id, providerId: 'credential', userId: u.id, password: hash, createdAt: ahora, updatedAt: ahora });
-      await auditar(tx, {
-        usuarioId: ctx.actor.usuarioId,
-        accion: 'crear_cuenta',
-        entidad: 'usuario',
-        entidadId: u.id,
-        detalle: { usuario: e.usuario, rol: e.rol, organizacionId: org.id },
-        ip: ctx.ip,
-        creadoEn: ahora,
-      });
-      return { id: u.id, usuario: e.usuario, nombre: e.nombre, rol: e.rol, organizacionTipo: tipo, claveTemporal };
+      const id = await insertarCuenta(ctx, tx, { ...e, organizacion: { id: org.id, nombre: org.nombre, tipo } }, hash, ahora);
+      return { id, usuario: e.usuario, nombre: e.nombre, rol: e.rol, organizacionTipo: tipo, claveTemporal };
     });
   } catch (err) {
-    if (esViolacionUnica(err, 'usuario_username_unico')) throw choqueUsuario;
-    if (esViolacionUnica(err, 'usuario_email_unico')) {
-      // Con correo reservado (no escribio uno) lo repetido es el usuario; con correo propio, el correo.
-      throw e.email ? new ErrorAccion('DUPLICADO', 'Ya existe una cuenta con ese correo.') : choqueUsuario;
-    }
-    throw err;
+    throw traducirChoqueCuenta(err, !!e.email);
   }
 }
 

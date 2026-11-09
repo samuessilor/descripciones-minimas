@@ -4,7 +4,7 @@
  */
 import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
-import { asignacion, organizacion, referencia, session, usuario } from '@/db/esquema';
+import { account, asignacion, organizacion, referencia, session, usuario } from '@/db/esquema';
 import type { Ejecutor } from '@/db/tipos';
 import { normalizarTexto } from '@/dominio/normalizacion';
 import type { Rol } from '@/dominio/permisos';
@@ -49,6 +49,8 @@ export interface FilaUsuarioAdmin {
   organizacionTipo: string;
   ultimoIngreso: string | null;
   creadoEn: string;
+  /** Sin credencial: la cuenta existe pero nadie le ha generado clave, asi que no puede ingresar (pendiente de entrega). */
+  sinClave: boolean;
 }
 
 const COLUMNAS_USUARIO = {
@@ -65,6 +67,7 @@ const COLUMNAS_USUARIO = {
   organizacionTipo: usuario.organizacionTipo,
   ultimoIngreso: usuario.ultimoIngreso,
   creadoEn: usuario.creadoEn,
+  sinClave: sql<boolean>`not exists (select 1 from ${account} where ${account.userId} = ${usuario.id} and ${account.providerId} = 'credential')`,
 };
 
 export async function listarUsuariosAdmin(ej: Ejecutor, actor: Actor, filtros: FiltrosUsuarios = {}): Promise<FilaUsuarioAdmin[]> {

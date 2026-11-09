@@ -6,6 +6,7 @@ import {
   Pencil,
   Send,
   Undo2,
+  UserPlus,
   type LucideIcon,
 } from 'lucide-react';
 import { ETIQUETA_PEDIDO, type Pedido } from '@/dominio/colaboracion';
@@ -26,6 +27,7 @@ const ICONO_TIPO: Record<string, LucideIcon> = {
   reapertura_solicitada: Undo2,
   cambio_en_mi_campo: Pencil,
   comentario: MessageSquareText,
+  cuenta_creada: UserPlus,
 };
 
 /** Icono redondo de un aviso, por tipo. Decorativo: el titulo dice todo. */

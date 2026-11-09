@@ -7,7 +7,7 @@
  */
 import { revalidatePath } from 'next/cache';
 import { activarItemCatalogo, guardarItemCatalogo, guardarPartida, guardarRestriccion, moverItemCatalogo } from '@/server/acciones/catalogos-admin';
-import { cambiarEstadoOrganizacion, crearOrganizacion, editarOrganizacion, retirarAccesoAgencia } from '@/server/acciones/organizaciones';
+import { cambiarEstadoOrganizacion, crearAgencia, crearOrganizacion, editarOrganizacion, retirarAccesoAgencia } from '@/server/acciones/organizaciones';
 import { comoResultado } from '@/server/acciones/resultado';
 import { cambiarOrganizacion, cambiarRol, crearCuenta, desactivarUsuario, reactivarUsuario, restablecerClave } from '@/server/acciones/usuarios';
 import { cerrarSesionesDeUsuario, editarUsuario } from '@/server/acciones/usuarios-admin';
@@ -27,6 +27,8 @@ export interface EstadoAdmin {
   estado: 'inicial' | 'ok' | 'error';
   mensaje?: string;
   secreto?: SecretoEntrega;
+  /** Cuenta creada sin clave (la creo la supervisora): queda pendiente de que el administrador la entregue. */
+  pendiente?: { id: string; nombre: string; usuario: string };
   /** Errores por campo (clave = nombre del campo del formulario). */
   errores?: Record<string, string>;
   /** Todos los mensajes de validacion (un campo puede tener varios). */
@@ -84,34 +86,66 @@ async function correr<T>(
 
 // ---- Usuarios -----------------------------------------------------------------------------------
 
+/** Estado de error de un alta (cuenta o agencia): errores por campo, y el duplicado se marca en el campo que choca. */
+function falloDeAlta(r: { codigo: string; mensaje: string; detalle?: unknown }): EstadoAdmin {
+  const problemas = (r.detalle as { problemas?: Problema[] } | undefined)?.problemas;
+  if (r.codigo === 'VALIDACION' && problemas?.length) {
+    const errores: Record<string, string> = {};
+    for (const p of problemas) errores[p.ruta.split('.')[0] ?? 'general'] ??= p.mensaje;
+    return { estado: 'error', mensaje: 'Revisa los datos marcados.', errores, marca: Date.now() };
+  }
+  if (r.codigo === 'DUPLICADO') {
+    const campo = r.mensaje.includes('correo') ? 'email' : r.mensaje.includes('organización') ? 'nombre' : 'usuario';
+    return { estado: 'error', mensaje: r.mensaje, errores: { [campo]: r.mensaje }, marca: Date.now() };
+  }
+  return { estado: 'error', mensaje: r.mensaje, marca: Date.now() };
+}
+
 export async function crearCuentaAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
   const r = await comoResultado(async () =>
     crearCuenta(await contextoDeAccion(), {
       nombre: texto(datos, 'nombre'),
       usuario: texto(datos, 'usuario'),
-      email: textoOpcional(datos, 'email'),
       organizacionId: texto(datos, 'organizacionId'),
       rol: texto(datos, 'rol'),
       area: textoOpcional(datos, 'area'),
       encargado: textoOpcional(datos, 'encargado'),
     }),
   );
-  if (!r.ok) {
-    const problemas = (r.detalle as { problemas?: Problema[] } | undefined)?.problemas;
-    if (r.codigo === 'VALIDACION' && problemas?.length) {
-      const errores: Record<string, string> = {};
-      for (const p of problemas) errores[p.ruta.split('.')[0] ?? 'general'] ??= p.mensaje;
-      return { estado: 'error', mensaje: 'Revisa los datos marcados.', errores, marca: Date.now() };
-    }
-    if (r.codigo === 'DUPLICADO') return { estado: 'error', mensaje: r.mensaje, errores: { [r.mensaje.includes('correo') ? 'email' : 'usuario']: r.mensaje }, marca: Date.now() };
-    return { estado: 'error', mensaje: r.mensaje, marca: Date.now() };
-  }
+  if (!r.ok) return falloDeAlta(r);
   revalidatePath('/admin/usuarios');
   revalidatePath('/admin');
   return {
     estado: 'ok',
     mensaje: `Creamos la cuenta de ${r.data.nombre}. Copia el usuario y la contraseña ahora: no se vuelven a mostrar.`,
     secreto: { id: r.data.id, nombre: r.data.nombre, usuario: r.data.usuario, clave: r.data.claveTemporal, accion: 'creada' },
+    marca: Date.now(),
+  };
+}
+
+/**
+ * Agencia de aduana en un solo paso (organizacion + su cuenta). La clave solo viaja al navegador del administrador; con la
+ * supervisora la respuesta no lleva ninguna y la cuenta queda `pendiente` de entrega.
+ */
+export async function crearAgenciaAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
+  const r = await comoResultado(async () =>
+    crearAgencia(await contextoDeAccion(), { nombre: texto(datos, 'nombre'), usuario: textoOpcional(datos, 'usuario') }),
+  );
+  if (!r.ok) return falloDeAlta(r);
+  for (const ruta of ['/admin/organizaciones', '/admin/usuarios', '/admin']) revalidatePath(ruta);
+  const cuenta = { id: r.data.cuentaId, nombre: r.data.nombre, usuario: r.data.usuario };
+  if (r.data.claveTemporal) {
+    return {
+      estado: 'ok',
+      mensaje: `Creamos la agencia ${r.data.nombre} y su cuenta. Copia el usuario y la contraseña ahora: no se vuelven a mostrar.`,
+      secreto: { ...cuenta, clave: r.data.claveTemporal, accion: 'creada' },
+      marca: Date.now(),
+    };
+  }
+  return {
+    estado: 'ok',
+    mensaje: `Creamos la agencia ${r.data.nombre} y su cuenta. Está pendiente de entrega: el administrador genera y entrega la clave.`,
+    pendiente: cuenta,
     marca: Date.now(),
   };
 }
@@ -192,7 +226,7 @@ export async function cerrarSesionesUsuarioAccion(_previo: EstadoAdmin, datos: F
 
 export async function crearOrganizacionAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
   return correr(
-    (ctx) => crearOrganizacion(ctx, { nombre: texto(datos, 'nombre'), tipo: texto(datos, 'tipo') }),
+    (ctx) => crearOrganizacion(ctx, { nombre: texto(datos, 'nombre'), tipo: 'interna' }),
     () => ({ mensaje: 'Creamos la organización.' }),
     ['/admin/organizaciones', '/admin/usuarios', '/admin'],
   );

@@ -52,7 +52,7 @@ export default async function AdminOrganizacion({ params }: { params: Promise<{ 
           </span>
         }
         acciones={
-          org.activa && administra ? (
+          org.activa && administra && (!esAgencia || personas.length === 0) ? (
             <EnlaceBoton href={`/admin/usuarios/nueva?organizacion=${org.id}`}>
               <UserPlus aria-hidden className="size-4" />
               Crear cuenta para esta {esAgencia ? 'agencia' : 'área'}
@@ -124,7 +124,7 @@ export default async function AdminOrganizacion({ params }: { params: Promise<{ 
                 { id: 'nombre', encabezado: 'Nombre', principal: true, celda: (u) => <span className="whitespace-normal">{nombreVisible(u.nombre)}</span> },
                 { id: 'usuario', encabezado: 'Usuario', ocultarBajo: 'md', celda: (u) => <span className="break-all font-mono text-sm text-tinta-suave">{u.username ?? 'sin usuario'}</span> },
                 { id: 'rol', encabezado: 'Rol', celda: (u) => <InsigniaRol rol={u.rol} /> },
-                { id: 'estado', encabezado: 'Estado', celda: (u) => <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} /> },
+                { id: 'estado', encabezado: 'Estado', celda: (u) => <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} sinClave={u.sinClave} /> },
                 { id: 'ingreso', encabezado: 'Último ingreso', ocultarBajo: 'lg', celda: (u) => <span className="text-sm text-tinta-suave">{hace(u.ultimoIngreso, ahora)}</span> },
               ]}
               vacio={<EstadoVacio compacto titulo="Aún no hay personas" descripcion={administra ? 'Crea la primera cuenta y entrégale su usuario y contraseña.' : 'Todavía no tiene cuentas.'} />}

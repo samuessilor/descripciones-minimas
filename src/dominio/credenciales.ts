@@ -30,6 +30,21 @@ export function validarClaveNueva(clave: string): string | null {
   return null;
 }
 
+/**
+ * Usuario sugerido para la cuenta de una agencia de aduana: el nombre de la empresa en minusculas, sin tildes y con guiones,
+ * mas `.aduana` (ej. «Agencia Magnum S.A.» -> `agencia-magnum-s-a.aduana`). Siempre cumple `USUARIO_REGEX`.
+ */
+export function usuarioSugeridoAgencia(nombreEmpresa: string): string {
+  const base = nombreEmpresa
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .slice(0, 33)
+    .replace(/^-+|-+$/g, '');
+  return `${base || 'agencia'}.aduana`;
+}
+
 /** El correo de una cuenta que no tiene uno propio (cuentas de area): dominio reservado, nunca recibe nada. */
 export function correoSinCorreo(usuario: string): string {
   return `${usuario}@sin-correo.invalid`;

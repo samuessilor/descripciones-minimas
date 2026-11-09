@@ -150,7 +150,7 @@ export default async function AdminUsuarios({ searchParams }: { searchParams: Pr
           { id: 'usuario', encabezado: 'Usuario', ocultarBajo: 'lg', celda: (u) => <span className="break-all font-mono text-sm text-tinta-suave">{u.username ?? 'sin usuario'}</span> },
           { id: 'rol', encabezado: 'Rol', celda: (u) => <InsigniaRol rol={u.rol} /> },
           { id: 'org', encabezado: 'Organización', ocultarBajo: 'md', celda: (u) => nombreVisible(u.organizacion) },
-          { id: 'estado', encabezado: 'Estado', celda: (u) => <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} /> },
+          { id: 'estado', encabezado: 'Estado', celda: (u) => <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} sinClave={u.sinClave} /> },
           { id: 'ingreso', encabezado: 'Último ingreso', ocultarBajo: 'lg', celda: (u) => <span className="text-sm text-tinta-suave">{hace(u.ultimoIngreso)}</span> },
         ]}
         tarjeta={(u) => (
@@ -161,7 +161,7 @@ export default async function AdminUsuarios({ searchParams }: { searchParams: Pr
             </div>
             <p className="break-all font-mono text-sm text-tinta-suave">{u.username ?? 'sin usuario'}</p>
             <p className="text-sm text-tinta-suave">{nombreVisible(u.organizacion)}</p>
-            <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} />
+            <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} sinClave={u.sinClave} />
           </div>
         )}
         vacio={

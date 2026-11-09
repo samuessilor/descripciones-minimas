@@ -14,7 +14,12 @@ export type TipoNotificacion =
   | 'reabierta'
   | 'reapertura_solicitada'
   | 'cambio_en_mi_campo'
-  | 'comentario';
+  | 'comentario'
+  /** Una supervisora creo una cuenta: el administrador debe generar y entregar su clave. No habla de una ficha. */
+  | 'cuenta_creada';
+
+/** Tipos que no llevan ficha (`referencia_id` NULL); el CHECK `notificacion_referencia_coherente` dice lo mismo. */
+const SIN_REFERENCIA: ReadonlySet<TipoNotificacion> = new Set(['cuenta_creada']);
 
 /**
  * Tipos que se AGRUPAN por defecto: repetir la misma accion sobre la misma ficha (corregir la respuesta del area,
@@ -45,13 +50,20 @@ export async function crearNotificacion(
   n: {
     usuarioId: string;
     tipo: TipoNotificacion;
-    referenciaId: string;
+    /** `null` solo en los tipos sin ficha (`cuenta_creada`); en los demas es obligatoria. */
+    referenciaId: string | null;
+    /** Solo en `cuenta_creada`: la cuenta que hay que entregar. */
+    cuentaId?: string | null;
     titulo: string;
     asignacionId?: string | null;
     creadaEn?: Date;
     agrupar?: boolean;
   },
 ): Promise<string> {
+  const cuentaId = n.cuentaId ?? null;
+  if (SIN_REFERENCIA.has(n.tipo) !== (n.referenciaId === null) || SIN_REFERENCIA.has(n.tipo) !== (cuentaId !== null)) {
+    throw new Error(SIN_REFERENCIA.has(n.tipo) ? `El aviso ${n.tipo} lleva una cuenta y no una ficha.` : `El aviso ${n.tipo} exige una ficha.`);
+  }
   const asignacionId = n.asignacionId ?? null;
   if (n.agrupar ?? AGRUPABLES.has(n.tipo)) {
     const [previa] = await ej
@@ -61,7 +73,7 @@ export async function crearNotificacion(
         and(
           eq(notificacion.usuarioId, n.usuarioId),
           eq(notificacion.tipo, n.tipo),
-          eq(notificacion.referenciaId, n.referenciaId),
+          n.referenciaId ? eq(notificacion.referenciaId, n.referenciaId) : isNull(notificacion.referenciaId),
           asignacionId ? eq(notificacion.asignacionId, asignacionId) : isNull(notificacion.asignacionId),
           isNull(notificacion.leidaEn),
         ),
@@ -85,6 +97,7 @@ export async function crearNotificacion(
       usuarioId: n.usuarioId,
       tipo: n.tipo,
       referenciaId: n.referenciaId,
+      cuentaId,
       titulo: n.titulo,
       asignacionId,
       ...(n.creadaEn ? { creadaEn: n.creadaEn } : {}),

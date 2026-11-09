@@ -3,7 +3,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { crearOrganizacionAccion } from '@/app/acciones/admin';
 import { FormularioAccion } from '@/componentes/admin/acciones';
-import { CampoAdmin, RadiosAdmin } from '@/componentes/admin/campos';
+import { FormularioNuevaAgencia } from '@/componentes/admin/FormularioNuevaAgencia';
+import { CampoAdmin } from '@/componentes/admin/campos';
 import { plural } from '@/componentes/admin/formato';
 import { Seccion } from '@/componentes/admin/piezas';
 import { Aviso } from '@/componentes/ui/aviso';
@@ -47,7 +48,7 @@ function TablaOrganizaciones({ filas, agencia }: { filas: FilaOrganizacionAdmin[
           compacto
           icono={Building2}
           titulo={agencia ? 'Todavía no hay agencias de aduana' : 'Todavía no hay organizaciones internas'}
-          descripcion={agencia ? 'Crea la primera para poder crear su cuenta y enviarle referencias.' : 'Crea la organización de EssilorLuxottica; el área de cada cuenta se elige al crearla.'}
+          descripcion={agencia ? 'Crea la primera: se crea con su cuenta y queda lista para enviarle referencias.' : 'Crea la organización de EssilorLuxottica; el área de cada cuenta se elige al crearla.'}
         />
       }
     />
@@ -88,19 +89,18 @@ export default async function AdminOrganizaciones() {
       ) : null}
 
       <div className="space-y-8">
-        <Seccion id="nueva" titulo="Nueva organización" descripcion="Para crear una cuenta nueva, primero existe su organización. Una empresa de aduana nueva: créala aquí como agencia, ábrela y crea su cuenta general.">
+        <Seccion
+          id="nueva-agencia"
+          titulo="Nueva agencia de aduana"
+          descripcion="Una agencia es una empresa con una sola cuenta. Escribe el nombre de la empresa: creamos la agencia y su cuenta de una vez, lista para enviarle referencias."
+        >
+          <FormularioNuevaAgencia />
+        </Seccion>
+
+        <Seccion id="nueva" titulo="Nueva área interna" descripcion="Para personas de EssilorLuxottica. El área de cada cuenta (Consumibles, Mantenimiento…) se elige al crear la cuenta.">
           <FormularioAccion accion={crearOrganizacionAccion} enviar="Crear organización" enviando="Creando…" reiniciar className="space-y-5">
-            <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:items-start">
-              <CampoAdmin nombre="nombre" etiqueta="Nombre" ayuda="Ejemplo: EssilorLuxottica (interna) o Agencia Magnum (agencia de aduana)." required maxLength={120} />
-              <RadiosAdmin
-                leyenda="Tipo"
-                nombre="tipo"
-                valorInicial="interna"
-                opciones={[
-                  { valor: 'interna', etiqueta: 'Área interna', descripcion: 'Personas de EssilorLuxottica. Ven todas las referencias; su área (Consumibles, Mantenimiento…) se elige en cada usuario.' },
-                  { valor: 'agencia', etiqueta: 'Agencia de aduana', descripcion: 'Una por empresa de aduana, con una cuenta general. Solo ven lo que se les envía y solo tienen rol Aduana.' },
-                ]}
-              />
+            <div className="max-w-xl">
+              <CampoAdmin nombre="nombre" etiqueta="Nombre" ayuda="Ejemplo: EssilorLuxottica." required maxLength={120} />
             </div>
           </FormularioAccion>
         </Seccion>

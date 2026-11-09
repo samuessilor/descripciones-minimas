@@ -22,6 +22,7 @@ const ETIQUETA_TIPO: Record<string, string> = {
   reapertura_solicitada: 'Reapertura',
   cambio_en_mi_campo: 'Cambio en tu campo',
   comentario: 'Comentario',
+  cuenta_creada: 'Cuenta nueva',
 };
 
 /** Una notificacion de la pagina completa: enlace a la ficha que la marca como leida al abrirla. */

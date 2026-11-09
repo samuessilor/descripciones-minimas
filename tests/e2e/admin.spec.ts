@@ -237,16 +237,26 @@ test('desactivar con pendientes obliga a reasignar y cierra la sesion al instant
 test('organizaciones: crear un area, una agencia y retirar el acceso de una agencia a una referencia', async ({ page, request }) => {
   await entrarComo(page, request, ADMIN);
   await page.goto('/admin/organizaciones');
-  await page.getByLabel('Nombre', { exact: true }).fill(`Agencia Globalco ${SUFIJO}`);
-  await page.getByRole('radio', { name: /^Agencia de aduana/ }).check();
+  // Agencia en un solo paso: la organizacion y su cuenta; el administrador ve la clave una vez.
+  await page.getByLabel('Nombre de la empresa').fill(`Agencia Globalco ${SUFIJO}`);
+  await expect(page.getByLabel('Usuario', { exact: true })).toHaveValue(/^agencia-globalco-.*\.aduana$/);
+  await pulsar(page.getByRole('button', { name: 'Crear agencia' }));
+  await expect(page.getByRole('heading', { name: `Agencia creada: Agencia Globalco ${SUFIJO}` })).toBeVisible();
+  expect((await page.getByTestId('credencial-contraseña').innerText()).trim()).toMatch(/^[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}$/);
+
+  // Nombre repetido: error en el campo, sin crear otra.
+  await pulsar(page.getByRole('button', { name: 'Crear otra agencia' }));
+  await page.getByLabel('Nombre de la empresa').fill(`Agencia Globalco ${SUFIJO}`);
+  await page.getByLabel('Usuario', { exact: true }).fill(`otra-${SUFIJO.toLowerCase()}.aduana`);
+  await pulsar(page.getByRole('button', { name: 'Crear agencia' }));
+  await expect(page.getByText('Ya existe una organización con ese nombre.').first()).toBeVisible();
+
+  // Un area interna se crea solo con el nombre.
+  await page.getByLabel('Nombre', { exact: true }).fill(`Area Nueva ${SUFIJO}`);
   await pulsar(page.getByRole('button', { name: 'Crear organización' }));
   await expect(aviso(page, 'Creamos la organización.')).toBeVisible();
   await expect(page.getByRole('link', { name: `Abrir Agencia Globalco ${SUFIJO}` })).toBeVisible();
-
-  // Nombre repetido: error en el campo.
-  await page.getByLabel('Nombre', { exact: true }).fill(`Agencia Globalco ${SUFIJO}`);
-  await pulsar(page.getByRole('button', { name: 'Crear organización' }));
-  await expect(page.getByText('Ya existe una organización con ese nombre.').first()).toBeVisible();
+  await expect(page.getByRole('link', { name: `Abrir Area Nueva ${SUFIJO}` })).toBeVisible();
 
   // Una organizacion con gente activa no se desactiva; se explica por que.
   await page.getByRole('link', { name: 'Abrir EssilorLuxottica [DESARROLLO]' }).click();

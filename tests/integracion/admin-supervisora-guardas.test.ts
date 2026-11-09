@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { account, usuario } from '@/db/esquema';
 
 vi.mock('@/dominio/permisos', async (original) => {
-  const real = await original<typeof import('@/dominio/permisos')>();
+  const real = await original<PermisosReales>();
   return {
     ...real,
     puede: ((actor: { rol: string }, accion: string, ctx?: never) =>
@@ -19,6 +19,8 @@ vi.mock('@/dominio/permisos', async (original) => {
 import { cambiarOrganizacion, cambiarRol, crearCuenta, desactivarUsuario, reactivarUsuario, restablecerClave } from '@/server/acciones/usuarios';
 import { cerrarSesionesDeUsuario, editarUsuario } from '@/server/acciones/usuarios-admin';
 import type { Actor, Contexto } from '@/server/politicas/actor';
+import type * as PermisosReales_ from '@/dominio/permisos';
+type PermisosReales = typeof PermisosReales_;
 import { crearSupervisora, nuevoEscenario, rechazaCon, type Escenario } from './ayudas';
 
 let e: Escenario;

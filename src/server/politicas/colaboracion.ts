@@ -444,11 +444,12 @@ export interface NotificacionVista {
   id: string;
   tipo: string;
   titulo: string;
-  referenciaId: string;
+  /** `null` en los avisos que no hablan de una ficha (`cuenta_creada`). */
+  referenciaId: string | null;
   asignacionId: string | null;
   leidaEn: string | null;
   creadaEn: string;
-  /** Enlace interno a la ficha. */
+  /** Enlace interno a lo que el aviso trata (la ficha, o la cuenta si es `cuenta_creada`). */
   href: string;
 }
 
@@ -465,6 +466,12 @@ export async function contarNoLeidasDe(ej: Ejecutor, actor: Actor): Promise<numb
     .from(notificacion)
     .where(and(eq(notificacion.usuarioId, actor.usuarioId), isNull(notificacion.leidaEn)));
   return r?.n ?? 0;
+}
+
+/** A donde lleva un aviso: a su ficha, o a la cuenta que hay que entregar (`cuenta_creada`). */
+function hrefDeAviso(n: { referenciaId: string | null; cuentaId: string | null }): string {
+  if (n.referenciaId) return `/referencias/${n.referenciaId}`;
+  return n.cuentaId ? `/admin/usuarios/${n.cuentaId}` : '/notificaciones';
 }
 
 export async function notificacionesDe(
@@ -500,7 +507,7 @@ export async function notificacionesDe(
       asignacionId: n.asignacionId,
       leidaEn: n.leidaEn ? n.leidaEn.toISOString() : null,
       creadaEn: n.creadaEn.toISOString(),
-      href: `/referencias/${n.referenciaId}`,
+      href: hrefDeAviso(n),
     }),
   );
   const ultima = items[items.length - 1];

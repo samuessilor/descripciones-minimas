@@ -23,7 +23,7 @@ interface Org {
 }
 
 /**
- * Crear una cuenta (10.4): nombre, usuario, organizacion, rol y area. La contrasena la genera el servidor y se muestra
+ * Crear una cuenta suelta (solo el administrador): organizacion, nombre y usuario; rol, area y encargado solo si aplican. La contrasena la genera el servidor y se muestra
  * UNA vez. Una cuenta de area (Consumibles, Mantenimiento...) es la forma normal: a esa cuenta se le envian las
  * referencias de su area. Si la organizacion es una agencia, el unico rol es `aduana` (D-28).
  */
@@ -100,27 +100,6 @@ export function FormularioCrearCuenta({ organizaciones, organizacionInicial }: {
     >
       {(estado) => (
         <>
-          <div className="grid gap-5 sm:grid-cols-2">
-            <CampoFormulario etiqueta={esAgencia ? 'Nombre de la cuenta (ej. Agencia X)' : 'Nombre de la cuenta (ej. Área Consumibles)'} error={estado.errores?.nombre}>
-              {(p) => <Campo {...p} name="nombre" autoComplete="off" required maxLength={200} />}
-            </CampoFormulario>
-            <CampoFormulario etiqueta="Usuario" ayuda="Con esto entra. Ej.: consumibles.essilorluxottica" error={estado.errores?.usuario}>
-              {(p) => (
-                <Campo
-                  {...p}
-                  name="usuario"
-                  autoComplete="off"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  required
-                  maxLength={40}
-                  value={usuario}
-                  onChange={(e) => setUsuario(normalizarUsuario(e.target.value))}
-                />
-              )}
-            </CampoFormulario>
-          </div>
-
           <CampoFormulario etiqueta="Organización" error={estado.errores?.organizacionId}>
             {(p) => (
               <Seleccion {...p} name="organizacionId" value={orgId} onChange={(e) => setOrgId(e.target.value)}>
@@ -146,13 +125,30 @@ export function FormularioCrearCuenta({ organizaciones, organizacionInicial }: {
             )}
           </CampoFormulario>
 
+          <div className="grid gap-5 sm:grid-cols-2">
+            <CampoFormulario etiqueta={esAgencia ? 'Nombre de la cuenta (ej. Agencia X)' : 'Nombre de la cuenta (ej. Área Consumibles)'} error={estado.errores?.nombre}>
+              {(p) => <Campo {...p} name="nombre" autoComplete="off" required maxLength={200} />}
+            </CampoFormulario>
+            <CampoFormulario etiqueta="Usuario" ayuda="Con esto entra. Ej.: consumibles.essilorluxottica" error={estado.errores?.usuario}>
+              {(p) => (
+                <Campo
+                  {...p}
+                  name="usuario"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  required
+                  maxLength={40}
+                  value={usuario}
+                  onChange={(e) => setUsuario(normalizarUsuario(e.target.value))}
+                />
+              )}
+            </CampoFormulario>
+          </div>
+
           {esAgencia ? (
-            <div className="space-y-2">
-              <input type="hidden" name="rol" value="aduana" />
-              <Aviso tipo="info" titulo="Rol: Aduana">
-                Esta es la cuenta general de la agencia. Solo tiene el rol de aduana y ve únicamente las referencias que le envíen.
-              </Aviso>
-            </div>
+            // Una agencia solo tiene el rol de aduana (D-28): no hay nada que elegir.
+            <input type="hidden" name="rol" value="aduana" />
           ) : (
             <GrupoRadios
               leyenda="Rol"
@@ -164,39 +160,25 @@ export function FormularioCrearCuenta({ organizaciones, organizacionInicial }: {
             />
           )}
 
-          {!esAgencia ? (
-            <CampoFormulario
-              etiqueta="Área"
-              ayuda={
-                areaObligatoria
-                  ? 'Obligatoria: la cuenta es del área; ve en «Para mí» lo de esa área y recibe lo que le envíen.'
-                  : 'Opcional para este rol.'
-              }
-              opcional={!areaObligatoria}
-              error={estado.errores?.area}
-            >
-              {(p) => (
-                <Seleccion {...p} name="area" defaultValue="" className="max-w-xs" required={areaObligatoria}>
-                  <option value="">{areaObligatoria ? 'Elige el área…' : 'Sin área'}</option>
-                  {AREAS.map((a) => (
-                    <option key={a} value={a}>
-                      {nombreDeArea(a)}
-                    </option>
-                  ))}
-                </Seleccion>
-              )}
-            </CampoFormulario>
+          {areaObligatoria ? (
+            <div className="grid gap-5 sm:grid-cols-2">
+              <CampoFormulario etiqueta="Área" ayuda="La cuenta es del área: ve en «Para mí» lo de esa área y recibe lo que le envíen." error={estado.errores?.area}>
+                {(p) => (
+                  <Seleccion {...p} name="area" defaultValue="" required>
+                    <option value="">Elige el área…</option>
+                    {AREAS.map((a) => (
+                      <option key={a} value={a}>
+                        {nombreDeArea(a)}
+                      </option>
+                    ))}
+                  </Seleccion>
+                )}
+              </CampoFormulario>
+              <CampoFormulario etiqueta="Encargado del área" ayuda="Opcional. Quién lleva hoy la cuenta." opcional error={estado.errores?.encargado}>
+                {(p) => <Campo {...p} name="encargado" autoComplete="off" maxLength={80} />}
+              </CampoFormulario>
+            </div>
           ) : null}
-
-          {!esAgencia ? (
-            <CampoFormulario etiqueta="Encargado del área" ayuda="Opcional. Quién lleva hoy la cuenta; la cuenta sigue siendo del área." opcional error={estado.errores?.encargado}>
-              {(p) => <Campo {...p} name="encargado" autoComplete="off" maxLength={80} />}
-            </CampoFormulario>
-          ) : null}
-
-          <CampoFormulario etiqueta="Correo de contacto" ayuda="No se usa para entrar ni para avisos. Déjalo vacío en las cuentas de área." opcional error={estado.errores?.email}>
-            {(p) => <Campo {...p} name="email" type="email" inputMode="email" autoComplete="off" maxLength={254} />}
-          </CampoFormulario>
 
           <p className="text-sm text-tinta-suave">Al crear la cuenta generamos una contraseña temporal y te la mostramos una vez para que se la entregues.</p>
         </>

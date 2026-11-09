@@ -5,11 +5,15 @@
 import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { asignacion, organizacion, referencia, usuario } from '@/db/esquema';
-import type { Ejecutor } from '@/db/tipos';
+import type { Ejecutor, Tx } from '@/db/tipos';
+import { normalizarUsuario, usuarioSugeridoAgencia, validarUsuario } from '@/dominio/credenciales';
+import { puede } from '@/dominio/permisos';
 import { auditar } from '../auditoria';
+import { generarClave, hashearClave } from '../claves';
 import { ahoraDe, type Contexto } from '../politicas/actor';
 import { exigir } from '../politicas/exigir';
 import { ErrorAccion, esViolacionUnica } from './resultado';
+import { insertarCuenta, traducirChoqueCuenta } from './usuarios';
 import { parsear, textoLimpio } from './validacion';
 
 /**
@@ -33,30 +37,81 @@ export const entradaCrearOrganizacion = z.object({
   tipo: z.enum(['interna', 'agencia']),
 });
 
+/** Crea la organizacion y deja su auditoria, dentro de la transaccion de quien llama. */
+async function insertarOrganizacion(ctx: Contexto, tx: Tx, nombre: string, tipo: 'interna' | 'agencia', ahora: Date): Promise<string> {
+  await exigirNombreLibre(tx, nombre);
+  const [o] = await tx.insert(organizacion).values({ nombre, tipo, creadaEn: ahora }).returning({ id: organizacion.id });
+  if (!o) throw new ErrorAccion('ERROR_INTERNO', 'No se pudo crear la organización.');
+  await auditar(tx, {
+    usuarioId: ctx.actor.usuarioId,
+    accion: 'crear_organizacion',
+    entidad: 'organizacion',
+    entidadId: o.id,
+    detalle: { nombre, tipo },
+    ip: ctx.ip,
+    creadoEn: ahora,
+  });
+  return o.id;
+}
+
 export async function crearOrganizacion(ctx: Contexto, entrada: unknown): Promise<{ id: string }> {
   exigir(ctx.actor, 'supervisar');
   const e = parsear(entradaCrearOrganizacion, entrada);
   const ahora = ahoraDe(ctx);
   try {
+    return await ctx.db.transaction(async (tx) => ({ id: await insertarOrganizacion(ctx, tx, e.nombre, e.tipo, ahora) }));
+  } catch (err) {
+    if (esViolacionUnica(err)) throw new ErrorAccion('DUPLICADO', 'Ya existe una organización con ese nombre.');
+    throw err;
+  }
+}
+
+export const entradaCrearAgencia = z.object({
+  nombre: nombreOrg(),
+  /** Opcional: si falta, se usa el sugerido (`<empresa>.aduana`). */
+  usuario: z.string().transform(normalizarUsuario).nullish(),
+});
+
+export interface ResultadoCrearAgencia {
+  organizacionId: string;
+  cuentaId: string;
+  nombre: string;
+  usuario: string;
+  /** Solo si la crea el administrador. Con la supervisora es `null`: la cuenta queda pendiente de entrega. */
+  claveTemporal: string | null;
+}
+
+/**
+ * Una agencia de aduana en UN solo paso: la organizacion y su unica cuenta (rol aduana, nombre = el de la empresa) en una
+ * misma transaccion; si falla la cuenta no queda la organizacion. La clave la ve solo el administrador: si actua la
+ * supervisora, el servidor no genera ninguna, la cuenta queda sin credencial (no puede entrar) y el administrador recibe
+ * el aviso para generarla con «Restablecer contraseña».
+ */
+export async function crearAgencia(ctx: Contexto, entrada: unknown): Promise<ResultadoCrearAgencia> {
+  exigir(ctx.actor, 'supervisar');
+  const e = parsear(entradaCrearAgencia, entrada);
+  const usuarioCuenta = e.usuario || usuarioSugeridoAgencia(e.nombre);
+  const problema = validarUsuario(usuarioCuenta);
+  if (problema) throw new ErrorAccion('VALIDACION', 'Revisa los datos marcados.', { problemas: [{ ruta: 'usuario', mensaje: problema }] });
+  const ahora = ahoraDe(ctx);
+
+  const claveTemporal = puede(ctx.actor, 'administrar') ? generarClave() : null;
+  const hash = claveTemporal ? await hashearClave(claveTemporal) : null;
+  try {
     return await ctx.db.transaction(async (tx) => {
-      await exigirNombreLibre(tx, e.nombre);
-      const [o] = await tx
-        .insert(organizacion)
-        .values({ nombre: e.nombre, tipo: e.tipo, creadaEn: ahora })
-        .returning({ id: organizacion.id });
-      if (!o) throw new ErrorAccion('ERROR_INTERNO', 'No se pudo crear la organización.');
-      await auditar(tx, {
-        usuarioId: ctx.actor.usuarioId,
-        accion: 'crear_organizacion',
-        entidad: 'organizacion',
-        entidadId: o.id,
-        detalle: { nombre: e.nombre, tipo: e.tipo },
-        ip: ctx.ip,
-        creadoEn: ahora,
-      });
-      return { id: o.id };
+      const organizacionId = await insertarOrganizacion(ctx, tx, e.nombre, 'agencia', ahora);
+      const cuentaId = await insertarCuenta(
+        ctx,
+        tx,
+        { nombre: e.nombre, usuario: usuarioCuenta, organizacion: { id: organizacionId, nombre: e.nombre, tipo: 'agencia' }, rol: 'aduana' },
+        hash,
+        ahora,
+      );
+      return { organizacionId, cuentaId, nombre: e.nombre, usuario: usuarioCuenta, claveTemporal };
     });
   } catch (err) {
+    const traducido = traducirChoqueCuenta(err, false);
+    if (traducido !== err) throw traducido;
     if (esViolacionUnica(err)) throw new ErrorAccion('DUPLICADO', 'Ya existe una organización con ese nombre.');
     throw err;
   }

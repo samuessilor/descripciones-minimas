@@ -56,9 +56,10 @@ export const notificacion = pgTable(
       .notNull()
       .references(() => usuario.id),
     tipo: text('tipo').notNull(),
-    referenciaId: uuid('referencia_id')
-      .notNull()
-      .references(() => referencia.id),
+    /** NULL solo en los avisos que no hablan de una ficha (`cuenta_creada`); lo exige el CHECK de coherencia. */
+    referenciaId: uuid('referencia_id').references(() => referencia.id),
+    /** Solo en `cuenta_creada`: la cuenta cuya clave hay que entregar (el aviso lleva a su ficha). */
+    cuentaId: uuid('cuenta_id').references(() => usuario.id),
     asignacionId: uuid('asignacion_id').references(() => asignacion.id),
     titulo: text('titulo').notNull(),
     leidaEn: timestamp('leida_en', { withTimezone: true }),
@@ -69,7 +70,9 @@ export const notificacion = pgTable(
     index('notificacion_referencia_idx').on(t.referenciaId),
     check(
       'notificacion_tipo_valido',
-      sql`${t.tipo} in ('asignacion','recordatorio','respuesta','clasificada','reabierta','reapertura_solicitada','cambio_en_mi_campo','comentario')`,
+      sql`${t.tipo} in ('asignacion','recordatorio','respuesta','clasificada','reabierta','reapertura_solicitada','cambio_en_mi_campo','comentario','cuenta_creada')`,
     ),
+    check('notificacion_referencia_coherente', sql`(${t.tipo} = 'cuenta_creada') = (${t.referenciaId} is null)`),
+    check('notificacion_cuenta_coherente', sql`(${t.tipo} = 'cuenta_creada') = (${t.cuentaId} is not null)`),
   ],
 );

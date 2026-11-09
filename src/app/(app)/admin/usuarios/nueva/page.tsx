@@ -16,7 +16,7 @@ export default async function CrearCuenta({ searchParams }: { searchParams: Prom
     <ContenedorLectura>
       <EncabezadoPagina
         titulo="Crear cuenta"
-        descripcion="No hay registro abierto: entra solo quien tiene una cuenta creada aquí. Lo normal es una cuenta por área y una por agencia de aduana; se crea con un usuario y una contraseña temporal que tú entregas."
+        descripcion="No hay registro abierto: entra solo quien tiene una cuenta creada aquí. Una cuenta por área; las agencias de aduana se crean completas desde Organizaciones. Se crea con un usuario y una contraseña temporal que tú entregas."
         migas={[{ etiqueta: 'Usuarios', href: '/admin/usuarios' }, { etiqueta: 'Crear cuenta' }]}
       />
       <FormularioCrearCuenta

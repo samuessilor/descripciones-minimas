@@ -52,7 +52,7 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
         <span className="flex flex-wrap items-center gap-2">
           <InsigniaRol rol={u.rol} />
           <InsigniaTipoOrg tipo={u.organizacionTipo} />
-          <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} />
+          <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} sinClave={u.sinClave} />
         </span>
       }
     />
@@ -249,9 +249,11 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
               </Datos>
               {u.activo ? (
                 <div className="flex flex-col items-stretch gap-2">
-                  <RestablecerClave usuarioId={u.id} nombre={nombreVisible(u.nombre)} variante={sinIngresar ? 'primario' : 'secundario'} />
+                  <RestablecerClave usuarioId={u.id} nombre={nombreVisible(u.nombre)} variante={sinIngresar || u.sinClave ? 'primario' : 'secundario'} />
                   <p className="text-sm text-tinta-suave">
-                    {sinIngresar
+                    {u.sinClave
+                      ? 'Pendiente de entrega: la cuenta todavía no tiene contraseña y no puede entrar. Genera una temporal para entregársela.'
+                      : sinIngresar
                       ? 'Nunca ha entrado. Genera una contraseña temporal para entregársela.'
                       : 'Genera una contraseña nueva, cierra sus sesiones y te la muestra una vez. La anterior deja de servir.'}
                   </p>
