@@ -71,14 +71,19 @@ export function parsearSecciones(texto: string | null | undefined): Seccion[] {
   return SECCIONES.filter((s) => pedidas.has(s));
 }
 
+/** Asignaciones creadas desde esta fecha ya saben que Producto es una seccion aparte (reunion 2026-11-09). */
+export const CORTE_PAIS_FABRICANTE_PROVEEDOR = new Date('2026-11-10T00:00:00.000Z');
+
 /**
  * Las secciones que una asignacion cubre de verdad. Pais de origen, fabricante y proveedor pasaron de Detalle a Producto
- * (reunion 2026-11-09): quien tenia pendiente Detalle sigue cubriendo tambien Producto, para que esos tres campos no
- * queden sin dueno en las asignaciones ya hechas. Se resuelve al leer; no se reescribe nada.
+ * (reunion 2026-11-09): quien tenia pendiente Detalle antes del corte sigue cubriendo tambien Producto, para que esos
+ * tres campos no queden sin dueno en las asignaciones ya hechas. Las posteriores se leen tal cual. Se resuelve al leer;
+ * no se reescribe nada.
  */
-export function seccionesCubiertas(texto: string | null | undefined): Seccion[] {
+export function seccionesCubiertas(texto: string | null | undefined, creadaEn?: Date | null): Seccion[] {
   const elegidas = parsearSecciones(texto);
-  return elegidas.includes('detalle') && !elegidas.includes('producto') ? ['producto', ...elegidas] : elegidas;
+  const antigua = !!creadaEn && creadaEn < CORTE_PAIS_FABRICANTE_PROVEEDOR;
+  return antigua && elegidas.includes('detalle') && !elegidas.includes('producto') ? ['producto', ...elegidas] : elegidas;
 }
 
 /** Lo que se guarda: nulo si no se eligio nada o se eligieron las tres (= toda su parte). */
@@ -88,9 +93,9 @@ export function textoDeSecciones(lista: readonly Seccion[]): string | null {
 }
 
 /** Partes que tiene pendientes una persona segun su asignacion: la aduana siempre su bloque; el area, las elegidas o las tres. */
-export function partesDeAsignacion(secciones: string | null | undefined, rolDestino: Rol): ParteFicha[] {
+export function partesDeAsignacion(secciones: string | null | undefined, rolDestino: Rol, creadaEn?: Date | null): ParteFicha[] {
   if (rolDestino === 'aduana') return ['aduana'];
-  const elegidas = seccionesCubiertas(secciones);
+  const elegidas = seccionesCubiertas(secciones, creadaEn);
   return elegidas.length > 0 ? elegidas : [...SECCIONES];
 }
 

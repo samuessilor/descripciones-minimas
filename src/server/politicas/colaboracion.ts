@@ -80,7 +80,7 @@ function completitudDe(tipo: TipoProducto, datos: FilaReferencia['datos']): Comp
  * Que le falta a la ficha segun lo que se le pidio a la persona (una frase corta). `secciones` es la de su
  * asignacion: si se le pidieron secciones concretas, solo se nombran esas (nunca la parte de otra persona).
  */
-export function describirFalta(c: Completitud, pedido: string | null, estado: EstadoFicha, secciones: string | null = null): string | null {
+export function describirFalta(c: Completitud, pedido: string | null, estado: EstadoFicha, secciones: string | null = null, desde: Date | null = null): string | null {
   if (estado === 'CLASIFICADA') return 'Ya está clasificada';
   if (pedido === 'clasificar') {
     // La clasificacion finalizada es el cierre, no un dato que falte; la respuesta del area la espera la aduana.
@@ -94,7 +94,7 @@ export function describirFalta(c: Completitud, pedido: string | null, estado: Es
       ? `Te pidieron información · faltan ${plural(c.area.faltan, 'campo', 'campos')} del área`
       : 'Te pidieron información: lee el mensaje';
   }
-  const propias = seccionesCubiertas(secciones);
+  const propias = seccionesCubiertas(secciones, desde);
   const seccion = (propias.length > 0 ? propias : SECCIONES).find((s) => c.secciones[s].estado === 'amarillo');
   if (seccion) return `Falta: ${ETIQUETA_SECCION[seccion]} (${plural(c.secciones[seccion].faltan, 'campo', 'campos')})`;
   // Lo suyo ya esta en verde: la asignacion sigue abierta hasta que marque «Listo por mi parte».
@@ -229,7 +229,7 @@ export async function bandejaParaMiDe(ej: Ejecutor, actor: Actor, ahora: Date, l
       diasEnGestion: diasEnGestion({ fechaSolicitud: f.fechaSolicitud, clasificadaEn: f.clasificadaEn, ahora, diasPausa: f.diasPausa }),
       color,
       etiqueta: etiquetaColor(color),
-      falta: describirFalta(c, f.pedido, estado, f.secciones),
+      falta: describirFalta(c, f.pedido, estado, f.secciones, f.desde),
     };
   });
   // Las de su area que nadie tiene en la mano (C1): salen aunque nadie se las haya enviado.

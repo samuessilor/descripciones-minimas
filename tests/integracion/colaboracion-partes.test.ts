@@ -90,7 +90,7 @@ describe('partes de la ficha', () => {
     expect(por?.especificaciones[0]?.dias).toBe(3);
   });
 
-  it('una asignacion de solo Detalle tambien cubre Producto (pais, fabricante y proveedor pasaron a Producto)', async () => {
+  it('una asignacion anterior al corte de solo Detalle tambien cubre Producto (pais, fabricante y proveedor pasaron a Producto)', async () => {
     const id = await nuevaFicha(e, { codigo: 'PAR-0005' });
     await enviarA(e.ctx(e.admin, T0), { referenciaId: id, destinatarios: [{ usuarioId: e.edward.usuarioId, secciones: ['detalle'] }] });
     const por = (await responsablesPorParte(e.db, e.admin, [id], T0)).get(id);
@@ -99,6 +99,15 @@ describe('partes de la ficha', () => {
     expect(por?.especificaciones).toHaveLength(0);
     // Lo guardado no se reescribe: sigue diciendo «detalle».
     expect((await asignacionesDe(e.db, id))[0]?.secciones).toBe('detalle');
+  });
+
+  it('una asignacion nueva de solo Detalle no se vuelve responsable de Producto', async () => {
+    const id = await nuevaFicha(e, { codigo: 'PAR-0006' });
+    const despues = new Date('2026-11-20T15:00:00.000Z');
+    await enviarA(e.ctx(e.admin, despues), { referenciaId: id, destinatarios: [{ usuarioId: e.edward.usuarioId, secciones: ['detalle'] }] });
+    const por = (await responsablesPorParte(e.db, e.admin, [id], despues)).get(id);
+    expect(por?.producto).toHaveLength(0);
+    expect(por?.detalle.map((r) => r.nombre)).toEqual(['Edward']);
   });
 });
 

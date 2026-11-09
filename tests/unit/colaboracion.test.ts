@@ -152,13 +152,21 @@ describe('describirFalta: la frase de «Para mí» para la aduana', () => {
   });
 });
 
-describe('partesDeAsignacion: asignaciones antiguas de Detalle tras mover pais, fabricante y proveedor a Producto', () => {
-  it('una asignacion que solo dice «detalle» tambien cubre Producto; el resto queda igual', () => {
-    expect(partesDeAsignacion('detalle', 'solicitante')).toEqual(['producto', 'detalle']);
-    expect(partesDeAsignacion('producto,detalle', 'solicitante')).toEqual(['producto', 'detalle']);
-    expect(partesDeAsignacion('producto', 'solicitante')).toEqual(['producto']);
-    expect(partesDeAsignacion('especificaciones', 'solicitante')).toEqual(['especificaciones']);
-    expect(partesDeAsignacion(null, 'solicitante')).toEqual(['producto', 'detalle', 'especificaciones']);
-    expect(partesDeAsignacion('detalle', 'aduana')).toEqual(['aduana']);
+describe('partesDeAsignacion: asignaciones de Detalle tras mover pais, fabricante y proveedor a Producto', () => {
+  const antes = new Date('2026-10-21T15:00:00.000Z');
+  const despues = new Date('2026-11-20T15:00:00.000Z');
+
+  it('una asignacion anterior al corte que solo dice «detalle» tambien cubre Producto; el resto queda igual', () => {
+    expect(partesDeAsignacion('detalle', 'solicitante', antes)).toEqual(['producto', 'detalle']);
+    expect(partesDeAsignacion('producto,detalle', 'solicitante', antes)).toEqual(['producto', 'detalle']);
+    expect(partesDeAsignacion('producto', 'solicitante', antes)).toEqual(['producto']);
+    expect(partesDeAsignacion('especificaciones', 'solicitante', antes)).toEqual(['especificaciones']);
+    expect(partesDeAsignacion(null, 'solicitante', antes)).toEqual(['producto', 'detalle', 'especificaciones']);
+    expect(partesDeAsignacion('detalle', 'aduana', antes)).toEqual(['aduana']);
+  });
+
+  it('una asignacion posterior al corte se lee tal cual: Detalle no incluye Producto', () => {
+    expect(partesDeAsignacion('detalle', 'solicitante', despues)).toEqual(['detalle']);
+    expect(partesDeAsignacion('detalle,especificaciones', 'solicitante', despues)).toEqual(['detalle', 'especificaciones']);
   });
 });

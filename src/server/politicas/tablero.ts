@@ -90,7 +90,7 @@ export async function responsablesPorParte(
       dias: diasDesde(f.creadaEn, ahora),
       pedido: (f.pedido as Pedido | null) ?? null,
     };
-    for (const parte of partesDeAsignacion(f.secciones, f.rol as Rol)) por[parte].push(r);
+    for (const parte of partesDeAsignacion(f.secciones, f.rol as Rol, f.creadaEn)) por[parte].push(r);
     mapa.set(f.referenciaId, por);
   }
   return mapa;
