@@ -72,7 +72,7 @@ export function parsearSecciones(texto: string | null | undefined): Seccion[] {
 }
 
 /** Asignaciones creadas desde esta fecha ya saben que Producto es una seccion aparte (reunion 2026-11-09). */
-export const CORTE_PAIS_FABRICANTE_PROVEEDOR = new Date('2026-11-10T00:00:00.000Z');
+export const CORTE_PAIS_FABRICANTE_PROVEEDOR = new Date('2026-11-09T18:00:00.000Z');
 
 /**
  * Las secciones que una asignacion cubre de verdad. Pais de origen, fabricante y proveedor pasaron de Detalle a Producto

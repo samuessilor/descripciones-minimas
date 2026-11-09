@@ -115,6 +115,8 @@ export async function gestoresActivos(ej: Ejecutor, excepto?: string): Promise<P
     })
     .from(usuario)
     .where(and(inArray(usuario.rol, ['admin', 'supervisor']), eq(usuario.activo, true), excepto ? ne(usuario.id, excepto) : undefined));
+  // Orden fijo: administrador primero, despues por nombre e id (el destino por defecto no depende del plan de la consulta).
+  filas.sort((a, b) => (a.rol === b.rol ? 0 : a.rol === 'admin' ? -1 : 1) || a.nombre.localeCompare(b.nombre) || a.id.localeCompare(b.id));
   return filas.map((f) => ({ ...f, organizacionTipo: f.organizacionTipo as TipoOrganizacion }));
 }
 
