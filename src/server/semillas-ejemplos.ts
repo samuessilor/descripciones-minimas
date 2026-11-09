@@ -4,7 +4,7 @@
  * distintas, pendientes para cada rol y avisos. Sirve para abrir la aplicacion y verla con vida.
  *
  * Todo pasa por las MISMAS acciones que usa la interfaz (crear, guardar campo, enviar a, partida, solicitud de
- * informacion de la aduana y respuesta del area, cerrar, reabrir, pedir reapertura, comentar): asi el historial, los avisos y el outbox de correo quedan coherentes y
+ * informacion de la aduana y respuesta del area, cerrar, reabrir, pedir reapertura, comentar): asi el historial y los avisos quedan coherentes y
  * cualquier regla nueva se respeta tambien aqui. Los valores son inventados (codigos `EJ-0001`...), correos
  * `@desarrollo.invalid`; no hay ningun dato de los Excel de trabajo.
  */

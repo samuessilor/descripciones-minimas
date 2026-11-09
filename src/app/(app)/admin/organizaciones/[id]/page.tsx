@@ -50,9 +50,9 @@ export default async function AdminOrganizacion({ params }: { params: Promise<{ 
         }
         acciones={
           org.activa ? (
-            <EnlaceBoton href={`/admin/usuarios/invitar?organizacion=${org.id}`}>
+            <EnlaceBoton href={`/admin/usuarios/nueva?organizacion=${org.id}`}>
               <UserPlus aria-hidden className="size-4" />
-              Invitar a esta {esAgencia ? 'agencia' : 'área'}
+              Crear cuenta para esta {esAgencia ? 'agencia' : 'área'}
             </EnlaceBoton>
           ) : undefined
         }
@@ -119,12 +119,12 @@ export default async function AdminOrganizacion({ params }: { params: Promise<{ 
               etiquetaEnlace={(u) => `Abrir a ${u.nombre}`}
               columnas={[
                 { id: 'nombre', encabezado: 'Nombre', principal: true, celda: (u) => <span className="whitespace-normal">{nombreVisible(u.nombre)}</span> },
-                { id: 'correo', encabezado: 'Correo', ocultarBajo: 'md', celda: (u) => <span className="break-all text-sm text-tinta-suave">{u.email}</span> },
+                { id: 'usuario', encabezado: 'Usuario', ocultarBajo: 'md', celda: (u) => <span className="break-all font-mono text-sm text-tinta-suave">{u.username ?? 'sin usuario'}</span> },
                 { id: 'rol', encabezado: 'Rol', celda: (u) => <InsigniaRol rol={u.rol} /> },
-                { id: 'estado', encabezado: 'Estado', celda: (u) => <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} correoInvalido={u.correoInvalido} /> },
+                { id: 'estado', encabezado: 'Estado', celda: (u) => <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} /> },
                 { id: 'ingreso', encabezado: 'Último ingreso', ocultarBajo: 'lg', celda: (u) => <span className="text-sm text-tinta-suave">{hace(u.ultimoIngreso, ahora)}</span> },
               ]}
-              vacio={<EstadoVacio compacto titulo="Aún no hay personas" descripcion="Invita a la primera y le llegará un correo con su enlace." />}
+              vacio={<EstadoVacio compacto titulo="Aún no hay personas" descripcion="Crea la primera cuenta y entrégale su usuario y contraseña." />}
             />
           </div>
         </Seccion>
@@ -143,10 +143,10 @@ export default async function AdminOrganizacion({ params }: { params: Promise<{ 
                     Tiene {plural(org.usuariosActivos, 'persona activa', 'personas activas')}. Desactívalas o muévelas a otra organización y vuelve aquí; así nadie se queda sin poder entrar sin que lo hayas decidido.
                   </Aviso>
                 ) : (
-                  <p className="max-w-[65ch] text-base text-tinta-suave">Desactivarla la oculta de las listas para invitar. No se borra nada: el historial conserva a quién perteneció cada cambio.</p>
+                  <p className="max-w-[65ch] text-base text-tinta-suave">Desactivarla la oculta de las listas para crear cuentas. No se borra nada: el historial conserva a quién perteneció cada cambio.</p>
                 )
               ) : (
-                <p className="max-w-[65ch] text-base text-tinta-suave">Está desactivada: no aparece al invitar y su gente no puede entrar. Reactívala para volver a usarla.</p>
+                <p className="max-w-[65ch] text-base text-tinta-suave">Está desactivada: no aparece al crear cuentas y su gente no puede entrar. Reactívala para volver a usarla.</p>
               )}
               <BotonAccion
                 accion={cambiarEstadoOrganizacionAccion}
@@ -157,8 +157,8 @@ export default async function AdminOrganizacion({ params }: { params: Promise<{ 
                 confirmar={{
                   titulo: org.activa ? `Desactivar ${org.nombre}` : `Reactivar ${org.nombre}`,
                   descripcion: org.activa
-                    ? 'Dejará de ofrecerse al invitar personas. Puedes reactivarla cuando quieras.'
-                    : 'Volverá a ofrecerse al invitar personas y su gente podrá entrar.',
+                    ? 'Dejará de ofrecerse al crear cuentas. Puedes reactivarla cuando quieras.'
+                    : 'Volverá a ofrecerse al crear cuentas y su gente podrá entrar.',
                   confirmar: org.activa ? 'Desactivar' : 'Reactivar',
                   cancelar: 'Todavía no',
                   peligro: org.activa,

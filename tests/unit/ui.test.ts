@@ -118,7 +118,7 @@ describe('navegacion por rol', () => {
       expect(etiquetas.includes('Administración'), rol).toBe(rol === 'admin');
     }
     const admin = destinosPara('admin').find((d) => d.href === '/admin');
-    expect(admin?.hijos?.map((h) => h.etiqueta)).toEqual(['Usuarios', 'Organizaciones', 'Catálogos', 'Auditoría', 'Cola de correo', 'Parámetros']);
+    expect(admin?.hijos?.map((h) => h.etiqueta)).toEqual(['Usuarios', 'Organizaciones', 'Catálogos', 'Auditoría', 'Parámetros']);
   });
 });
 

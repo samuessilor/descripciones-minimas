@@ -207,7 +207,7 @@ export async function aplicarEscritura(
       if (typeof valorGuardado === 'string' && solicitudSinRespuesta(valores)) {
         await pedirRespuestaAlArea(tx, actor, actualizada, valorGuardado, p.ahora);
       } else if (typeof valorGuardado !== 'string' && vigente) {
-        await terminarPedidosDeRespuesta(tx, ficha.id, vigente.a, p.ahora, 'La aduana ya no necesita esa información: el aviso dejó de aplicar.');
+        await terminarPedidosDeRespuesta(tx, ficha.id, vigente.a, p.ahora);
       }
     } else if (p.campo === 'respuesta_area' && valorGuardado !== null) {
       await registrarRespuestaDelArea(tx, actor, actualizada, p.ahora);

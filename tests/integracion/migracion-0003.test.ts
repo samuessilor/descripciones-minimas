@@ -125,10 +125,10 @@ describe('migracion 0003 sobre una base con 0000-0002 y datos de preguntas', () 
     expect(h!.n).toBe(1);
   });
 
-  it('retira avisos `pregunta`, abandona su correo pendiente y limpia la presencia de edicion', async () => {
+  it('retira avisos `pregunta` y limpia la presencia de edicion (la cola de correo se retiro despues, en la 0007)', async () => {
     expect(await filas(sql`select id from notificacion where tipo = 'pregunta'`)).toHaveLength(0);
-    const [correo] = await filas<{ estado: string; notificacion_id: string | null }>(sql`select estado, notificacion_id from entrega_correo`);
-    expect(correo).toMatchObject({ estado: 'abandonado', notificacion_id: null });
+    const [cola] = await filas<{ existe: string | null }>(sql`select to_regclass('public.entrega_correo')::text as existe`);
+    expect(cola!.existe).toBeNull();
     expect(await filas(sql`select campo from edicion_activa`)).toHaveLength(0);
     // El tipo `pregunta` ya no es valido.
     await expect(

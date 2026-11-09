@@ -11,10 +11,13 @@ describe('rutas de Better Auth expuestas por HTTP', () => {
     expect(rutaAuthPermitida('POST', '/api/auth/get-session')).toBe(false);
   });
 
-  it('el resto queda cerrado (magic-link, cuentas, cambio de correo, etc.)', () => {
+  it('el resto queda cerrado (entrar, registrarse, contrasenas, cambio de correo, etc.)', () => {
     for (const [m, ruta] of [
-      ['GET', '/api/auth/magic-link/verify'],
-      ['POST', '/api/auth/sign-in/magic-link'],
+      ['POST', '/api/auth/sign-in/email'],
+      ['POST', '/api/auth/sign-up/email'],
+      ['POST', '/api/auth/change-password'],
+      ['POST', '/api/auth/reset-password'],
+      ['POST', '/api/auth/forget-password'],
       ['POST', '/api/auth/update-user'],
       ['POST', '/api/auth/change-email'],
       ['GET', '/api/auth/list-sessions'],

@@ -5,9 +5,10 @@
  * Solo `POST /sign-out`. `GET /get-session` NO se expone: devuelve el token de sesion crudo en el cuerpo
  * JSON (anula `HttpOnly`) y ningun cliente lo usa; el servidor resuelve la sesion con `getActor()`.
  * Todo lo demas responde 404:
- *  - `/sign-in/magic-link` se pide por la Server Action (con limite de tasa y anti-enumeracion);
- *  - `GET /magic-link/verify` consume el token al primer acceso (lo quemaria un escaner de enlaces):
- *    la confirmacion es el POST de `/entrar/confirmar`;
+ *  - `/sign-in/email` y `/sign-up/email` quedan cerrados: se entra por la Server Action de la pantalla de entrada
+ *    (con limite de intentos y anti-enumeracion) y las cuentas solo las crea un administrador;
+ *  - nada de cambiar o restablecer contrasena por aqui (`/change-password`, `/reset-password`): cada cambio pasa por
+ *    una accion propia con su limite y su auditoria;
  *  - nada de actualizar usuario, cambiar correo ni cuentas sociales.
  */
 const PERMITIDAS: Record<string, ReadonlySet<string>> = {

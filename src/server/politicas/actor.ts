@@ -9,6 +9,8 @@ import type { ActorLike, Rol, TipoOrganizacion } from '@/dominio/permisos';
 
 export interface Actor extends ActorLike {
   nombre: string;
+  /** Con lo que entra (nulo en cuentas anteriores al acceso por contrasena). */
+  username?: string | null;
   email: string;
   area: string | null;
   organizacionNombre: string;
@@ -33,6 +35,7 @@ export async function cargarActorPorId(ej: Ejecutor, usuarioId: string): Promise
     .select({
       id: usuario.id,
       nombre: usuario.nombre,
+      username: usuario.username,
       email: usuario.email,
       rol: usuario.rol,
       area: usuario.area,
@@ -49,6 +52,7 @@ export async function cargarActorPorId(ej: Ejecutor, usuarioId: string): Promise
   return {
     usuarioId: f.id,
     nombre: f.nombre,
+    username: f.username,
     email: f.email,
     rol: f.rol as Rol,
     area: f.area,

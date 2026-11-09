@@ -18,7 +18,7 @@ export default async function PaginaDevColaboracion() {
   return (
     <main id="contenido" className="mx-auto max-w-3xl space-y-4 px-4 py-8">
       <h1 className="font-display text-2xl font-extrabold text-tinta">Envío en lote · demostración</h1>
-      <p className="text-tinta-suave">Marca varias referencias y usa «Enviar a…»: es el mismo diálogo de la ficha, con un correo resumen por persona.</p>
+      <p className="text-tinta-suave">Marca varias referencias y usa «Enviar a…»: es el mismo diálogo de la ficha.</p>
       <DemoLote filas={filas.map((f) => ({ id: f.id, codigo: f.codigo, nombre: f.nombreProducto }))} />
     </main>
   );

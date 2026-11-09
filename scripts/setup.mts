@@ -26,7 +26,7 @@ console.log('✔ Carpetas .data/ y .data/uploads/ listas');
 const archivo = resolve(raiz, '.env.local');
 if (existsSync(archivo)) {
   const actual = readFileSync(archivo, 'utf8');
-  const faltan = ['BETTER_AUTH_SECRET', 'CRON_SECRET'].filter((k) => !new RegExp(`^${k}=.+`, 'm').test(actual));
+  const faltan = ['BETTER_AUTH_SECRET'].filter((k) => !new RegExp(`^${k}=.+`, 'm').test(actual));
   if (faltan.length === 0) {
     console.log('✔ .env.local ya existe y tiene los secretos (no se toca)');
   } else {
@@ -42,11 +42,9 @@ if (existsSync(archivo)) {
       'NODE_ENV=development',
       `APP_URL=${process.env.APP_URL || 'http://localhost:3000'}`,
       `BETTER_AUTH_SECRET=${secreto()}`,
-      `CRON_SECRET=${secreto()}`,
       '# DATABASE_URL vacia => PGlite en .data/pglite (un solo proceso: solo el servidor abre la base).',
       'DATABASE_URL=',
       'ALMACEN=local',
-      '# Sin RESEND_API_KEY ni SMTP_URL el correo sale por consola y por /api/dev/correo.',
       '',
     ].join('\n'),
   );
@@ -57,9 +55,8 @@ console.log(`
 Listo. Siguientes pasos:
   npm run inicio     TODO en uno: setup + servidor + navegador (usa un puerto libre y alinea APP_URL)
   npm run dev        solo el servidor; migra y siembra la base local solo (http://localhost:3000)
-  Usuarios de desarrollo: admin@desarrollo.invalid, solicitante@desarrollo.invalid,
-                          solicitante2@desarrollo.invalid, lector@desarrollo.invalid,
-                          aduana-a@desarrollo.invalid, aduana-b@desarrollo.invalid
-  El enlace de acceso se imprime en la consola del servidor y en GET /api/dev/correo.
+  Cuentas de desarrollo (contraseña de ejemplo: desarrollo-2026): admin, consumibles, mantenimiento, instrumentos,
+                          marketing, aduana-a, aduana-b, lector, solicitante, solicitante2
+  Con npm run inicio entras sin escribir nada y cambias de cuenta desde el menú de arriba a la derecha.
   Si el puerto 3000 esta ocupado usa npm run inicio o alinea APP_URL (ver README).
 `);

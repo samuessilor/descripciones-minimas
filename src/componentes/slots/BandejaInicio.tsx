@@ -143,13 +143,13 @@ export async function BandejaInicio() {
               <EstadoVacio
                 icono={Hourglass}
                 titulo="No hay asignaciones abiertas"
-                descripcion="Lo que el equipo envíe con «Enviar a…» aparece aquí con su estado, si le llegó el correo y un botón para recordar."
+                descripcion="Lo que el equipo envíe con «Enviar a…» aparece aquí con su estado, si ya la abrió y un botón para recordar."
               />
             ) : (
               <EstadoVacio
                 icono={Hourglass}
                 titulo="No esperas respuesta de nadie"
-                descripcion="Cuando envíes una referencia con «Enviar a…», la verás aquí con su estado, si le llegó el correo y un botón para recordar."
+                descripcion="Cuando envíes una referencia con «Enviar a…», la verás aquí con su estado, si ya la abrió y un botón para recordar."
               />
             )
           ) : (

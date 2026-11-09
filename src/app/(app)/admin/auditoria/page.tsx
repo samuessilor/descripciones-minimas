@@ -28,8 +28,6 @@ function enlaceEntidad(f: FilaAuditoria): string | null {
       return f.entidadId === 'desconocido' ? null : `/admin/usuarios/${f.entidadId}`;
     case 'organizacion':
       return `/admin/organizaciones/${f.entidadId}`;
-    case 'entrega_correo':
-      return `/admin/correo/${f.entidadId}`;
     default:
       // Envios, fotos...: la ficha viaja en el detalle.
       return typeof f.detalle?.referenciaId === 'string' ? `/referencias/${f.detalle.referenciaId}` : null;

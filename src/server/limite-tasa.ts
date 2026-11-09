@@ -2,7 +2,7 @@
  * Limite de tasa en la propia base (tabla `limite_tasa`, sin Redis; 13.3). Ventana fija: un
  * contador por (clave, ventana). Un `INSERT ... ON CONFLICT DO UPDATE` atomico, igual en PGlite y Postgres.
  */
-import { lt, sql } from 'drizzle-orm';
+import { and, eq, lt, sql } from 'drizzle-orm';
 import { limiteTasa } from '@/db/esquema';
 import type { Ejecutor } from '@/db/tipos';
 
@@ -20,12 +20,12 @@ export interface ResultadoTasa {
 
 /** Valores S-13. */
 export const REGLAS_TASA = {
-  enlacePorCorreo: { max: 5, ventanaMs: 15 * 60_000 },
-  // Por IP es mas alto que S-13: toda una oficina (o una agencia) sale por la misma IP publica (NAT) y pide su enlace
-  // a la misma hora. El limite por correo y la espera de 30 s protegen cada buzon; este solo frena el barrido masivo.
-  enlacePorIp: { max: 60, ventanaMs: 15 * 60_000 },
-  /** Espera minima de 30 s entre solicitudes del mismo correo (10.6). */
-  enlaceEspera: { max: 1, ventanaMs: 30_000 },
+  // Por IP es alto: toda una oficina (o una agencia) sale por la misma IP publica (NAT) y entra a la misma hora. El
+  // limite por usuario frena adivinar una contrasena; este solo frena el barrido masivo de usuarios.
+  accesoPorIp: { max: 100, ventanaMs: 15 * 60_000 },
+  /** Intentos FALLIDOS por usuario: entrar bien no cuenta (varias personas comparten la cuenta de un area). */
+  accesoFallidoPorUsuario: { max: 10, ventanaMs: 15 * 60_000 },
+  cambiarClave: { max: 5, ventanaMs: 15 * 60_000 },
   subirArchivo: { max: 30, ventanaMs: 3_600_000 },
   exportar: { max: 5, ventanaMs: 3_600_000 },
   buscar: { max: 120, ventanaMs: 60_000 },
@@ -54,4 +54,16 @@ export async function limitarTasa(
     await ej.delete(limiteTasa).where(lt(limiteTasa.ventana, new Date(ahora.getTime() - 86_400_000)));
   }
   return { permitido: contador <= regla.max, contador, reintentarEnMs: inicio + regla.ventanaMs - ahora.getTime() };
+}
+
+/** Mira el contador de la ventana actual SIN sumar (para contar solo lo que el llamador decida, p. ej. los fallos). */
+export async function consultarTasa(ej: Ejecutor, clave: string, regla: ReglaTasa, ahora: Date = new Date()): Promise<ResultadoTasa> {
+  const inicio = Math.floor(ahora.getTime() / regla.ventanaMs) * regla.ventanaMs;
+  const [fila] = await ej
+    .select({ contador: limiteTasa.contador })
+    .from(limiteTasa)
+    .where(and(eq(limiteTasa.clave, clave), eq(limiteTasa.ventana, new Date(inicio))))
+    .limit(1);
+  const contador = fila?.contador ?? 0;
+  return { permitido: contador < regla.max, contador, reintentarEnMs: inicio + regla.ventanaMs - ahora.getTime() };
 }

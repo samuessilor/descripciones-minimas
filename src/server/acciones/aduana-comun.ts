@@ -6,11 +6,9 @@ import { and, eq, inArray, ne } from 'drizzle-orm';
 import { asignacion, auditoria, usuario } from '@/db/esquema';
 import type { Ejecutor, Tx } from '@/db/tipos';
 import { autorVisible, type TipoOrganizacion } from '@/dominio/permisos';
-import { enlaceReferencia, nombreSinMarca } from '@/dominio/colaboracion';
-import { cargarPerfiles, comoDestino, configAvisos } from '../colaboracion/comun';
-import type { PlantillaAviso } from '../correo/plantillas';
+import { nombreSinMarca } from '@/dominio/colaboracion';
+import { cargarPerfiles, comoDestino } from '../colaboracion/comun';
 import { avisar } from '../notificaciones/avisar';
-import type { TipoNotificacion } from '../notificaciones/crear';
 import type { Actor } from '../politicas/actor';
 import { NOMBRE_OTRA_AGENCIA } from '../politicas/referencias';
 
@@ -69,39 +67,31 @@ export async function personasActivas(ej: Ejecutor, ids: string[]): Promise<Pers
 
 /**
  * Aviso del lado aduana (clasificada, reabierta, reapertura solicitada): el MISMO mecanismo
- * que «Enviar a» (`avisar`). En la transaccion de quien llama deja la notificacion en la bandeja y, si la persona
- * acepta correo, la fila del outbox con el mensaje ya armado y el enlace directo a la ficha. Si la transaccion se
- * revierte no queda ni aviso ni correo. Devuelve el id del correo encolado (o `null`).
+ * que «Enviar a» (`avisar`). En la transaccion de quien llama deja la notificacion en la bandeja; si la transaccion
+ * se revierte no queda el aviso.
  */
 export async function avisarAduana(
   tx: Ejecutor,
   p: {
     actor: Actor;
     persona: PersonaAviso;
-    tipo: TipoNotificacion & PlantillaAviso;
+    tipo: 'clasificada' | 'reabierta' | 'reapertura_solicitada';
     ficha: { id: string; codigo: string };
     titulo: string;
     ahora: Date;
     asignacionId?: string | null;
   },
-): Promise<string | null> {
+): Promise<void> {
   const perfil = (await cargarPerfiles(tx, [p.persona.id])).get(p.persona.id);
-  if (!perfil || !perfil.activo) return null;
-  const cfg = configAvisos();
-  const r = await avisar(tx, {
+  if (!perfil || !perfil.activo) return;
+  await avisar(tx, {
     destino: comoDestino(perfil),
     tipo: p.tipo,
     referenciaId: p.ficha.id,
     asignacionId: p.asignacionId ?? null,
     titulo: p.titulo,
     ahora: p.ahora,
-    contacto: cfg.contacto,
-    correo: {
-      plantilla: p.tipo,
-      params: { quien: nombreParaDestinatario(p.actor, p.persona), enlace: enlaceReferencia(cfg.appUrl, p.ficha.id), codigo: cfg.incluirReferencia ? p.ficha.codigo : null },
-    },
   });
-  return r.correoId;
 }
 
 /** Nombre de `actor` tal como lo debe ver `destinatario` (una agencia no ve a otra, A5). */

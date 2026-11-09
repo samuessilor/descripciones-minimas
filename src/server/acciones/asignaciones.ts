@@ -1,11 +1,9 @@
 /**
  * Asignaciones "Enviar a" (SPEC 8.3, 12.4, 14).
  *
- * Todo lo que cambia una asignacion ocurre en UNA transaccion junto con su notificacion, su fila
- * del outbox de correo y la auditoria (patron outbox, 14): es imposible un "enviado a Brian" sin
- * pendiente para Brian, y si el proveedor de correo cae el pendiente igual esta en la bandeja.
- * El envio del correo lo hace despues el despachador (`correo/despachar.ts`); estas funciones
- * devuelven los `correoIds` para que la capa de Server Actions pida el envio inmediato con `after()`.
+ * Todo lo que cambia una asignacion ocurre en UNA transaccion junto con su notificacion y la auditoria: es
+ * imposible un "enviado a Brian" sin pendiente para Brian. El aviso vive en la plataforma (campana y «Para mi»);
+ * no hay correo.
  *
  *  - `enviarA` / `enviarALote`: upsert (nunca duplican un pendiente), reglas de visibilidad por
  *    organizacion y una sola agencia a la vez.
@@ -22,8 +20,6 @@ import {
   ETIQUETA_PEDIDO,
   PEDIDOS,
   VERBO_PEDIDO,
-  enlaceInicio,
-  enlaceReferencia,
   esAsignacionActiva,
   inicioDiaBogota,
   listaHumana,
@@ -46,11 +42,10 @@ import {
   comoDestino,
   configAvisos,
   marcarLeidasDeFicha,
-  retirarCorreosPendientes,
   type Perfil,
 } from '../colaboracion/comun';
 import { limitarTasa, REGLAS_TASA } from '../limite-tasa';
-import { avisar, encolarAviso, type CanalAviso } from '../notificaciones/avisar';
+import { avisar } from '../notificaciones/avisar';
 import { ahoraDe, type Actor, type Contexto } from '../politicas/actor';
 import { cargarReferenciaBloqueada, cargarReferenciaVisible, type FilaReferencia } from '../politicas/referencias';
 import { ErrorAccion } from './resultado';
@@ -76,8 +71,6 @@ export interface ResumenDestinatario {
   usuarioId: string;
   nombre: string;
   organizacion: string;
-  /** Como le llego el aviso: correo, solo bandeja (su preferencia) o correo invalido. */
-  canal: CanalAviso;
   creadas: number;
   actualizadas: number;
   /** Ya tenia esa referencia con el mismo pedido y mensaje: no se le avisa otra vez. */
@@ -91,8 +84,6 @@ export interface ResultadoEnviarA {
   /** Destinatarios (ids) que ya tenian la ficha pendiente ("ya tenian pendiente: N"). */
   yaTenianPendiente: string[];
   destinatarios: ResumenDestinatario[];
-  /** Filas del outbox creadas: la capa de acciones pide su envio inmediato. */
-  correoIds: string[];
   /** Identificador del lote (solo `enviarALote`). */
   loteId?: string;
 }
@@ -238,8 +229,6 @@ interface ResultadoColocar {
   asignacionId: string;
   accion: 'creada' | 'actualizada' | 'sin_cambios';
   notificacionId: string | null;
-  canal: CanalAviso;
-  correoId: string | null;
 }
 
 /** «para completar: Detalle y Especificaciones» (sin partes si es toda su parte). */
@@ -261,16 +250,11 @@ async function colocarAsignacion(
     mensaje: string | null;
     deUsuarioId: string;
     ahora: Date;
-    /** Resumen de lote: el correo individual no se encola. */
-    sinCorreo?: boolean;
     /** Texto propio para la notificacion (reasignaciones). */
     titulo?: (pedido: Pedido) => string;
   },
 ): Promise<ResultadoColocar> {
   const { actor, ficha, destino, ahora } = p;
-  const cfg = configAvisos();
-  const enlace = enlaceReferencia(cfg.appUrl, ficha.id);
-  const codigoCorreo = cfg.incluirReferencia ? ficha.codigo : null;
 
   const [existente] = await tx
     .select()
@@ -291,7 +275,7 @@ async function colocarAsignacion(
       (existente.mensaje ?? null) === (p.mensaje ?? null) &&
       (existente.secciones ?? null) === destino.secciones;
     if (igual) {
-      return { asignacionId: existente.id, accion: 'sin_cambios', notificacionId: null, canal: 'sin_correo', correoId: null };
+      return { asignacionId: existente.id, accion: 'sin_cambios', notificacionId: null };
     }
     await tx
       .update(asignacion)
@@ -306,12 +290,8 @@ async function colocarAsignacion(
         ? p.titulo(destino.pedido)
         : `${nombreSinMarca(actor.nombre)} actualizó lo que te pide en ${ficha.codigo}: ahora es ${paraQue(destino.pedido, destino.secciones)}`,
       ahora,
-      contacto: cfg.contacto,
-      correo: p.sinCorreo
-        ? null
-        : { plantilla: 'pendiente_actualizada', params: { quien: actor.nombre, enlace, pedido: destino.pedido, codigo: codigoCorreo } },
     });
-    return { asignacionId: existente.id, accion: 'actualizada', notificacionId: aviso.notificacionId, canal: aviso.canal, correoId: aviso.correoId };
+    return { asignacionId: existente.id, accion: 'actualizada', notificacionId: aviso.notificacionId };
   }
 
   const [nueva] = await tx
@@ -336,16 +316,8 @@ async function colocarAsignacion(
     asignacionId: nueva.id,
     titulo: p.titulo ? p.titulo(destino.pedido) : tituloAsignacion(actor.nombre, ficha.codigo, destino.pedido, destino.secciones),
     ahora,
-    contacto: cfg.contacto,
-    correo: p.sinCorreo
-      ? null
-      : {
-          plantilla: 'pendiente',
-          params: { quien: actor.nombre, enlace, pedido: destino.pedido, codigo: codigoCorreo },
-          clave: `asig:${nueva.id}:inicial`,
-        },
   });
-  return { asignacionId: nueva.id, accion: 'creada', notificacionId: aviso.notificacionId, canal: aviso.canal, correoId: aviso.correoId };
+  return { asignacionId: nueva.id, accion: 'creada', notificacionId: aviso.notificacionId };
 }
 
 function accesoTrasTerminar(actor: Pick<Actor, 'organizacionTipo'>, ahora: Date): Date | null {
@@ -373,11 +345,6 @@ async function cerrarMisAsignaciones(tx: Tx, actor: Actor, referenciaId: string,
       .set({ estado: 'hecha', completadaEn: ahora, accesoHasta: accesoTrasTerminar(actor, ahora) })
       .where(eq(asignacion.id, m.id));
   }
-  await retirarCorreosPendientes(
-    tx,
-    mias.map((m) => m.id),
-    'La persona pasó la referencia a otra: el aviso dejó de aplicar.',
-  );
 }
 
 async function limitarEnvios(ctx: Contexto, ahora: Date): Promise<void> {
@@ -404,12 +371,11 @@ function exigirFichaEnviable(ficha: FilaReferencia): void {
   }
 }
 
-function resumenDe(perfil: Perfil, r: ResultadoColocar[], canal: CanalAviso): ResumenDestinatario {
+function resumenDe(perfil: Perfil, r: ResultadoColocar[]): ResumenDestinatario {
   return {
     usuarioId: perfil.id,
     nombre: nombreSinMarca(perfil.nombre),
     organizacion: nombreSinMarca(perfil.organizacionNombre),
-    canal,
     creadas: r.filter((x) => x.accion === 'creada').length,
     actualizadas: r.filter((x) => x.accion === 'actualizada').length,
     sinCambios: r.filter((x) => x.accion === 'sin_cambios').length,
@@ -442,7 +408,6 @@ export async function enviarA(ctx: Contexto, entrada: unknown): Promise<Resultad
     const validados = await validarDestinatarios(tx, actor, ficha, destinatarios, ahora);
 
     const resumenes: ResumenDestinatario[] = [];
-    const correoIds: string[] = [];
     let hubo = false;
     for (const destino of validados) {
       const r = await colocarAsignacion(tx, { actor, ficha, destino, mensaje, deUsuarioId: actor.usuarioId, ahora });
@@ -458,8 +423,7 @@ export async function enviarA(ctx: Contexto, entrada: unknown): Promise<Resultad
           creadoEn: ahora,
         });
       }
-      if (r.correoId) correoIds.push(r.correoId);
-      resumenes.push(resumenDe(destino.perfil, [r], r.canal));
+      resumenes.push(resumenDe(destino.perfil, [r]));
     }
 
     if (hubo) {
@@ -473,7 +437,6 @@ export async function enviarA(ctx: Contexto, entrada: unknown): Promise<Resultad
       actualizadas: resumenes.reduce((a, r) => a + r.actualizadas, 0),
       yaTenianPendiente: resumenes.filter((r) => r.actualizadas + r.sinCambios > 0).map((r) => r.usuarioId),
       destinatarios: resumenes,
-      correoIds,
     };
   });
 }
@@ -490,7 +453,6 @@ export async function enviarALote(ctx: Contexto, entrada: unknown): Promise<Resu
   const destinatarios = unicosDestinatarios(e.destinatarios);
   const idsFichas = [...new Set(e.referenciaIds)].sort();
   const loteId = crypto.randomUUID();
-  const cfg = configAvisos();
 
   return ctx.db.transaction(async (tx) => {
     const porDestino = new Map<string, ResultadoColocar[]>();
@@ -512,7 +474,7 @@ export async function enviarALote(ctx: Contexto, entrada: unknown): Promise<Resu
       }
       let hubo = false;
       for (const destino of validados) {
-        const r = await colocarAsignacion(tx, { actor, ficha, destino, mensaje, deUsuarioId: actor.usuarioId, ahora, sinCorreo: true });
+        const r = await colocarAsignacion(tx, { actor, ficha, destino, mensaje, deUsuarioId: actor.usuarioId, ahora });
         perfilesDestino.set(destino.perfil.id, destino.perfil);
         porDestino.set(destino.perfil.id, [...(porDestino.get(destino.perfil.id) ?? []), r]);
         if (r.accion !== 'sin_cambios') {
@@ -535,29 +497,9 @@ export async function enviarALote(ctx: Contexto, entrada: unknown): Promise<Resu
       }
     }
 
-    // UN correo resumen por destinatario (14): "Tienes 10 descripciones minimas pendientes".
     const resumenes: ResumenDestinatario[] = [];
-    const correoIds: string[] = [];
     for (const [usuarioId, lista] of porDestino) {
-      const perfil = perfilesDestino.get(usuarioId) as Perfil;
-      const conAviso = lista.filter((x) => x.accion !== 'sin_cambios');
-      let canal: CanalAviso = 'sin_correo';
-      const primera = conAviso.find((x) => x.notificacionId)?.notificacionId;
-      if (primera) {
-        const r = await encolarAviso(tx, {
-          destino: comoDestino(perfil),
-          notificacionId: primera,
-          contacto: cfg.contacto,
-          correo: {
-            plantilla: 'resumen_lote',
-            params: { quien: actor.nombre, enlace: enlaceInicio(cfg.appUrl), cantidad: conAviso.length },
-            clave: `lote:${loteId}:${usuarioId}`,
-          },
-        });
-        canal = r.canal;
-        if (r.correoId) correoIds.push(r.correoId);
-      }
-      resumenes.push(resumenDe(perfil, lista, canal));
+      resumenes.push(resumenDe(perfilesDestino.get(usuarioId) as Perfil, lista));
     }
 
     await auditar(tx, {
@@ -575,7 +517,6 @@ export async function enviarALote(ctx: Contexto, entrada: unknown): Promise<Resu
       actualizadas: resumenes.reduce((a, r) => a + r.actualizadas, 0),
       yaTenianPendiente: resumenes.filter((r) => r.actualizadas + r.sinCambios > 0).map((r) => r.usuarioId),
       destinatarios: resumenes,
-      correoIds,
       loteId,
     };
   });
@@ -608,7 +549,6 @@ export interface ResultadoMarcarListo {
   yaEstaba: boolean;
   /** Personas a las que se les aviso que terminaste. */
   avisados: string[];
-  correoIds: string[];
 }
 
 export async function marcarListo(ctx: Contexto, entrada: unknown): Promise<ResultadoMarcarListo> {
@@ -616,7 +556,6 @@ export async function marcarListo(ctx: Contexto, entrada: unknown): Promise<Resu
   const ahora = ahoraDe(ctx);
   const actor = ctx.actor;
   exigirPermisoEnviar(actor);
-  const cfg = configAvisos();
 
   return ctx.db.transaction(async (tx) => {
     const ficha = await cargarReferenciaBloqueada(tx, actor, referenciaId, ahora);
@@ -634,7 +573,7 @@ export async function marcarListo(ctx: Contexto, entrada: unknown): Promise<Resu
         .from(asignacion)
         .where(and(eq(asignacion.referenciaId, ficha.id), eq(asignacion.aUsuarioId, actor.usuarioId), eq(asignacion.estado, 'hecha')))
         .limit(1);
-      if (hecha) return { ok: true as const, yaEstaba: true, avisados: [], correoIds: [] };
+      if (hecha) return { ok: true as const, yaEstaba: true, avisados: [] };
       throw new ErrorAccion(
         'VALIDACION',
         'Esta referencia no está pendiente para ti, así que no hay nada que marcar. Si quieres pasarla a alguien, usa «Enviar a…».',
@@ -646,17 +585,11 @@ export async function marcarListo(ctx: Contexto, entrada: unknown): Promise<Resu
       transicionarAsignacion(m.estado as 'pendiente' | 'en_curso', 'terminar');
       await tx.update(asignacion).set({ estado: 'hecha', completadaEn: ahora, accesoHasta: hasta }).where(eq(asignacion.id, m.id));
     }
-    await retirarCorreosPendientes(
-      tx,
-      mias.map((m) => m.id),
-      'La persona ya terminó su parte: el aviso dejó de aplicar.',
-    );
 
     // Avisa a quien se la envio (una vez por persona).
     const remitentes = [...new Set(mias.map((m) => m.deUsuarioId))].filter((id) => id !== actor.usuarioId);
     const perfiles = await cargarPerfiles(tx, remitentes);
     const avisados: string[] = [];
-    const correoIds: string[] = [];
     const devueltaA: string[] = [];
     let agencias: Array<{ id: string }> | null = null;
     for (const id of remitentes) {
@@ -698,21 +631,15 @@ export async function marcarListo(ctx: Contexto, entrada: unknown): Promise<Resu
           }
         }
       }
-      const a = await avisar(tx, {
+      await avisar(tx, {
         destino: comoDestino(p),
         tipo: 'respuesta',
         referenciaId: ficha.id,
         asignacionId: asignacionAviso,
         titulo: `${nombreSinMarca(actor.nombre)} terminó su parte en ${ficha.codigo}`,
         ahora,
-        contacto: cfg.contacto,
-        correo: {
-          plantilla: 'devuelta',
-          params: { quien: actor.nombre, enlace: enlaceReferencia(cfg.appUrl, ficha.id), codigo: cfg.incluirReferencia ? ficha.codigo : null },
-        },
       });
       avisados.push(id);
-      if (a.correoId) correoIds.push(a.correoId);
     }
     await auditarColaboracion(tx, {
       usuarioId: actor.usuarioId,
@@ -723,7 +650,7 @@ export async function marcarListo(ctx: Contexto, entrada: unknown): Promise<Resu
       ip: ctx.ip,
       creadoEn: ahora,
     });
-    return { ok: true as const, yaEstaba: false, avisados, correoIds };
+    return { ok: true as const, yaEstaba: false, avisados };
   });
 }
 
@@ -746,7 +673,6 @@ export async function cancelarAsignacion(ctx: Contexto, entrada: unknown): Promi
     }
     transicionarAsignacion(a.estado as 'pendiente' | 'en_curso', 'cancelar');
     await tx.update(asignacion).set({ estado: 'cancelada', completadaEn: ahora, accesoHasta: null }).where(eq(asignacion.id, a.id));
-    await retirarCorreosPendientes(tx, [a.id], 'El envío se canceló antes de salir el aviso.');
 
     const destino = (await cargarPerfiles(tx, [a.aUsuarioId])).get(a.aUsuarioId);
     if (destino && destino.activo) {
@@ -757,8 +683,6 @@ export async function cancelarAsignacion(ctx: Contexto, entrada: unknown): Promi
         asignacionId: a.id,
         titulo: `${nombreSinMarca(actor.nombre)} canceló lo que te había enviado en ${ficha.codigo}. Ya no tienes nada pendiente ahí`,
         ahora,
-        contacto: configAvisos().contacto,
-        correo: null,
       });
     }
     await auditarColaboracion(tx, {
@@ -778,8 +702,6 @@ export async function cancelarAsignacion(ctx: Contexto, entrada: unknown): Promi
 
 export interface ResultadoRecordar {
   ok: true;
-  canal: CanalAviso;
-  correoId: string | null;
   /** Recordatorios enviados hoy sobre esta asignacion (incluido este). */
   hoy: number;
   maxPorDia: number;
@@ -828,24 +750,13 @@ export async function recordar(ctx: Contexto, entrada: unknown): Promise<Resulta
       throw new ErrorAccion('VALIDACION', 'Esa persona ya no tiene acceso a la plataforma. Reasigna la referencia a otra persona.');
     }
     const dias = Math.max(0, Math.floor((ahora.getTime() - a.creadaEn.getTime()) / 86_400_000));
-    const aviso = await avisar(tx, {
+    await avisar(tx, {
       destino: comoDestino(perfil),
       tipo: 'recordatorio',
       referenciaId: ficha.id,
       asignacionId: a.id,
       titulo: `${nombreSinMarca(actor.nombre)} te recuerda ${ficha.codigo}, que sigue pendiente${dias > 0 ? ` desde hace ${plural(dias, 'día', 'días')}` : ''}`,
       ahora,
-      contacto: cfg.contacto,
-      correo: {
-        plantilla: 'recordatorio',
-        params: {
-          quien: actor.nombre,
-          enlace: enlaceReferencia(cfg.appUrl, ficha.id),
-          pedido: (a.pedido as Pedido | null) ?? null,
-          diasEspera: dias,
-          codigo: cfg.incluirReferencia ? ficha.codigo : null,
-        },
-      },
     });
     await tx
       .update(asignacion)
@@ -860,7 +771,7 @@ export async function recordar(ctx: Contexto, entrada: unknown): Promise<Resulta
       ip: ctx.ip,
       creadoEn: ahora,
     });
-    return { ok: true as const, canal: aviso.canal, correoId: aviso.correoId, hoy: n + 1, maxPorDia: cfg.maxRecordatoriosDia };
+    return { ok: true as const, hoy: n + 1, maxPorDia: cfg.maxRecordatoriosDia };
   });
 }
 
@@ -869,14 +780,12 @@ export async function recordar(ctx: Contexto, entrada: unknown): Promise<Resulta
 export interface ResultadoReasignar {
   ok: true;
   nueva: ResumenDestinatario;
-  correoIds: string[];
 }
 
 export async function reasignar(ctx: Contexto, entrada: unknown): Promise<ResultadoReasignar> {
   const e = parsear(z.object({ asignacionId: z.uuid(), aUsuarioId: z.uuid() }), entrada);
   const ahora = ahoraDe(ctx);
   const actor = ctx.actor;
-  const cfg = configAvisos();
 
   return ctx.db.transaction(async (tx) => {
     const { a, ficha } = await cargarAsignacionBloqueada(tx, actor, e.asignacionId, ahora);
@@ -900,7 +809,6 @@ export async function reasignar(ctx: Contexto, entrada: unknown): Promise<Result
 
     transicionarAsignacion(a.estado as 'pendiente' | 'en_curso', 'reasignar');
     await tx.update(asignacion).set({ estado: 'reasignada', completadaEn: ahora, accesoHasta: null }).where(eq(asignacion.id, a.id));
-    await retirarCorreosPendientes(tx, [a.id], 'La referencia se reasignó antes de salir el aviso.');
 
     const r = await colocarAsignacion(tx, {
       actor,
@@ -920,8 +828,6 @@ export async function reasignar(ctx: Contexto, entrada: unknown): Promise<Result
         asignacionId: a.id,
         titulo: `${nombreSinMarca(actor.nombre)} le pasó ${ficha.codigo} a ${nombreSinMarca(destino.perfil.nombre)}. Ya no tienes nada pendiente ahí`,
         ahora,
-        contacto: cfg.contacto,
-        correo: null,
       });
     }
     await auditar(tx, {
@@ -933,7 +839,7 @@ export async function reasignar(ctx: Contexto, entrada: unknown): Promise<Result
       ip: ctx.ip,
       creadoEn: ahora,
     });
-    return { ok: true as const, nueva: resumenDe(destino.perfil, [r], r.canal), correoIds: r.correoId ? [r.correoId] : [] };
+    return { ok: true as const, nueva: resumenDe(destino.perfil, [r]) };
   });
 }
 
@@ -970,14 +876,13 @@ export async function abrirFicha(ctx: Contexto, entrada: unknown): Promise<{ enC
 
 /**
  * Para quien crea una asignacion SIN pasar por `enviarA` (p. ej. la reasignacion obligatoria al desactivar a un
- * usuario, `acciones/usuarios.ts`): deja el aviso en la bandeja del nuevo responsable y el correo en el outbox, en
- * la misma transaccion de quien llama. Idempotente: si la asignacion ya tiene su aviso inicial no hace nada.
- * Devuelve el id del correo encolado (para `programarEnvioInmediato`) o `null`.
+ * usuario, `acciones/usuarios.ts`): deja el aviso en la bandeja del nuevo responsable, en la misma transaccion de
+ * quien llama. Idempotente: si la asignacion ya tiene su aviso inicial no hace nada.
  */
 export async function avisarAsignacionExistente(
   tx: Tx,
   p: { asignacionId: string; quien: string; ahora: Date; titulo?: string },
-): Promise<{ correoId: string | null } | null> {
+): Promise<{ notificacionId: string } | null> {
   const [a] = await tx.select().from(asignacion).where(eq(asignacion.id, p.asignacionId)).limit(1);
   if (!a || !esAsignacionActiva(a.estado)) return null;
   const [previo] = await tx
@@ -989,7 +894,6 @@ export async function avisarAsignacionExistente(
   const [ficha] = await tx.select().from(referencia).where(eq(referencia.id, a.referenciaId)).limit(1);
   const destino = (await cargarPerfiles(tx, [a.aUsuarioId])).get(a.aUsuarioId);
   if (!ficha || !destino || !destino.activo) return null;
-  const cfg = configAvisos();
   const pedido = ((a.pedido as Pedido | null) ?? pedidoPorDefecto(destino.rol)) as Pedido;
   const r = await avisar(tx, {
     destino: comoDestino(destino),
@@ -998,14 +902,8 @@ export async function avisarAsignacionExistente(
     asignacionId: a.id,
     titulo: p.titulo ?? tituloAsignacion(p.quien, ficha.codigo, pedido),
     ahora: p.ahora,
-    contacto: cfg.contacto,
-    correo: {
-      plantilla: 'pendiente',
-      params: { quien: p.quien, enlace: enlaceReferencia(cfg.appUrl, ficha.id), pedido, codigo: cfg.incluirReferencia ? ficha.codigo : null },
-      clave: `asig:${a.id}:inicial`,
-    },
   });
-  return { correoId: r.correoId };
+  return { notificacionId: r.notificacionId };
 }
 
 // ---- Solicitud de informacion de la aduana (descripciones minimas adicionales) ------------------------------------
@@ -1063,14 +961,13 @@ export async function pedirRespuestaAlArea(tx: Tx, actor: Actor, ficha: FilaRefe
       mensaje,
       deUsuarioId: actor.usuarioId,
       ahora,
-      sinCorreo: true,
       titulo: () => `${nombreSinMarca(actor.nombre)} pide información adicional en ${ficha.codigo}`,
     });
   }
 }
 
 /** Los pendientes «Responder» que dejo `deUsuarioId` en la ficha quedan hechos (ya no hay nada que responder). */
-export async function terminarPedidosDeRespuesta(tx: Tx, referenciaId: string, deUsuarioId: string, ahora: Date, motivo: string): Promise<void> {
+export async function terminarPedidosDeRespuesta(tx: Tx, referenciaId: string, deUsuarioId: string, ahora: Date): Promise<void> {
   const abiertas = await tx
     .select({ id: asignacion.id, estado: asignacion.estado })
     .from(asignacion)
@@ -1087,11 +984,6 @@ export async function terminarPedidosDeRespuesta(tx: Tx, referenciaId: string, d
     transicionarAsignacion(a.estado as 'pendiente' | 'en_curso', 'terminar');
     await tx.update(asignacion).set({ estado: 'hecha', completadaEn: ahora }).where(eq(asignacion.id, a.id));
   }
-  await retirarCorreosPendientes(
-    tx,
-    abiertas.map((a) => a.id),
-    motivo,
-  );
 }
 
 /**
@@ -1101,7 +993,7 @@ export async function terminarPedidosDeRespuesta(tx: Tx, referenciaId: string, d
 export async function registrarRespuestaDelArea(tx: Tx, actor: Actor, ficha: FilaReferencia, ahora: Date): Promise<void> {
   const autorSolicitud = ficha.datos?.descripciones_minimas?.a;
   if (!autorSolicitud) return;
-  await terminarPedidosDeRespuesta(tx, ficha.id, autorSolicitud, ahora, 'El área ya respondió la solicitud de la aduana: el aviso dejó de aplicar.');
+  await terminarPedidosDeRespuesta(tx, ficha.id, autorSolicitud, ahora);
   if (autorSolicitud === actor.usuarioId) return;
   const autor = (await cargarPerfiles(tx, [autorSolicitud])).get(autorSolicitud);
   if (!autor || !autor.activo) return;
@@ -1111,6 +1003,5 @@ export async function registrarRespuestaDelArea(tx: Tx, actor: Actor, ficha: Fil
     referenciaId: ficha.id,
     titulo: `${nombreSinMarca(actor.nombre)} respondió tu solicitud de información en ${ficha.codigo}`,
     ahora,
-    contacto: configAvisos().contacto,
   });
 }

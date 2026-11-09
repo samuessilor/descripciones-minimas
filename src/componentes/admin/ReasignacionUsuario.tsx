@@ -97,8 +97,8 @@ function ListaReasignacion({
       {candidatos.length === 0 ? (
         <Aviso tipo="error" titulo="No hay a quién reasignar">
           {soloMismaOrganizacion
-            ? 'La agencia no tiene otra persona activa que pueda recibir estas referencias. Invita primero a alguien de la misma agencia.'
-            : 'No hay otra persona activa que pueda recibirlas. Invita o reactiva a alguien y vuelve a intentar.'}
+            ? 'La agencia no tiene otra persona activa que pueda recibir estas referencias. Crea primero otra cuenta de la misma agencia.'
+            : 'No hay otra persona activa que pueda recibirlas. Crea o reactiva otra cuenta y vuelve a intentar.'}
         </Aviso>
       ) : (
         <>

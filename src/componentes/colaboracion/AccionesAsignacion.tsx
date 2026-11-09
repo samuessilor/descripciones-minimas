@@ -66,12 +66,7 @@ export function AccionesAsignacion({
       avisar({
         tipo: 'exito',
         titulo: `Le recordamos a ${nombre}`,
-        descripcion:
-          r.data.canal === 'correo'
-            ? 'Le llegó un aviso y el correo va en camino.'
-            : r.data.canal === 'correo_invalido'
-              ? 'Le llegó un aviso en la plataforma; su correo está marcado como inválido, avísale por otro medio.'
-              : 'Le llegó un aviso en la plataforma.',
+        descripcion: 'Le llegó un aviso en la plataforma.',
       });
       cambio();
     } else {
@@ -137,7 +132,7 @@ export function AccionesAsignacion({
         abierto={cancelando}
         onCerrar={() => setCancelando(false)}
         titulo={`Cancelar lo que le enviaste a ${nombre}`}
-        descripcion={`${nombre} dejará de tener ${a.codigo} como pendiente. Si el correo aún no salió, tampoco saldrá. La referencia y su historial no se tocan.`}
+        descripcion={`${nombre} dejará de tener ${a.codigo} como pendiente. La referencia y su historial no se tocan.`}
         confirmar="Cancelar el envío"
         cancelar="Todavía no"
         peligro

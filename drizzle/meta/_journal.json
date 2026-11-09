@@ -43,6 +43,20 @@
       "when": 1793314492206,
       "tag": "0005_area_responsable",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793904168874,
+      "tag": "0006_usuario_username",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793905247881,
+      "tag": "0007_sin_correo",
+      "breakpoints": true
     }
   ]
 }

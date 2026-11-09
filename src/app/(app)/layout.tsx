@@ -26,6 +26,7 @@ export default async function LayoutAutenticado({ children }: { children: ReactN
         usuario={{
           nombre: actor.nombre,
           email: actor.email,
+          username: actor.username ?? null,
           rol: actor.rol,
           organizacion: nombreSinMarca(actor.organizacionNombre),
           esAgencia: actor.organizacionTipo === 'agencia',

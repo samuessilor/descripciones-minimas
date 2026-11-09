@@ -4,7 +4,7 @@
  */
 import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
-import { asignacion, entregaCorreo, organizacion, referencia, session, usuario } from '@/db/esquema';
+import { asignacion, organizacion, referencia, session, usuario } from '@/db/esquema';
 import type { Ejecutor } from '@/db/tipos';
 import { normalizarTexto } from '@/dominio/normalizacion';
 import { puede, type Rol } from '@/dominio/permisos';
@@ -30,7 +30,7 @@ export const esUuid = (s: string | undefined | null): s is string => !!s && UUID
 
 // ---- Usuarios -----------------------------------------------------------------------------------
 
-export type EstadoUsuarioFiltro = 'activo' | 'inactivo' | 'sin_ingreso' | 'correo_invalido';
+export type EstadoUsuarioFiltro = 'activo' | 'inactivo' | 'sin_ingreso';
 
 export interface FiltrosUsuarios {
   q?: string | undefined;
@@ -42,11 +42,11 @@ export interface FiltrosUsuarios {
 export interface FilaUsuarioAdmin {
   id: string;
   nombre: string;
+  username: string | null;
   email: string;
   rol: string;
   area: string | null;
   activo: boolean;
-  correoInvalido: boolean;
   organizacion: string;
   organizacionId: string;
   organizacionTipo: string;
@@ -57,11 +57,11 @@ export interface FilaUsuarioAdmin {
 const COLUMNAS_USUARIO = {
   id: usuario.id,
   nombre: usuario.nombre,
+  username: usuario.username,
   email: usuario.email,
   rol: usuario.rol,
   area: usuario.area,
   activo: usuario.activo,
-  correoInvalido: usuario.correoInvalido,
   organizacion: organizacion.nombre,
   organizacionId: usuario.organizacionId,
   organizacionTipo: usuario.organizacionTipo,
@@ -76,7 +76,7 @@ export async function listarUsuariosAdmin(ej: Ejecutor, actor: Actor, filtros: F
   if (q) {
     const patron = `%${escaparLike(q)}%`;
     condiciones.push(
-      sql`(${sinTildesSql(sql`${usuario.nombre}`)} like ${patron} escape '\\' or lower(${usuario.email}) like ${patron} escape '\\' or ${sinTildesSql(sql`coalesce(${usuario.area}, '')`)} like ${patron} escape '\\')`,
+      sql`(${sinTildesSql(sql`${usuario.nombre}`)} like ${patron} escape '\\' or coalesce(${usuario.username}, '') like ${patron} escape '\\' or lower(${usuario.email}) like ${patron} escape '\\' or ${sinTildesSql(sql`coalesce(${usuario.area}, '')`)} like ${patron} escape '\\')`,
     );
   }
   if (filtros.rol) condiciones.push(eq(usuario.rol, filtros.rol));
@@ -90,9 +90,6 @@ export async function listarUsuariosAdmin(ej: Ejecutor, actor: Actor, filtros: F
       break;
     case 'sin_ingreso':
       condiciones.push(and(eq(usuario.activo, true), isNull(usuario.ultimoIngreso)) as SQL);
-      break;
-    case 'correo_invalido':
-      condiciones.push(eq(usuario.correoInvalido, true));
       break;
   }
   const filas = await ej
@@ -356,11 +353,10 @@ export async function fichasConVariasAgencias(ej: Ejecutor, actor: Actor): Promi
 // ---- Resumen ------------------------------------------------------------------------------------
 
 export interface ResumenAdmin {
-  usuarios: { activos: number; inactivos: number; sinIngreso: number; correoInvalido: number };
+  usuarios: { activos: number; inactivos: number; sinIngreso: number };
   sinIngresoLista: Array<{ id: string; nombre: string; email: string; creadoEn: string }>;
   organizaciones: { internas: number; agencias: number };
   agenciasSinUsuarios: Array<{ id: string; nombre: string }>;
-  correo: Record<'pendiente' | 'enviando' | 'enviado' | 'fallido' | 'abandonado', number>;
   fichasConVariasAgencias: FichaVariasAgencias[];
 }
 
@@ -371,7 +367,6 @@ export async function resumenAdmin(ej: Ejecutor, actor: Actor): Promise<ResumenA
       activos: sql<number>`(count(*) filter (where ${usuario.activo}))::int`,
       inactivos: sql<number>`(count(*) filter (where not ${usuario.activo}))::int`,
       sinIngreso: sql<number>`(count(*) filter (where ${usuario.activo} and ${usuario.ultimoIngreso} is null))::int`,
-      correoInvalido: sql<number>`(count(*) filter (where ${usuario.correoInvalido}))::int`,
     })
     .from(usuario);
   const sinIngresoLista = await ej
@@ -396,22 +391,14 @@ export async function resumenAdmin(ej: Ejecutor, actor: Actor): Promise<ResumenA
       ),
     )
     .orderBy(asc(organizacion.nombre));
-  const correos = await ej
-    .select({ estado: entregaCorreo.estado, n: sql<number>`count(*)::int` })
-    .from(entregaCorreo)
-    .groupBy(entregaCorreo.estado);
-
-  const correo = { pendiente: 0, enviando: 0, enviado: 0, fallido: 0, abandonado: 0 };
-  for (const c of correos) if (c.estado in correo) correo[c.estado as keyof typeof correo] = c.n;
   return {
-    usuarios: u ?? { activos: 0, inactivos: 0, sinIngreso: 0, correoInvalido: 0 },
+    usuarios: u ?? { activos: 0, inactivos: 0, sinIngreso: 0 },
     sinIngresoLista: sinIngresoLista.map((x) => ({ ...x, creadoEn: x.creadoEn.toISOString() })),
     organizaciones: {
       internas: orgs.find((o) => o.tipo === 'interna')?.n ?? 0,
       agencias: orgs.find((o) => o.tipo === 'agencia')?.n ?? 0,
     },
     agenciasSinUsuarios,
-    correo,
     fichasConVariasAgencias: await fichasConVariasAgencias(ej, actor),
   };
 }

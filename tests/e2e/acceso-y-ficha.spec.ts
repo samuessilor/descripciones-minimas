@@ -1,5 +1,5 @@
 /**
- * E2E de H1 (SPEC 17.1): invitar -> enlace -> ficha de prueba con `guardarCampo` real -> historial ->
+ * E2E de H1 (SPEC 17.1): crear cuenta -> usuario y contrasena -> ficha de prueba con `guardarCampo` real -> historial ->
  * choque de edicion con dos navegadores -> revocacion de sesion al desactivar (P-12).
  * Requiere el servidor de desarrollo con la base sembrada (la propia configuracion lo levanta).
  */
@@ -8,7 +8,7 @@ import { contextoAutenticado, entrarComo, pulsarHidratado, vigilarErrores } from
 
 test.describe.configure({ mode: 'serial' });
 
-test('login por enlace magico sin errores de consola ni de CSP, y navegacion con todas las secciones', async ({ page, request }) => {
+test('login con usuario y contrasena sin errores de consola ni de CSP, y navegacion con todas las secciones', async ({ page, request }) => {
   // Login real + 10 rutas que en frio se compilan bajo demanda: los 90 s globales no alcanzan.
   test.setTimeout(240_000);
   const errores = vigilarErrores(page);
@@ -22,7 +22,7 @@ test('login por enlace magico sin errores de consola ni de CSP, y navegacion con
   // El menu de usuario (avatar + nombre) es un boton que abre la cuenta.
   await expect(page.getByRole('button', { name: 'Ana Admin' })).toBeVisible();
 
-  for (const ruta of ['/referencias', '/notificaciones', '/cuenta', '/admin', '/admin/usuarios', '/admin/organizaciones', '/admin/catalogos', '/admin/auditoria', '/admin/correo']) {
+  for (const ruta of ['/referencias', '/notificaciones', '/cuenta', '/admin', '/admin/usuarios', '/admin/organizaciones', '/admin/catalogos', '/admin/auditoria', '/admin/parametros']) {
     const r = await page.goto(ruta);
     expect(r?.status(), ruta).toBe(200);
   }
@@ -102,18 +102,22 @@ test('dos navegadores en el mismo campo: choque con las tres salidas, sin perder
 
 test('P-12: desactivar a un usuario con sesion abierta la cierra en su siguiente peticion', async ({ browser, request }) => {
   const admin = await contextoAutenticado(browser, request, 'admin@desarrollo.invalid');
-  const correo = `prueba-${Date.now()}@desarrollo.invalid`;
+  const usuario = `prueba-${Date.now().toString(36)}`;
   try {
-    // El admin invita (sin registro abierto: solo asi se entra).
-    await admin.page.goto('/admin/usuarios/invitar');
-    await admin.page.getByLabel('Nombre completo').fill('Persona de prueba');
-    await admin.page.getByLabel('Correo').fill(correo);
+    // El admin crea la cuenta (sin registro abierto: solo asi se entra) y copia la contrasena temporal.
+    await admin.page.goto('/admin/usuarios/nueva');
+    await admin.page.getByLabel(/^Nombre/).fill('Persona de prueba');
+    await admin.page.getByLabel('Usuario', { exact: true }).fill(usuario);
     await admin.page.getByLabel('Organización').selectOption({ label: 'EssilorLuxottica [DESARROLLO]' });
-    await pulsarHidratado(admin.page.getByRole('button', { name: 'Invitar y enviar el enlace' }));
+    await pulsarHidratado(admin.page.getByRole('button', { name: 'Crear la cuenta' }));
+    await expect(admin.page.getByRole('heading', { name: 'Cuenta creada: Persona de prueba' })).toBeVisible();
+    const clave = (await admin.page.getByTestId('credencial-contraseña').innerText()).trim();
+    expect(clave).toMatch(/^[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}$/);
+    await admin.page.getByRole('link', { name: 'Ver la cuenta' }).click();
     await expect(admin.page.getByRole('heading', { level: 1, name: 'Persona de prueba' })).toBeVisible();
 
-    // La persona entra con su enlace de bienvenida.
-    const persona = await contextoAutenticado(browser, request, correo);
+    // La persona entra con el usuario y la contrasena que se le entregaron.
+    const persona = await contextoAutenticado(browser, request, usuario, clave);
     try {
       await persona.page.goto('/referencias');
       await expect(persona.page.getByRole('heading', { name: 'Referencias' })).toBeVisible();

@@ -1,26 +1,33 @@
 /**
- * `npm run cuentas:iniciales -- <archivo.json>`: crea de una vez las cuentas acordadas con el area (reunion 2026-10-29):
+ * `npm run cuentas:iniciales -- <archivo.json> [--salida <claves.txt>]`: crea de una vez las cuentas acordadas con el area
+ * (reunion 2026-10-29), cada una con usuario y contrasena temporal:
  *   - administradores (organizacion interna EssilorLuxottica),
  *   - UNA cuenta general por area (Consumibles, Mantenimiento, Instrumentos, Marketing), rol solicitante,
  *   - UNA cuenta general por empresa de aduana (su propia organizacion tipo agencia), rol aduana,
  *   - lectores (opcional).
- * Formato: ver `cuentas.ejemplo.json`. El archivo real lleva correos de la empresa: va FUERA del repositorio.
+ * Formato: ver `cuentas.ejemplo.json`.
  *
- * Idempotente: lo que ya existe (correo u organizacion) no se toca. Cambios posteriores (desactivar una agencia,
- * cambiar de proveedor) se hacen en Administracion. Usa `DATABASE_URL_UNPOOLED` o `DATABASE_URL`; sin ninguna, la
- * PGlite local (servidor DETENIDO).
+ * Las contrasenas se muestran UNA vez (en consola o en el archivo de `--salida`, que debe estar FUERA del repositorio):
+ * en la base solo queda su hash. Con esa lista el implementador entrega usuario y contrasena a quien corresponda.
+ *
+ * Idempotente: lo que ya existe (usuario u organizacion) no se toca ni recibe contrasena nueva. Cambios posteriores
+ * (restablecer una contrasena, desactivar una agencia) se hacen en Administracion. Usa `DATABASE_URL_UNPOOLED` o
+ * `DATABASE_URL`; sin ninguna, la PGlite local (servidor DETENIDO).
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { relative, resolve } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { organizacion, usuario } from '../src/db/esquema/identidad';
+import { account, organizacion, usuario } from '../src/db/esquema/identidad';
 import { crearConexion } from '../src/db/conexion';
 import { esArea } from '../src/dominio/areas';
+import { correoSinCorreo, normalizarUsuario, validarUsuario } from '../src/dominio/credenciales';
+import { generarClave, hashearClave } from '../src/server/claves';
 import { cargarConfig } from '../src/server/config';
 
 const ORG_INTERNA = 'EssilorLuxottica';
 
 interface Cuenta {
-  correo: string;
+  usuario: string;
   nombre: string;
 }
 interface Archivo {
@@ -30,17 +37,32 @@ interface Archivo {
   lectores?: Cuenta[];
 }
 
-const ruta = process.argv[2];
+const args = process.argv.slice(2);
+const ruta = args.find((a) => !a.startsWith('--'));
+const iSalida = args.indexOf('--salida');
+const salida = iSalida >= 0 ? args[iSalida + 1] : undefined;
 if (!ruta) {
-  console.error('Uso: npm run cuentas:iniciales -- C:\\ruta\\cuentas.json   (formato: cuentas.ejemplo.json)');
+  console.error('Uso: npm run cuentas:iniciales -- C:\\ruta\\cuentas.json [--salida C:\\ruta\\claves.txt]   (formato: cuentas.ejemplo.json)');
   process.exit(1);
+}
+if (salida) {
+  const raiz = resolve(import.meta.dirname, '..');
+  const rel = relative(raiz, resolve(salida));
+  if (!rel.startsWith('..') && !resolve(salida).includes('node_modules')) {
+    console.error(`El archivo de contraseñas (${salida}) quedaría dentro del repositorio. Elige una ruta fuera de ${raiz}.`);
+    process.exit(1);
+  }
 }
 const datos = JSON.parse(readFileSync(ruta, 'utf8')) as Archivo;
 
-const CORREO = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const errores: string[] = [];
+const vistos = new Set<string>();
 const revisar = (c: Cuenta, donde: string) => {
-  if (!c.correo || !CORREO.test(c.correo.trim())) errores.push(`${donde}: correo invalido «${c.correo ?? ''}»`);
+  const u = normalizarUsuario(c.usuario);
+  const p = validarUsuario(u);
+  if (p) errores.push(`${donde}: usuario «${c.usuario ?? ''}» no es válido. ${p}`);
+  if (vistos.has(u)) errores.push(`${donde}: el usuario «${u}» está repetido en el archivo`);
+  vistos.add(u);
   if (!c.nombre?.trim()) errores.push(`${donde}: falta el nombre`);
 };
 (datos.administradores ?? []).forEach((c, i) => revisar(c, `administradores[${i}]`));
@@ -54,7 +76,7 @@ const revisar = (c: Cuenta, donde: string) => {
   if (!c.empresa?.trim()) errores.push(`agencias[${i}]: falta la empresa`);
 });
 if (errores.length) {
-  console.error(`El archivo tiene ${errores.length} error(es); no se creo nada:\n  ${errores.join('\n  ')}`);
+  console.error(`El archivo tiene ${errores.length} error(es); no se creó nada:\n  ${errores.join('\n  ')}`);
   process.exit(1);
 }
 
@@ -63,26 +85,34 @@ const conexion = crearConexion({ url: c.DATABASE_URL_UNPOOLED ?? c.DATABASE_URL,
 const db = conexion.db;
 let creadas = 0;
 let existentes = 0;
+const entregables: string[] = [];
 
 async function org(nombre: string, tipo: 'interna' | 'agencia') {
   const [ya] = await db.select().from(organizacion).where(eq(organizacion.nombre, nombre)).limit(1);
   if (ya) return ya;
   const [nueva] = await db.insert(organizacion).values({ nombre, tipo }).returning();
   console.log(`  + organizacion ${nombre} (${tipo})`);
-  return nueva;
+  return nueva!;
 }
 
-async function cuenta(c: Cuenta, rol: 'admin' | 'solicitante' | 'aduana' | 'lector', o: { id: string; tipo: string }, area: string | null) {
-  const email = c.correo.trim().toLowerCase();
-  const [ya] = await db.select({ id: usuario.id }).from(usuario).where(eq(usuario.email, email)).limit(1);
+async function cuenta(cu: Cuenta, rol: 'admin' | 'solicitante' | 'aduana' | 'lector', o: { id: string; tipo: string }, area: string | null) {
+  const username = normalizarUsuario(cu.usuario);
+  const [ya] = await db.select({ id: usuario.id }).from(usuario).where(eq(usuario.username, username)).limit(1);
   if (ya) {
     existentes++;
-    console.log(`  = ${email} ya existe; no se cambia`);
+    console.log(`  = ${username} ya existe; no se cambia`);
     return;
   }
-  await db.insert(usuario).values({ nombre: c.nombre.trim(), email, organizacionId: o.id, organizacionTipo: o.tipo, rol, area });
+  const clave = generarClave();
+  const hash = await hashearClave(clave);
+  const [u] = await db
+    .insert(usuario)
+    .values({ nombre: cu.nombre.trim(), username, email: correoSinCorreo(username), organizacionId: o.id, organizacionTipo: o.tipo, rol, area })
+    .returning({ id: usuario.id });
+  await db.insert(account).values({ accountId: u!.id, providerId: 'credential', userId: u!.id, password: hash });
   creadas++;
-  console.log(`  + ${rol.padEnd(11)} ${email}${area ? ` (${area})` : ''}`);
+  entregables.push(`${username.padEnd(22)} ${clave}   ${rol}${area ? ` · ${area}` : ''} · ${cu.nombre.trim()}`);
+  console.log(`  + ${rol.padEnd(11)} ${username}${area ? ` (${area})` : ''}`);
 }
 
 try {
@@ -91,7 +121,16 @@ try {
   for (const a of datos.areas ?? []) await cuenta(a, 'solicitante', interna, a.area);
   for (const l of datos.lectores ?? []) await cuenta(l, 'lector', interna, null);
   for (const g of datos.agencias ?? []) await cuenta(g, 'aduana', await org(g.empresa.trim(), 'agencia'), null);
-  console.log(`✔ ${creadas} cuenta(s) creada(s), ${existentes} ya existian. Cada una entra pidiendo su enlace en /entrar.`);
+  console.log(`✔ ${creadas} cuenta(s) creada(s), ${existentes} ya existian.`);
+  if (entregables.length > 0) {
+    const cuerpo = ['USUARIO                CONTRASEÑA        CUENTA', ...entregables].join('\n');
+    if (salida) {
+      writeFileSync(salida, `${cuerpo}\n`, { encoding: 'utf8' });
+      console.log(`  Usuarios y contraseñas guardados en ${salida}. Entrégalos y bórralo después: la base solo guarda su hash.`);
+    } else {
+      console.log(`\n${cuerpo}\n\nCópialas ahora: no se vuelven a mostrar. Quien entre puede cambiarla en «Mi cuenta».`);
+    }
+  }
 } finally {
   await conexion.cerrar();
 }

@@ -1,6 +1,6 @@
 /**
  * Reglas puras de la colaboracion (SPEC 8.3 y 14): pedidos por rol, maquina de estados de la
- * asignacion, esperas de reintento del correo y formato de tiempo. Dominio PURO: sin base ni Next.
+ * asignacion y formato de tiempo. Dominio PURO: sin base ni Next.
  */
 import { ETIQUETA_SECCION, SECCIONES, type Seccion } from './campos';
 import type { Rol } from './permisos';
@@ -124,24 +124,6 @@ export function transicionarAsignacion(estado: EstadoAsignacion, evento: EventoA
 
 export function esAsignacionActiva(estado: string): boolean {
   return estado === 'pendiente' || estado === 'en_curso';
-}
-
-// ---- Correo: reintentos con espera creciente (14, S-16) ----------------------------------------------
-
-/** Esperas tras el fallo 1, 2, 3, 4 y 5: 5 min, 30 min, 2 h, 12 h y 24 h. El sexto fallo abandona. */
-export const ESPERAS_REINTENTO_MS = [5 * 60_000, 30 * 60_000, 2 * 3_600_000, 12 * 3_600_000, 24 * 3_600_000] as const;
-/** Seis intentos en total. */
-export const MAX_INTENTOS_CORREO = ESPERAS_REINTENTO_MS.length + 1;
-/** Un reclamo (`enviando`) vence a los 2 minutos y otro despachador puede recuperarlo. */
-export const BLOQUEO_ENVIO_MS = 2 * 60_000;
-
-export type PlanReintento = { estado: 'fallido'; proximoIntento: Date } | { estado: 'abandonado' };
-
-/** Que hacer tras un intento fallido, dado cuantos intentos se han hecho (incluido el que fallo). */
-export function planReintento(intentosHechos: number, ahora: Date): PlanReintento {
-  if (intentosHechos >= MAX_INTENTOS_CORREO) return { estado: 'abandonado' };
-  const espera = ESPERAS_REINTENTO_MS[Math.max(0, intentosHechos - 1)] ?? ESPERAS_REINTENTO_MS[ESPERAS_REINTENTO_MS.length - 1]!;
-  return { estado: 'fallido', proximoIntento: new Date(ahora.getTime() + espera) };
 }
 
 // ---- Fechas y tiempo ----------------------------------------------------------------------------------

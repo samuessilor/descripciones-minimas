@@ -1,7 +1,7 @@
 /** Semilla de ejemplos de desarrollo: 12 fichas EJ-* en estados variados, con historial, comentarios y avisos. */
 import { eq, inArray, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { asignacion, campoHistorial, comentario, entregaCorreo, notificacion, referencia, usuario } from '@/db/esquema';
+import { account, asignacion, campoHistorial, comentario, notificacion, referencia, usuario } from '@/db/esquema';
 import { sembrarDatosMaestros } from '@/db/semillas/datos-maestros';
 import { sembrarDesarrollo, sembrarTodo } from '@/server/semillas';
 import { sembrarEjemplos } from '@/server/semillas-ejemplos';
@@ -41,7 +41,7 @@ describe('semilla de ejemplos', () => {
     expect(autores.size).toBe(2); // Edgar lo escribio y Carla lo reemplazo con motivo
   });
 
-  it('cada rol con trabajo tiene al menos un pendiente y los avisos tienen correo en el outbox', async () => {
+  it('cada rol con trabajo tiene al menos un pendiente y hay avisos en la campana', async () => {
     const pend = await c.db
       .select({ email: usuario.email })
       .from(asignacion)
@@ -52,11 +52,18 @@ describe('semilla de ejemplos', () => {
       expect([...con].some((x) => x.startsWith(e)), `pendiente para ${e}`).toBe(true);
     }
     const [{ n: avisos }] = (await c.db.select({ n: sql<number>`count(*)::int` }).from(notificacion)) as [{ n: number }];
-    const [{ n: correos }] = (await c.db.select({ n: sql<number>`count(*)::int` }).from(entregaCorreo)) as [{ n: number }];
     expect(avisos).toBeGreaterThanOrEqual(12);
-    expect(correos).toBeGreaterThanOrEqual(8);
     const [{ n: comentarios }] = (await c.db.select({ n: sql<number>`count(*)::int` }).from(comentario)) as [{ n: number }];
     expect(comentarios).toBeGreaterThanOrEqual(3);
+  });
+
+  it('toda cuenta de ejemplo tiene usuario (la parte local del correo) y contrasena', async () => {
+    const us = await c.db.select({ id: usuario.id, email: usuario.email, username: usuario.username }).from(usuario);
+    const conClave = new Set((await c.db.select({ id: account.userId }).from(account)).map((a) => a.id));
+    for (const u of us) {
+      expect(u.username, u.email).toBe(u.email.split('@')[0]);
+      expect(conClave.has(u.id), u.email).toBe(true);
+    }
   });
 
   it('una cuenta general por area y por agencia; toda referencia de ejemplo tiene area responsable (C1, C3, P4)', async () => {

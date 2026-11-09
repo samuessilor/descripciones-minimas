@@ -2,7 +2,7 @@
  * Lecturas de colaboracion de UNA ficha, todas filtradas para el actor (13.2):
  *   GET /api/colaboracion/ficha/<id>/contexto       datos del dialogo "Enviar a" y mi asignacion
  *   GET /api/colaboracion/ficha/<id>/destinatarios  personas a las que puedo enviarla
- *   GET /api/colaboracion/ficha/<id>/seguimiento    a quien esta enviada, desde cuando y como va el correo
+ *   GET /api/colaboracion/ficha/<id>/seguimiento    a quien esta enviada y desde cuando
  *   GET /api/colaboracion/ficha/<id>/historial      linea de tiempo (?campo=&antes=)
  *   GET /api/colaboracion/ficha/<id>/comentarios    comentarios visibles para mi (?campo=)
  *   GET /api/colaboracion/ficha/<id>/campos         quien puso cada valor y cuando

@@ -2,7 +2,7 @@
 import { and, eq, ne } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asignacion, auditoria, usuario } from '@/db/esquema';
-import { cambiarOrganizacion, cambiarRol, desactivarUsuario, invitarUsuario, reactivarUsuario } from '@/server/acciones/usuarios';
+import { cambiarOrganizacion, cambiarRol, desactivarUsuario, crearCuenta, reactivarUsuario } from '@/server/acciones/usuarios';
 import { ErrorAccion } from '@/server/acciones/resultado';
 import { asignarAAduana, nuevoEscenario, nuevaFicha, type Escenario } from './ayudas';
 
@@ -24,34 +24,41 @@ async function codigoDe(p: Promise<unknown>): Promise<string> {
 }
 
 describe('invitar (D-28 en politicas)', () => {
-  it('solo un admin invita', async () => {
+  it('solo un admin crea cuentas', async () => {
     for (const quien of [e.edward, e.brian, e.lector]) {
-      expect(await codigoDe(invitarUsuario(e.ctx(quien), { nombre: 'X', email: 'x@prueba.invalid', organizacionId: e.orgInterna, rol: 'lector' }))).toBe('SIN_PERMISO');
+      expect(await codigoDe(crearCuenta(e.ctx(quien), { nombre: 'X', usuario: 'xxx', email: 'x@prueba.invalid', organizacionId: e.orgInterna, rol: 'lector' }))).toBe('SIN_PERMISO');
     }
   });
 
   it('una agencia solo admite el rol aduana; una interna admite todos', async () => {
     for (const rol of ['admin', 'solicitante', 'lector'] as const) {
-      expect(await codigoDe(invitarUsuario(e.ctx(e.admin), { nombre: 'X', email: `${rol}@agencia.invalid`, organizacionId: e.orgA, rol }))).toBe('VALIDACION');
+      expect(await codigoDe(crearCuenta(e.ctx(e.admin), { nombre: 'X', usuario: `${rol}-ag`, email: `${rol}@agencia.invalid`, organizacionId: e.orgA, rol }))).toBe('VALIDACION');
     }
     for (const rol of ['admin', 'solicitante', 'aduana', 'lector'] as const) {
-      const r = await invitarUsuario(e.ctx(e.admin), { nombre: `Interno ${rol}`, email: `${rol}@interna.invalid`, organizacionId: e.orgInterna, rol });
+      const r = await crearCuenta(e.ctx(e.admin), { nombre: `Interno ${rol}`, usuario: `interno-${rol}`, email: `${rol}@interna.invalid`, organizacionId: e.orgInterna, rol });
       expect(r.organizacionTipo).toBe('interna');
     }
   });
 
-  it('guarda el correo en minusculas, rechaza duplicados sin importar mayusculas y audita', async () => {
-    const r = await invitarUsuario(e.ctx(e.admin), { nombre: 'Nueva', email: ' Nueva@Interna.INVALID ', organizacionId: e.orgInterna, rol: 'solicitante', area: 'Consumibles' });
-    expect(r.email).toBe('nueva@interna.invalid');
-    expect(await codigoDe(invitarUsuario(e.ctx(e.admin), { nombre: 'Otra', email: 'NUEVA@interna.invalid', organizacionId: e.orgInterna, rol: 'solicitante' }))).toBe('DUPLICADO');
-    const a = await e.db.select().from(auditoria).where(and(eq(auditoria.accion, 'invitar'), eq(auditoria.entidadId, r.id)));
+  it('guarda el usuario y el correo en minusculas, rechaza duplicados sin importar mayusculas y audita', async () => {
+    const r = await crearCuenta(e.ctx(e.admin), { nombre: 'Nueva', usuario: ' Nueva.Interna ', email: ' Nueva@Interna.INVALID ', organizacionId: e.orgInterna, rol: 'solicitante', area: 'Consumibles' });
+    expect(r.usuario).toBe('nueva.interna');
+    const [fila] = await e.db.select().from(usuario).where(eq(usuario.id, r.id));
+    expect(fila).toMatchObject({ username: 'nueva.interna', email: 'nueva@interna.invalid' });
+    expect(await codigoDe(crearCuenta(e.ctx(e.admin), { nombre: 'Otra', usuario: 'NUEVA.interna', organizacionId: e.orgInterna, rol: 'solicitante' }))).toBe('DUPLICADO');
+    // Sin correo propio, repetir el usuario dice «usuario» (no «correo»).
+    const sinCorreo = await crearCuenta(e.ctx(e.admin), { nombre: 'Area X', usuario: 'area-x', organizacionId: e.orgInterna, rol: 'solicitante' });
+    expect(sinCorreo.usuario).toBe('area-x');
+    await expect(crearCuenta(e.ctx(e.admin), { nombre: 'Area X2', usuario: 'AREA-X', organizacionId: e.orgInterna, rol: 'solicitante' })).rejects.toThrow('Ya existe una cuenta con ese usuario.');
+    expect(await codigoDe(crearCuenta(e.ctx(e.admin), { nombre: 'Otra', usuario: 'otra.persona', email: 'NUEVA@interna.invalid', organizacionId: e.orgInterna, rol: 'solicitante' }))).toBe('DUPLICADO');
+    const a = await e.db.select().from(auditoria).where(and(eq(auditoria.accion, 'crear_cuenta'), eq(auditoria.entidadId, r.id)));
     expect(a).toHaveLength(1);
     expect(a[0]!.usuarioId).toBe(e.admin.usuarioId);
   });
 
   it('rechaza correos y organizaciones invalidos', async () => {
-    expect(await codigoDe(invitarUsuario(e.ctx(e.admin), { nombre: 'X', email: 'no-es-correo', organizacionId: e.orgInterna, rol: 'lector' }))).toBe('VALIDACION');
-    expect(await codigoDe(invitarUsuario(e.ctx(e.admin), { nombre: 'X', email: 'o@prueba.invalid', organizacionId: '00000000-0000-4000-8000-000000000000', rol: 'lector' }))).toBe('NO_ENCONTRADO');
+    expect(await codigoDe(crearCuenta(e.ctx(e.admin), { nombre: 'X', usuario: 'xxx', email: 'no-es-correo', organizacionId: e.orgInterna, rol: 'lector' }))).toBe('VALIDACION');
+    expect(await codigoDe(crearCuenta(e.ctx(e.admin), { nombre: 'X', usuario: 'xxx', email: 'o@prueba.invalid', organizacionId: '00000000-0000-4000-8000-000000000000', rol: 'lector' }))).toBe('NO_ENCONTRADO');
   });
 });
 
@@ -63,7 +70,7 @@ describe('cambiar rol y organizacion', () => {
   });
 
   it('un interno con rol aduana si puede moverse a una agencia (PA-16 lo deja abierto)', async () => {
-    const r = await invitarUsuario(e.ctx(e.admin), { nombre: 'Clasificador interno', email: 'clasif@interna.invalid', organizacionId: e.orgInterna, rol: 'aduana' });
+    const r = await crearCuenta(e.ctx(e.admin), { nombre: 'Clasificador interno', usuario: 'clasif', email: 'clasif@interna.invalid', organizacionId: e.orgInterna, rol: 'aduana' });
     expect(await codigoDe(cambiarOrganizacion(e.ctx(e.admin), { usuarioId: r.id, organizacionId: e.orgB }))).toBe('OK');
     const [u] = await e.db.select().from(usuario).where(eq(usuario.id, r.id));
     expect(u).toMatchObject({ organizacionId: e.orgB, organizacionTipo: 'agencia' });
@@ -91,7 +98,7 @@ describe('desactivar (10.4, 10.6, CA-29)', () => {
     // Destino invalido: un lector.
     expect(await codigoDe(desactivarUsuario(e.ctx(e.admin), { usuarioId: e.brian.usuarioId, reasignaciones: { [f1]: e.lector.usuarioId, [f2]: e.lector.usuarioId } }))).toBe('VALIDACION');
 
-    const colega = await invitarUsuario(e.ctx(e.admin), { nombre: 'Colega', email: 'colega@agencia.invalid', organizacionId: e.orgA, rol: 'aduana' });
+    const colega = await crearCuenta(e.ctx(e.admin), { nombre: 'Colega', usuario: 'u-colega', email: 'colega@agencia.invalid', organizacionId: e.orgA, rol: 'aduana' });
     const r = await desactivarUsuario(e.ctx(e.admin), { usuarioId: e.brian.usuarioId, reasignaciones: { [f1]: colega.id, [f2]: colega.id } });
     expect(r.reasignadas).toBe(2);
 
@@ -107,8 +114,8 @@ describe('desactivar (10.4, 10.6, CA-29)', () => {
 
   it('si el destino ya tenia la ficha pendiente no rompe el indice unico (se cierra solo la vieja)', async () => {
     const f = await nuevaFicha(e);
-    const dos = await invitarUsuario(e.ctx(e.admin), { nombre: 'Dos', email: 'dos@agencia.invalid', organizacionId: e.orgB, rol: 'aduana' });
-    const tres = await invitarUsuario(e.ctx(e.admin), { nombre: 'Tres', email: 'tres@agencia.invalid', organizacionId: e.orgB, rol: 'aduana' });
+    const dos = await crearCuenta(e.ctx(e.admin), { nombre: 'Dos', usuario: 'u-dos', email: 'dos@agencia.invalid', organizacionId: e.orgB, rol: 'aduana' });
+    const tres = await crearCuenta(e.ctx(e.admin), { nombre: 'Tres', usuario: 'u-tres', email: 'tres@agencia.invalid', organizacionId: e.orgB, rol: 'aduana' });
     await e.db.insert(asignacion).values([
       { referenciaId: f, deUsuarioId: e.edward.usuarioId, aUsuarioId: dos.id, estado: 'pendiente' },
       { referenciaId: f, deUsuarioId: e.edward.usuarioId, aUsuarioId: tres.id, estado: 'pendiente' },
@@ -122,7 +129,7 @@ describe('desactivar (10.4, 10.6, CA-29)', () => {
   it('no deja sin administradores y se puede reactivar', async () => {
     await e.db.update(usuario).set({ activo: false }).where(and(eq(usuario.rol, 'admin'), ne(usuario.id, e.admin.usuarioId)));
     expect(await codigoDe(desactivarUsuario(e.ctx(e.admin), { usuarioId: e.admin.usuarioId }))).toBe('VALIDACION');
-    const otro = await invitarUsuario(e.ctx(e.admin), { nombre: 'Admin 2', email: 'admin2@interna.invalid', organizacionId: e.orgInterna, rol: 'admin' });
+    const otro = await crearCuenta(e.ctx(e.admin), { nombre: 'Admin 2', usuario: 'u-admin2', email: 'admin2@interna.invalid', organizacionId: e.orgInterna, rol: 'admin' });
     expect(await codigoDe(desactivarUsuario(e.ctx(e.admin), { usuarioId: otro.id }))).toBe('OK');
     expect(await codigoDe(reactivarUsuario(e.ctx(e.admin), { usuarioId: otro.id }))).toBe('OK');
     expect((await e.db.select().from(usuario).where(eq(usuario.id, otro.id)))[0]!.activo).toBe(true);

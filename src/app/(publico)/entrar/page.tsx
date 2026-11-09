@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 export default async function PaginaEntrar({ searchParams }: { searchParams: Promise<{ siguiente?: string }> }) {
   const { siguiente } = await searchParams;
   const destino = siguienteSeguro(siguiente);
-  // Si ya hay sesion valida, no se pide el enlace otra vez.
+  // Si ya hay sesion valida, no se pide la contrasena otra vez.
   if (await getActor()) redirect(destino);
   // Solo desarrollo con `npm run inicio`: sin login, se entra como admin (ver MenuUsuario para cambiar de cuenta).
   if (process.env.NODE_ENV === 'development' && process.env.SIN_LOGIN === '1') {

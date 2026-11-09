@@ -21,6 +21,19 @@ export default async function Ayuda() {
     <ContenedorLectura>
       <EncabezadoPagina titulo="Ayuda" descripcion="Cómo se usa, paso a paso. Una referencia es una hoja de vida que se llena entre varias personas." />
       <div className="space-y-4" data-testid="ayuda">
+        <Paso titulo="Cómo entro">
+          <ul>
+            <li>
+              Entras con un <b>usuario</b> y una <b>contraseña</b> que te entrega el administrador (por ejemplo, el usuario <b>consumibles</b>). No hay
+              registro ni correo: si no tienes cuenta o olvidaste la contraseña, pídesela a quien administra.
+            </li>
+            <li>
+              Cambia tu contraseña cuando quieras en <b>Mi cuenta</b> (menú de arriba a la derecha). Si es una cuenta de área que usan varias personas,
+              avisen al cambiarla.
+            </li>
+            <li>La sesión se cierra sola tras 8 horas sin usarla. «Cerrar sesión» está en el mismo menú.</li>
+          </ul>
+        </Paso>
         <Paso titulo="1. Los dos colores">
           <ul>
             <li>
@@ -114,14 +127,19 @@ export default async function Ayuda() {
         <Paso titulo="8. Cuentas: una por área y una por empresa de aduana">
           <ul>
             <li>
-              Cada área (Consumibles, Mantenimiento, Instrumentos, Marketing) tiene una cuenta general que entra con su correo. Ve en «Para mí» las
-              referencias de su área que tienen algo pendiente, aunque nadie se las haya enviado, y recibe las solicitudes de la aduana sobre ellas. El
-              área se compromete a revisar «Para mí» y la campana a diario.
+              Cada área (Consumibles, Mantenimiento, Instrumentos, Marketing) tiene una cuenta general que entra con su usuario y contraseña. Ve en
+              «Para mí» las referencias de su área que tienen algo pendiente, aunque nadie se las haya enviado, y recibe las solicitudes de la aduana sobre
+              ellas. A esa cuenta se le puede enviar trabajo con «Enviar a…», igual que a una persona. El área se compromete a revisar «Para mí» y la
+              campana a diario.
             </li>
-            <li>El área de cada persona se elige de la lista en Administración › Usuarios (al invitar o al editar).</li>
+            <li>
+              Quien administra crea las cuentas en Administración › Usuarios › «Crear cuenta»: nombre, usuario, organización, rol y área. La plataforma
+              genera una <b>contraseña temporal</b> y la muestra <b>una sola vez</b>: se copia y se entrega a quien corresponda. Si se pierde, se
+              restablece desde la ficha de la cuenta («Restablecer contraseña»), lo que cierra sus sesiones.
+            </li>
             <li>
               Cada empresa de aduana es una organización de tipo agencia con una cuenta general, sin datos personales. Para una empresa nueva:
-              Administración › Organizaciones › «Nueva organización» (tipo Agencia de aduana) › ábrela › «Invitar a esta agencia» con el correo general.
+              Administración › Organizaciones › «Nueva organización» (tipo Agencia de aduana) › ábrela › «Crear cuenta para esta agencia».
             </li>
             <li>
               Si cambian de proveedor de aduana: en Administración › Usuarios abre la cuenta de la agencia vieja y desactívala; antes de hacerlo te pide a
@@ -131,8 +149,8 @@ export default async function Ayuda() {
         </Paso>
         <Paso titulo="¿Por qué no llega un correo?">
           <p>
-            Los avisos viven dentro de la aplicación: la campana y «Para mí». Si algo es urgente, usa «Recordar» o escríbele por el medio de siempre; el
-            enlace de la ficha sirve para eso.
+            Esta plataforma no envía correos: los avisos viven dentro de la aplicación, en la campana y en «Para mí». Si algo es urgente, usa «Recordar»
+            o escríbele por el medio de siempre; el enlace de la ficha sirve para eso.
           </p>
         </Paso>
       </div>

@@ -5,9 +5,10 @@ import type { Ejecutor } from '@/db/tipos';
 export type AccionAuditada =
   | 'login'
   | 'login_fallido'
-  | 'solicitar_enlace'
   | 'cerrar_sesion'
-  | 'invitar'
+  | 'crear_cuenta'
+  | 'restablecer_clave'
+  | 'cambiar_clave'
   | 'desactivar'
   | 'reactivar'
   | 'cambiar_rol'
@@ -28,7 +29,6 @@ export type AccionAuditada =
   | 'leer_adjunto'
   | 'crear_referencia'
   // Administracion (H5)
-  | 'reenviar_invitacion'
   | 'editar_usuario'
   | 'crear_organizacion'
   | 'editar_organizacion'
@@ -36,8 +36,6 @@ export type AccionAuditada =
   | 'guardar_catalogo'
   | 'guardar_restriccion'
   | 'guardar_partida'
-  | 'reintentar_correo'
-  | 'marcar_correo_invalido'
   | 'actualizar_preferencias';
 
 export interface EntradaAuditoria {

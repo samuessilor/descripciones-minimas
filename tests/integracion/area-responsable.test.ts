@@ -11,7 +11,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asignacion, campoHistorial, referencia, usuario } from '@/db/esquema';
 import { crearReferencia } from '@/server/acciones/crear-referencia';
-import { invitarUsuario } from '@/server/acciones/usuarios';
+import { crearCuenta } from '@/server/acciones/usuarios';
 import { editarUsuario } from '@/server/acciones/usuarios-admin';
 import { cargarActorPorId, type Actor } from '@/server/politicas/actor';
 import { pendientesDe, resumenInicioDe } from '@/server/politicas/colaboracion';
@@ -56,8 +56,9 @@ beforeAll(async () => {
   e = await nuevoEscenario();
   // Edward es de Consumibles; Mantenimiento tiene su cuenta general; Marketing no tiene a nadie.
   consumibles = await conArea(e.edward, 'Consumibles');
-  const r = await invitarUsuario(e.ctx(e.admin), {
+  const r = await crearCuenta(e.ctx(e.admin), {
     nombre: 'Mantenimiento',
+    usuario: 'mantenimiento',
     email: 'mantenimiento@prueba.invalid',
     organizacionId: e.orgInterna,
     rol: 'solicitante',
@@ -91,9 +92,9 @@ describe('P4: area responsable al crear', () => {
 });
 
 describe('C2: el area del usuario es del catalogo', () => {
-  it('invitar y editar solo aceptan las cuatro areas (o ninguna)', async () => {
+  it('crear cuenta y editar solo aceptan las cuatro areas (o ninguna)', async () => {
     await expect(
-      invitarUsuario(e.ctx(e.admin), { nombre: 'Y', email: 'y@prueba.invalid', organizacionId: e.orgInterna, rol: 'solicitante', area: 'Insumos' }),
+      crearCuenta(e.ctx(e.admin), { nombre: 'Y', usuario: 'yyy', email: 'y@prueba.invalid', organizacionId: e.orgInterna, rol: 'solicitante', area: 'Insumos' }),
     ).rejects.toMatchObject({ codigo: 'VALIDACION' });
     await editarUsuario(e.ctx(e.admin), { usuarioId: e.charles.usuarioId, nombre: 'Charles', area: 'Instrumentos' });
     expect((await cargarActorPorId(e.db, e.charles.usuarioId))?.area).toBe('Instrumentos');

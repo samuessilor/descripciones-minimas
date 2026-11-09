@@ -1,17 +1,16 @@
 /**
- * Usuarios (M1, 10.4, 13.1): invitar, desactivar con revocacion inmediata de sesiones, cambiar rol
- * u organizacion. SIN registro abierto: entra quien un admin creo. La regla rol x tipo de
- * organizacion (D-28) se valida aqui (politicas) ademas de la interfaz y de la base (CHECK + FK).
- *
- * El envio del correo de bienvenida (con enlace) lo hace la Server Action que envuelve a
- * `invitarUsuario`, porque necesita Better Auth y el entorno de Next.
+ * Usuarios (M1, 10.4, 13.1): crear cuenta (usuario + contrasena temporal), restablecer contrasena, desactivar con
+ * revocacion inmediata de sesiones, cambiar rol u organizacion. SIN registro abierto: entra quien un admin creo. La
+ * regla rol x tipo de organizacion (D-28) se valida aqui (politicas) ademas de la interfaz y de la base (CHECK + FK).
  */
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { asignacion, organizacion, usuario } from '@/db/esquema';
+import { account, asignacion, organizacion, usuario } from '@/db/esquema';
 import type { Tx } from '@/db/tipos';
+import { correoSinCorreo, normalizarUsuario, USUARIO_AYUDA, validarUsuario } from '@/dominio/credenciales';
 import { ROLES, puede, validarRolOrganizacion, type Rol, type TipoOrganizacion } from '@/dominio/permisos';
 import { auditar } from '../auditoria';
+import { generarClave, hashearClave } from '../claves';
 import { avisarAsignacionExistente } from './asignaciones';
 import { revocarSesionesDeUsuario } from '../sesiones';
 import { ahoraDe, type Contexto } from '../politicas/actor';
@@ -44,8 +43,7 @@ type FilaUsuario = typeof usuario.$inferSelect;
  * Reasigna las asignaciones activas (pendiente / en curso) de `u`: EXIGE un destino por ficha. Cierra la vieja
  * como `reasignada` y abre otra al destino, todo dentro de la transaccion de quien llama. Con
  * `mismaOrganizacion` el destino debe ser de la misma organizacion que `u` (la agencia conserva su ficha).
- * Cada asignacion nueva avisa a su responsable (bandeja + correo en el outbox, en la misma transaccion).
- * Devuelve cuantas reasigno y los correos encolados (para el envio inmediato tras confirmar).
+ * Cada asignacion nueva avisa a su responsable en la bandeja, en la misma transaccion. Devuelve cuantas reasigno.
  */
 async function reasignarPendientes(
   tx: Tx,
@@ -54,7 +52,7 @@ async function reasignarPendientes(
   ahora: Date,
   quien: string,
   opciones: { mismaOrganizacion?: boolean } = {},
-): Promise<{ n: number; correoIds: string[]; movidas: Array<{ referenciaId: string; aUsuarioId: string }> }> {
+): Promise<{ n: number; movidas: Array<{ referenciaId: string; aUsuarioId: string }> }> {
   const pendientes = await tx
     .select()
     .from(asignacion)
@@ -69,7 +67,6 @@ async function reasignarPendientes(
     );
   }
 
-  const correoIds: string[] = [];
   const movidas: Array<{ referenciaId: string; aUsuarioId: string }> = [];
   for (const p of pendientes) {
     const destinoId = mapa[p.referenciaId] as string;
@@ -99,12 +96,9 @@ async function reasignarPendientes(
       })
       .onConflictDoNothing() // si el destino ya tenia una activa en esa ficha, basta con cerrar la vieja
       .returning({ id: asignacion.id });
-    if (nueva) {
-      const aviso = await avisarAsignacionExistente(tx, { asignacionId: nueva.id, quien, ahora });
-      if (aviso?.correoId) correoIds.push(aviso.correoId);
-    }
+    if (nueva) await avisarAsignacionExistente(tx, { asignacionId: nueva.id, quien, ahora });
   }
-  return { n: pendientes.length, correoIds, movidas };
+  return { n: pendientes.length, movidas };
 }
 
 async function cargarOrganizacion(ctx: Pick<Contexto, 'db'>, id: string) {
@@ -113,25 +107,43 @@ async function cargarOrganizacion(ctx: Pick<Contexto, 'db'>, id: string) {
   return o;
 }
 
-export const entradaInvitarUsuario = z.object({
+export const entradaCrearCuenta = z.object({
   nombre: textoLimpio().pipe(z.string().trim().min(1, 'Escribe el nombre.').max(200)),
-  email: z.string().trim().toLowerCase().max(254).pipe(z.email('Escribe un correo válido.')),
+  usuario: z
+    .string()
+    .transform(normalizarUsuario)
+    .refine((v) => validarUsuario(v) === null, { message: USUARIO_AYUDA }),
+  /** Opcional: las cuentas de area no tienen correo propio. Solo es de contacto; no se usa para entrar. */
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .max(254)
+    .refine((v) => v === '' || z.email().safeParse(v).success, { message: 'Escribe un correo válido o déjalo vacío.' })
+    .nullish(),
   organizacionId: z.uuid(),
   rol: z.enum(ROLES),
   area: areaUsuario(),
 });
 
-export interface ResultadoInvitar {
+export interface ResultadoCrearCuenta {
   id: string;
-  email: string;
+  usuario: string;
   nombre: string;
   rol: Rol;
   organizacionTipo: TipoOrganizacion;
+  /** Se muestra UNA vez a quien crea la cuenta; en la base solo queda su hash. */
+  claveTemporal: string;
 }
 
-export async function invitarUsuario(ctx: Contexto, entrada: unknown): Promise<ResultadoInvitar> {
+/**
+ * Crea una cuenta con usuario y contrasena temporal. SIN registro abierto: la crea un administrador y le entrega
+ * el usuario y la contrasena a quien corresponda (o al area, si es una cuenta general). La contrasena se genera aqui,
+ * se guarda solo su hash y vuelve en la respuesta para mostrarla una vez.
+ */
+export async function crearCuenta(ctx: Contexto, entrada: unknown): Promise<ResultadoCrearCuenta> {
   exigirAdmin(ctx);
-  const e = parsear(entradaInvitarUsuario, entrada);
+  const e = parsear(entradaCrearCuenta, entrada);
   const ahora = ahoraDe(ctx);
   const org = await cargarOrganizacion(ctx, e.organizacionId);
   const tipo = org.tipo as TipoOrganizacion;
@@ -139,13 +151,23 @@ export async function invitarUsuario(ctx: Contexto, entrada: unknown): Promise<R
   const regla = validarRolOrganizacion(e.rol, tipo);
   if (!regla.ok) throw new ErrorAccion('VALIDACION', regla.mensaje);
 
+  const claveTemporal = generarClave();
+  const hash = await hashearClave(claveTemporal);
+  const correo = e.email ? e.email : correoSinCorreo(e.usuario);
+
+  const choqueUsuario = new ErrorAccion('DUPLICADO', 'Ya existe una cuenta con ese usuario.');
   try {
     return await ctx.db.transaction(async (tx) => {
+      // El usuario se revisa primero: sin correo propio el correo reservado `usuario@sin-correo.invalid` choca igual y el
+      // mensaje diria «correo» cuando lo repetido es el usuario.
+      const [yaUsuario] = await tx.select({ id: usuario.id }).from(usuario).where(eq(usuario.username, e.usuario)).limit(1);
+      if (yaUsuario) throw choqueUsuario;
       const [u] = await tx
         .insert(usuario)
         .values({
           nombre: e.nombre,
-          email: e.email,
+          username: e.usuario,
+          email: correo,
           organizacionId: org.id,
           organizacionTipo: tipo,
           rol: e.rol,
@@ -156,24 +178,65 @@ export async function invitarUsuario(ctx: Contexto, entrada: unknown): Promise<R
           actualizadoEn: ahora,
         })
         .returning({ id: usuario.id });
-      if (!u) throw new ErrorAccion('ERROR_INTERNO', 'No se pudo crear el usuario.');
+      if (!u) throw new ErrorAccion('ERROR_INTERNO', 'No se pudo crear la cuenta.');
+      await tx.insert(account).values({ accountId: u.id, providerId: 'credential', userId: u.id, password: hash, createdAt: ahora, updatedAt: ahora });
       await auditar(tx, {
         usuarioId: ctx.actor.usuarioId,
-        accion: 'invitar',
+        accion: 'crear_cuenta',
         entidad: 'usuario',
         entidadId: u.id,
-        detalle: { email: e.email, rol: e.rol, organizacionId: org.id },
+        detalle: { usuario: e.usuario, rol: e.rol, organizacionId: org.id },
         ip: ctx.ip,
         creadoEn: ahora,
       });
-      return { id: u.id, email: e.email, nombre: e.nombre, rol: e.rol, organizacionTipo: tipo };
+      return { id: u.id, usuario: e.usuario, nombre: e.nombre, rol: e.rol, organizacionTipo: tipo, claveTemporal };
     });
   } catch (err) {
+    if (esViolacionUnica(err, 'usuario_username_unico')) throw choqueUsuario;
     if (esViolacionUnica(err, 'usuario_email_unico')) {
-      throw new ErrorAccion('DUPLICADO', 'Ya existe un usuario con ese correo.');
+      // Con correo reservado (no escribio uno) lo repetido es el usuario; con correo propio, el correo.
+      throw e.email ? new ErrorAccion('DUPLICADO', 'Ya existe una cuenta con ese correo.') : choqueUsuario;
     }
     throw err;
   }
+}
+
+/**
+ * Restablece la contrasena de OTRA cuenta: genera una temporal, cierra todas sus sesiones y la devuelve para
+ * entregarla a mano. Nadie puede leer la contrasena actual (solo existe su hash).
+ */
+export async function restablecerClave(ctx: Contexto, entrada: unknown): Promise<{ usuario: string; nombre: string; claveTemporal: string; sesionesCerradas: number }> {
+  exigirAdmin(ctx);
+  const { usuarioId } = parsear(z.object({ usuarioId: z.uuid() }), entrada);
+  const ahora = ahoraDe(ctx);
+  const claveTemporal = generarClave();
+  const hash = await hashearClave(claveTemporal);
+
+  return ctx.db.transaction(async (tx) => {
+    const [u] = await tx.select().from(usuario).where(eq(usuario.id, usuarioId)).for('update').limit(1);
+    if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
+    const [cred] = await tx
+      .select({ id: account.id })
+      .from(account)
+      .where(and(eq(account.userId, u.id), eq(account.providerId, 'credential')))
+      .limit(1);
+    if (cred) {
+      await tx.update(account).set({ password: hash, updatedAt: ahora }).where(eq(account.id, cred.id));
+    } else {
+      await tx.insert(account).values({ accountId: u.id, providerId: 'credential', userId: u.id, password: hash, createdAt: ahora, updatedAt: ahora });
+    }
+    const sesionesCerradas = await revocarSesionesDeUsuario(tx, u.id);
+    await auditar(tx, {
+      usuarioId: ctx.actor.usuarioId,
+      accion: 'restablecer_clave',
+      entidad: 'usuario',
+      entidadId: u.id,
+      detalle: { sesionesCerradas },
+      ip: ctx.ip,
+      creadoEn: ahora,
+    });
+    return { usuario: u.username ?? u.email, nombre: u.nombre, claveTemporal, sesionesCerradas };
+  });
 }
 
 export const entradaDesactivarUsuario = z.object({
@@ -185,8 +248,6 @@ export const entradaDesactivarUsuario = z.object({
 export interface ResultadoDesactivar {
   sesionesCerradas: number;
   reasignadas: number;
-  /** Correos de aviso encolados al reasignar: la Server Action los envia al confirmar (`programarEnvioInmediato`). */
-  correoIds: string[];
 }
 
 /**
@@ -213,7 +274,7 @@ export async function desactivarUsuario(ctx: Contexto, entrada: unknown): Promis
       }
     }
 
-    const { n: reasignadas, correoIds, movidas } = await reasignarPendientes(tx, u, e.reasignaciones ?? {}, ahora, ctx.actor.nombre);
+    const { n: reasignadas, movidas } = await reasignarPendientes(tx, u, e.reasignaciones ?? {}, ahora, ctx.actor.nombre);
 
     await tx.update(usuario).set({ activo: false, actualizadoEn: ahora }).where(eq(usuario.id, u.id));
     const sesionesCerradas = await revocarSesionesDeUsuario(tx, u.id);
@@ -227,7 +288,7 @@ export async function desactivarUsuario(ctx: Contexto, entrada: unknown): Promis
       ip: ctx.ip,
       creadoEn: ahora,
     });
-    return { sesionesCerradas, reasignadas, correoIds };
+    return { sesionesCerradas, reasignadas };
   });
 }
 
@@ -301,21 +362,20 @@ export const entradaCambiarOrganizacion = z.object({
  *    que `desactivarUsuario`; sin destino, VALIDACION);
  *  - el acceso temporal vigente de sus asignaciones ya terminadas (S-22, 30 dias) se cierra: no se transfiere.
  */
-export async function cambiarOrganizacion(ctx: Contexto, entrada: unknown): Promise<{ ok: true; correoIds: string[] }> {
+export async function cambiarOrganizacion(ctx: Contexto, entrada: unknown): Promise<{ ok: true }> {
   exigirAdmin(ctx);
   const e = parsear(entradaCambiarOrganizacion, entrada);
   const ahora = ahoraDe(ctx);
   const org = await cargarOrganizacion(ctx, e.organizacionId);
-  const correoIds = await ctx.db.transaction(async (tx) => {
+  await ctx.db.transaction(async (tx) => {
     const [u] = await tx.select().from(usuario).where(eq(usuario.id, e.usuarioId)).for('update').limit(1);
     if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
-    if (u.organizacionId === org.id) return [] as string[]; // sin cambio
+    if (u.organizacionId === org.id) return; // sin cambio
     const regla = validarRolOrganizacion(u.rol as Rol, org.tipo as TipoOrganizacion);
     if (!regla.ok) throw new ErrorAccion('VALIDACION', regla.mensaje);
 
     let reasignadas = 0;
     let movidas: Array<{ referenciaId: string; aUsuarioId: string }> = [];
-    let correos: string[] = [];
     let accesosCerrados = 0;
     if (u.organizacionId !== org.id && (u.organizacionTipo === 'agencia' || org.tipo === 'agencia')) {
       const r = await reasignarPendientes(tx, u, e.reasignaciones ?? {}, ahora, ctx.actor.nombre, {
@@ -323,7 +383,6 @@ export async function cambiarOrganizacion(ctx: Contexto, entrada: unknown): Prom
       });
       reasignadas = r.n;
       movidas = r.movidas;
-      correos = r.correoIds;
       const cerradas = await tx
         .update(asignacion)
         .set({ accesoHasta: ahora })
@@ -352,7 +411,6 @@ export async function cambiarOrganizacion(ctx: Contexto, entrada: unknown): Prom
       ip: ctx.ip,
       creadoEn: ahora,
     });
-    return correos;
   });
-  return { ok: true, correoIds };
+  return { ok: true };
 }

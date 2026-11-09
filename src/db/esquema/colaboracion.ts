@@ -1,6 +1,5 @@
 /**
- * Colaboracion y avisos (SPEC 6.2, 8.3, 14): asignaciones, bandeja, outbox de correo y
- * correo de desarrollo. En H1 solo `notificacion` se escribe (aviso `cambio_en_mi_campo`).
+ * Colaboracion y avisos (SPEC 6.2, 8.3, 14): asignaciones y bandeja de avisos (campana y «Para mi»).
  */
 import { sql } from 'drizzle-orm';
 import { check, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
@@ -73,44 +72,3 @@ export const notificacion = pgTable(
     ),
   ],
 );
-
-export const entregaCorreo = pgTable(
-  'entrega_correo',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    notificacionId: uuid('notificacion_id').references(() => notificacion.id),
-    destinatario: text('destinatario').notNull(),
-    plantilla: text('plantilla').notNull(),
-    /** 'rebotado' llega en V1 con el webhook (14). */
-    estado: text('estado').notNull().default('pendiente'),
-    claveIdempotencia: text('clave_idempotencia').notNull().unique(),
-    intentos: integer('intentos').notNull().default(0),
-    proximoIntento: timestamp('proximo_intento', { withTimezone: true }).notNull().defaultNow(),
-    bloqueadoHasta: timestamp('bloqueado_hasta', { withTimezone: true }),
-    ultimoError: text('ultimo_error'),
-    enviadoEn: timestamp('enviado_en', { withTimezone: true }),
-    creadaEn: timestamp('creada_en', { withTimezone: true }).notNull().defaultNow(),
-    // Payload inmutable por fila: un reintento envia exactamente lo mismo (14).
-    asunto: text('asunto').notNull(),
-    cuerpoTexto: text('cuerpo_texto').notNull(),
-    cuerpoHtml: text('cuerpo_html').notNull(),
-  },
-  (t) => [
-    index('entrega_correo_cola_idx').on(t.estado, t.proximoIntento),
-    check(
-      'entrega_correo_estado_valido',
-      sql`${t.estado} in ('pendiente','enviando','enviado','fallido','abandonado')`,
-    ),
-  ],
-);
-
-/** Solo desarrollo: guarda el correo y el enlace para que las pruebas E2E los lean (12.2). */
-export const correoDev = pgTable('correo_dev', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  destinatario: text('destinatario').notNull(),
-  asunto: text('asunto').notNull(),
-  cuerpoTexto: text('cuerpo_texto').notNull(),
-  cuerpoHtml: text('cuerpo_html').notNull(),
-  enlace: text('enlace'),
-  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
-});

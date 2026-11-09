@@ -39,7 +39,9 @@ export const usuario = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     nombre: text('nombre').notNull(),
-    /** Guardado en minusculas (check `usuario_email_minusculas`). */
+    /** Con lo que se entra (junto a la contrasena). Minusculas, sin espacios: `consumibles`, `aduana-a`. */
+    username: text('username'),
+    /** Guardado en minusculas (check `usuario_email_minusculas`). Solo de contacto: no se usa para entrar. */
     email: text('email').notNull(),
     emailVerificado: boolean('email_verificado').notNull().default(false),
     imagen: text('imagen'),
@@ -49,9 +51,6 @@ export const usuario = pgTable(
     rol: text('rol').notNull(),
     area: text('area'),
     activo: boolean('activo').notNull().default(true),
-    /** MVP: lo marca el admin a mano; automatico en V1 con el webhook de rebotes (14). */
-    correoInvalido: boolean('correo_invalido').notNull().default(false),
-    preferenciaAviso: text('preferencia_aviso').notNull().default('inmediato'),
     /** Permite desactivar el atajo "/" (WCAG 2.1.4, RV-42). */
     atajosTeclado: boolean('atajos_teclado').notNull().default(true),
     ultimoIngreso: timestamp('ultimo_ingreso', { withTimezone: true }),
@@ -61,13 +60,14 @@ export const usuario = pgTable(
   },
   (t) => [
     uniqueIndex('usuario_email_unico').on(sql`lower(${t.email})`),
+    uniqueIndex('usuario_username_unico').on(t.username),
+    check('usuario_username_formato', sql`${t.username} is null or ${t.username} ~ '^[a-z0-9][a-z0-9._-]{2,39}$'`),
     foreignKey({
       name: 'usuario_organizacion_fk',
       columns: [t.organizacionId, t.organizacionTipo],
       foreignColumns: [organizacion.id, organizacion.tipo],
     }),
     check('usuario_rol_valido', sql`${t.rol} in ('admin','solicitante','aduana','lector')`),
-    check('usuario_preferencia_valida', sql`${t.preferenciaAviso} in ('inmediato','solo_bandeja')`),
     check('usuario_email_minusculas', sql`${t.email} = lower(${t.email})`),
     // D-28: una agencia solo admite el rol `aduana`.
     check('usuario_agencia_solo_aduana', sql`${t.organizacionTipo} <> 'agencia' or ${t.rol} = 'aduana'`),

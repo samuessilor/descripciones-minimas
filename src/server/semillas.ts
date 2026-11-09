@@ -1,19 +1,21 @@
 /**
  * Semillas de DESARROLLO (solo con NODE_ENV=development o pruebas): organizaciones, usuarios y
  * referencias de ejemplo CLARAMENTE MARCADOS como `[DESARROLLO]`. Los correos usan el TLD
- * reservado `.invalid`, asi nada sale a una persona real.
+ * reservado `.invalid`, asi nada sale a una persona real. Todas comparten la contrasena `CLAVE_DESARROLLO`.
  *
  * Datos SINTETICOS (D-24, A9): las referencias estan inspiradas en la estructura de los
  * ejemplos de la reunion (un insumo tipo "NSR E1" y un repuesto tipo "motor Panasonic serie E
  * 400 W") pero con codigos `TEST-000n` y valores inventados; no se copia ningun dato de los Excel.
  */
 import { and, eq } from 'drizzle-orm';
-import { asignacion, organizacion, referencia, usuario } from '@/db/esquema';
+import { account, asignacion, organizacion, referencia, usuario } from '@/db/esquema';
 import { sembrarDatosMaestros } from '@/db/semillas/datos-maestros';
 import type { Db } from '@/db/tipos';
 import { AREAS } from '@/dominio/areas';
 import { normalizarTexto } from '@/dominio/normalizacion';
 import type { Rol } from '@/dominio/permisos';
+import { hashearClave } from './claves';
+import { CLAVE_DESARROLLO } from './cuentas-demo';
 import { cargarActorPorId, type Actor } from './politicas/actor';
 import { crearReferencia } from './acciones/crear-referencia';
 import { guardarCampo } from './acciones/guardar-campo';
@@ -76,20 +78,28 @@ export async function sembrarDesarrollo(db: Db): Promise<void> {
     .returning();
   const org = new Map(orgs.map((o) => [o.nombre, o]));
 
-  await db.insert(usuario).values(
-    USUARIOS_DESARROLLO.map((u) => {
-      const o = org.get(u.org);
-      if (!o) throw new Error(`Semilla: falta la organizacion ${u.org}`);
-      return {
-        nombre: u.nombre,
-        email: u.email,
-        organizacionId: o.id,
-        organizacionTipo: o.tipo,
-        rol: u.rol,
-        area: u.area ?? null,
-      };
-    }),
-  );
+  const creados = await db
+    .insert(usuario)
+    .values(
+      USUARIOS_DESARROLLO.map((u) => {
+        const o = org.get(u.org);
+        if (!o) throw new Error(`Semilla: falta la organizacion ${u.org}`);
+        return {
+          nombre: u.nombre,
+          // Se entra con el usuario (`consumibles`, `aduana-a`, ...) y la contrasena de ejemplo.
+          username: u.email.split('@')[0] as string,
+          email: u.email,
+          organizacionId: o.id,
+          organizacionTipo: o.tipo,
+          rol: u.rol,
+          area: u.area ?? null,
+        };
+      }),
+    )
+    .returning({ id: usuario.id });
+  // Un solo hash para todas: cada hash ya lleva su propia sal y las cuentas de ejemplo comparten contrasena a proposito.
+  const hash = await hashearClave(CLAVE_DESARROLLO);
+  await db.insert(account).values(creados.map((c) => ({ accountId: c.id, providerId: 'credential', userId: c.id, password: hash })));
 
   const solicitante = await actorPorEmail(db, 'solicitante@desarrollo.invalid');
   const solicitante2 = await actorPorEmail(db, 'solicitante2@desarrollo.invalid');

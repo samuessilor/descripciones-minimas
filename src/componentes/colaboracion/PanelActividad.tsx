@@ -27,14 +27,14 @@ import {
   type DetalleAbrirActividad,
 } from './api';
 import { DialogoRestaurar, LineaDeTiempo, type ObjetivoRestaurar } from './Historial';
-import { InsigniaCorreo, InsigniaPedido, textoSalidaCorreo } from './piezas';
+import { InsigniaPedido } from './piezas';
 import { useLectura } from './usar-lectura';
 
 type IdPestana = 'historial' | 'comentarios' | 'envios';
 
 /**
  * Panel lateral de la ficha (10.2): Historial (linea de tiempo por campo con restaurar), Comentarios (con
- * alcance) y Envios (a quien esta enviada, desde cuando, como va el correo, recordar). Es un cajon
+ * alcance) y Envios (a quien esta enviada, desde cuando, si ya la abrio, recordar). Es un cajon
  * superpuesto: no ensancha el formulario; en movil es una hoja inferior.
  *
  * Al montarse tambien registra que la persona abrio la ficha (`pendiente` -> `en_curso`) y marca leidos
@@ -432,7 +432,7 @@ function PestanaEnvios({ referenciaId, lectura }: { referenciaId: string; lectur
           compacto
           icono={Send}
           titulo="Nadie la tiene pendiente"
-          descripcion="Cuando envíes esta referencia a alguien con «Enviar a…», verás aquí desde cuándo la tiene y si le llegó el correo."
+          descripcion="Cuando envíes esta referencia a alguien con «Enviar a…», verás aquí desde cuándo la tiene y si ya la abrió."
         />
       ) : (
         <ul className="space-y-3" aria-label="Envíos abiertos">
@@ -444,14 +444,6 @@ function PestanaEnvios({ referenciaId, lectura }: { referenciaId: string; lectur
               </div>
               <p className="text-sm text-tinta">{textoEstadoEnvio(s)}</p>
               {s.mensaje ? <p className="rounded-md bg-superficie-2 px-2.5 py-1.5 text-sm text-tinta">«{s.mensaje}»</p> : null}
-              {s.entrega ? (
-                <div className="space-y-1.5">
-                  <InsigniaCorreo entrega={s.entrega} />
-                  {textoSalidaCorreo(s.entrega) ? (
-                    <p className={s.entrega.estado === 'no_entregable' ? 'text-sm font-medium text-error' : 'text-sm text-tinta-suave'}>{textoSalidaCorreo(s.entrega)}</p>
-                  ) : null}
-                </div>
-              ) : null}
               <p className="text-xs text-tinta-suave">
                 Enviada por {s.esMia ? 'ti' : nombreVisible(s.de.nombre)}
                 {s.nRecordatorios > 0 ? ` · ${plural(s.nRecordatorios, 'recordatorio', 'recordatorios')}` : ''}

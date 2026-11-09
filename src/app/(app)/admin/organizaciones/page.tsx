@@ -46,7 +46,7 @@ function TablaOrganizaciones({ filas, agencia }: { filas: FilaOrganizacionAdmin[
           compacto
           icono={Building2}
           titulo={agencia ? 'Todavía no hay agencias de aduana' : 'Todavía no hay organizaciones internas'}
-          descripcion={agencia ? 'Crea la primera para poder invitar su cuenta y enviarle referencias.' : 'Crea la organización de EssilorLuxottica; el área de cada persona se elige al invitarla.'}
+          descripcion={agencia ? 'Crea la primera para poder crear su cuenta y enviarle referencias.' : 'Crea la organización de EssilorLuxottica; el área de cada cuenta se elige al crearla.'}
         />
       }
     />
@@ -87,7 +87,7 @@ export default async function AdminOrganizaciones() {
       ) : null}
 
       <div className="space-y-8">
-        <Seccion id="nueva" titulo="Nueva organización" descripcion="Para invitar gente nueva, primero existe su organización. Una empresa de aduana nueva: créala aquí como agencia, ábrela e invita su cuenta general.">
+        <Seccion id="nueva" titulo="Nueva organización" descripcion="Para crear una cuenta nueva, primero existe su organización. Una empresa de aduana nueva: créala aquí como agencia, ábrela y crea su cuenta general.">
           <FormularioAccion accion={crearOrganizacionAccion} enviar="Crear organización" enviando="Creando…" reiniciar className="space-y-5">
             <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:items-start">
               <CampoAdmin nombre="nombre" etiqueta="Nombre" ayuda="Ejemplo: EssilorLuxottica (interna) o Agencia Magnum (agencia de aduana)." required maxLength={120} />

@@ -68,14 +68,11 @@ if (puerto !== pedido) console.log(`El puerto ${pedido} esta ocupado por otro pr
 console.log(`
 Descripciones minimas · desarrollo local
   Direccion ........ ${url}
-  Entrar ........... escribe uno de estos correos en /entrar (no hay contrasena):
-                     admin@  solicitante@  solicitante2@  lector@  aduana-a@  aduana-b@   (todos @desarrollo.invalid)
-  El enlace ........ llega al correo de desarrollo: ${url}/api/dev/correo?formato=html
-                     (tambien se imprime en esta consola). Dura 30 minutos y sirve una vez.
-  Avisos ........... quedan dentro de la app (campana y "Para mi"); no salen por correo (AVISOS_POR_CORREO=true los envia tambien)
+  Entrar ........... sin login: entras como admin y cambias de cuenta desde el menu de arriba a la derecha.
+                     Con login (CON_LOGIN=1): usuario admin, consumibles, mantenimiento, instrumentos, marketing, aduana-a, aduana-b,
+                     lector, solicitante o solicitante2; contrasena de ejemplo: desarrollo-2026.
   Datos ............ 15 referencias de ejemplo. Reiniciarlas: POST ${url}/api/dev/reset   (o: npm run db:reset, con el servidor detenido)
-  Sin login ........ entras como admin; arriba a la derecha, en el menu de la cuenta, cambias a Solicitante o Aduana.
-                     (CON_LOGIN=1 npm run inicio  vuelve al login por enlace)
+  (CON_LOGIN=1 npm run inicio  pide usuario y contrasena como en produccion)
   Para parar ....... Ctrl+C
 `);
 

@@ -11,7 +11,7 @@ export const MAX_FICHAS_LOTE = 25;
 
 /**
  * Barra de envio en lote para el LISTADO (RV-37): aparece cuando hay referencias marcadas con la casilla y
- * ofrece «Enviar a…» con los mismos destinatarios para todas (un solo correo resumen por persona).
+ * ofrece «Enviar a…» con los mismos destinatarios para todas (a cada persona le llega un solo aviso por referencia).
  *
  *   <BarraLote referenciaIds={marcadas} onLimpiar={() => setMarcadas([])} />
  *

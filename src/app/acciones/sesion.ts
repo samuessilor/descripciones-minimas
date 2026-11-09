@@ -1,70 +1,44 @@
 'use server';
 
 /**
- * Server Actions del acceso (10.6, 13.1). Capa delgada: la logica vive en `server/acceso.ts` y se
- * prueba sin Next. La respuesta de "pedir enlace" es siempre la misma exista o no el correo.
+ * Server Actions del acceso (10.6, 13.1). Capa delgada: la logica vive en `server/acceso.ts` y se prueba sin Next.
+ * El mensaje de error es el mismo exista o no el usuario.
  */
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { z } from 'zod';
 import { siguienteSeguro } from '@/dominio/redireccion';
-import { ipDeCabeceras, solicitarEnlace, confirmarEnlace } from '@/server/acceso';
+import { ipDeCabeceras, iniciarSesion } from '@/server/acceso';
 import { ErrorAccion } from '@/server/acciones/resultado';
 import { getAuth, getDepsAcceso } from '@/server/auth-app';
-import { getConfig } from '@/server/config';
 import { getActor, registrarCierreDeSesion } from '@/server/sesion';
 
 export interface EstadoFormulario {
-  estado: 'inicial' | 'enviado' | 'error' | 'limite';
+  estado: 'inicial' | 'error' | 'limite';
   mensaje?: string;
-  /** Cambia con cada respuesta: la interfaz lo usa como `key` para reiniciar el contador de reenvio. */
+  /** Cambia con cada respuesta: la interfaz lo usa para reaccionar aunque el texto sea igual. */
   marca?: number;
-  motivo?: 'vencido' | 'usado' | 'invalido';
+  /** Lo que se escribio en «Usuario»: React vacia el formulario al terminar la accion y no debe perderse. */
+  usuario?: string;
 }
 
-const MENSAJE_ENVIADO =
-  'Si ese correo tiene acceso, te enviamos un enlace. Puede tardar un minuto; revisa también el spam.';
-
-const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-export async function solicitarEnlaceAccion(_previo: EstadoFormulario, datos: FormData): Promise<EstadoFormulario> {
-  const t0 = Date.now();
-  const correo = z.email().safeParse(String(datos.get('email') ?? '').trim());
-  if (!correo.success) return { estado: 'error', mensaje: 'Escribe un correo válido.' };
+export async function iniciarSesionAccion(_previo: EstadoFormulario, datos: FormData): Promise<EstadoFormulario> {
+  const usuario = String(datos.get('usuario') ?? '');
+  const clave = String(datos.get('clave') ?? '');
+  if (!usuario.trim() || !clave) return { estado: 'error', mensaje: 'Escribe tu usuario y tu contraseña.', marca: Date.now(), usuario };
   const siguiente = siguienteSeguro(datos.get('siguiente'));
-  const ip = ipDeCabeceras(await headers());
+  const h = await headers();
 
+  let destino: string;
   try {
-    await solicitarEnlace(getDepsAcceso(), { email: correo.data, siguiente, ip });
+    const r = await iniciarSesion(getDepsAcceso(), { usuario, clave, siguiente, ip: ipDeCabeceras(h), headers: h });
+    if (!r.ok) return { estado: 'error', mensaje: 'Usuario o contraseña incorrectos.', marca: Date.now(), usuario };
+    destino = r.siguiente; // las cookies de sesion ya las dejo el plugin nextCookies()
   } catch (e) {
-    if (e instanceof ErrorAccion && e.codigo === 'LIMITE_TASA') return { estado: 'limite', mensaje: e.message };
-    console.error('[acceso] no se pudo enviar el enlace', e);
-    return {
-      estado: 'error',
-      mensaje: 'Algo salió mal de nuestro lado. Intenta de nuevo; si sigue, avisa al administrador.',
-    };
+    if (e instanceof ErrorAccion && e.codigo === 'LIMITE_TASA') return { estado: 'limite', mensaje: e.message, marca: Date.now(), usuario };
+    console.error('[acceso] no se pudo iniciar sesion', e);
+    return { estado: 'error', mensaje: 'Algo salió mal de nuestro lado. Intenta de nuevo; si sigue, avisa al administrador.', marca: Date.now(), usuario };
   }
-  // Tiempo minimo parejo: no revela por latencia si el correo existe (anti-enumeracion).
-  const resto = 450 - (Date.now() - t0);
-  if (resto > 0) await esperar(resto);
-  return { estado: 'enviado', mensaje: MENSAJE_ENVIADO, marca: Date.now() };
-}
-
-const MENSAJES_CONFIRMAR: Record<NonNullable<EstadoFormulario['motivo']>, string> = {
-  vencido: `Este enlace venció (dura ${'{min}'} minutos).`,
-  usado: 'Este enlace ya se usó. Si ya entraste, ve a la referencia; si no, pide uno nuevo.',
-  invalido: 'Este enlace no es válido. Pide uno nuevo.',
-};
-
-export async function confirmarEnlaceAccion(_previo: EstadoFormulario, datos: FormData): Promise<EstadoFormulario> {
-  const token = String(datos.get('token') ?? '');
-  const siguiente = siguienteSeguro(datos.get('siguiente'));
-  const r = await confirmarEnlace(getDepsAcceso(), { token, siguiente, headers: await headers() });
-  if (!r.ok) {
-    const min = String(getConfig().ENLACE_VIGENCIA_MINUTOS);
-    return { estado: 'error', motivo: r.motivo, mensaje: MENSAJES_CONFIRMAR[r.motivo].replace('{min}', min) };
-  }
-  redirect(r.siguiente); // las cookies de sesion ya las dejo el plugin nextCookies()
+  redirect(destino);
 }
 
 export async function cerrarSesionAccion(): Promise<void> {

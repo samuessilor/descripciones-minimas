@@ -1,6 +1,6 @@
 /**
- * SOLO DESARROLLO: reinicia los contadores de limite de tasa. Las pruebas E2E piden muchos enlaces al
- * mismo correo en pocos segundos y el limite (5 por 15 min, 30 s de espera) es una regla del producto.
+ * SOLO DESARROLLO: reinicia los contadores de limite de tasa. Las pruebas E2E entran muchas veces con la misma cuenta
+ * en pocos segundos y el limite de intentos (10 por 15 min) es una regla del producto.
  */
 import { limiteTasa } from '@/db/esquema';
 import { getDb } from '@/db';

@@ -21,7 +21,6 @@ const ESTADOS: Array<{ valor: EstadoUsuarioFiltro; etiqueta: string }> = [
   { valor: 'activo', etiqueta: 'Activos' },
   { valor: 'sin_ingreso', etiqueta: 'Sin ingresar todavía' },
   { valor: 'inactivo', etiqueta: 'Inactivos' },
-  { valor: 'correo_invalido', etiqueta: 'Con correo inválido' },
 ];
 
 export default async function AdminUsuarios({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -61,11 +60,11 @@ export default async function AdminUsuarios({ searchParams }: { searchParams: Pr
     <>
       <EncabezadoPagina
         titulo="Usuarios"
-        descripcion="Quién puede entrar, con qué rol y desde qué organización. Nadie se elimina: se desactiva y lo que llenó se conserva."
+        descripcion="Las cuentas que pueden entrar (una por área, una por agencia y las de cada persona), con su rol y organización. Nadie se elimina: se desactiva y lo que llenó se conserva."
         acciones={
-          <EnlaceBoton href="/admin/usuarios/invitar">
+          <EnlaceBoton href="/admin/usuarios/nueva">
             <UserPlus aria-hidden className="size-4" />
-            Invitar a una persona
+            Crear cuenta
           </EnlaceBoton>
         }
       />
@@ -75,7 +74,7 @@ export default async function AdminUsuarios({ searchParams }: { searchParams: Pr
           <Etiqueta htmlFor="f-q">Buscar</Etiqueta>
           <div className="relative">
             <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-tinta-suave" />
-            <Campo id="f-q" name="q" type="search" defaultValue={q ?? ''} placeholder="Nombre, correo o área" className="pl-9" autoComplete="off" />
+            <Campo id="f-q" name="q" type="search" defaultValue={q ?? ''} placeholder="Nombre, usuario o área" className="pl-9" autoComplete="off" />
           </div>
         </div>
         <div className="space-y-1.5">
@@ -144,10 +143,10 @@ export default async function AdminUsuarios({ searchParams }: { searchParams: Pr
         etiquetaEnlace={(u) => `Abrir a ${u.nombre}`}
         columnas={[
           { id: 'nombre', encabezado: 'Nombre', principal: true, celda: (u) => <span className="whitespace-normal">{nombreVisible(u.nombre)}</span> },
-          { id: 'correo', encabezado: 'Correo', ocultarBajo: 'lg', celda: (u) => <span className="break-all text-sm text-tinta-suave">{u.email}</span> },
+          { id: 'usuario', encabezado: 'Usuario', ocultarBajo: 'lg', celda: (u) => <span className="break-all font-mono text-sm text-tinta-suave">{u.username ?? 'sin usuario'}</span> },
           { id: 'rol', encabezado: 'Rol', celda: (u) => <InsigniaRol rol={u.rol} /> },
           { id: 'org', encabezado: 'Organización', ocultarBajo: 'md', celda: (u) => nombreVisible(u.organizacion) },
-          { id: 'estado', encabezado: 'Estado', celda: (u) => <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} correoInvalido={u.correoInvalido} /> },
+          { id: 'estado', encabezado: 'Estado', celda: (u) => <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} /> },
           { id: 'ingreso', encabezado: 'Último ingreso', ocultarBajo: 'lg', celda: (u) => <span className="text-sm text-tinta-suave">{hace(u.ultimoIngreso)}</span> },
         ]}
         tarjeta={(u) => (
@@ -156,23 +155,23 @@ export default async function AdminUsuarios({ searchParams }: { searchParams: Pr
               <span className="min-w-0 break-words text-base font-semibold text-tinta">{nombreVisible(u.nombre)}</span>
               <InsigniaRol rol={u.rol} />
             </div>
-            <p className="break-all text-sm text-tinta-suave">{u.email}</p>
+            <p className="break-all font-mono text-sm text-tinta-suave">{u.username ?? 'sin usuario'}</p>
             <p className="text-sm text-tinta-suave">{nombreVisible(u.organizacion)}</p>
-            <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} correoInvalido={u.correoInvalido} />
+            <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} />
           </div>
         )}
         vacio={
           <EstadoVacio
             icono={Search}
             titulo={filtros.length > 0 ? 'No encontramos personas con esos filtros' : 'Todavía no hay usuarios'}
-            descripcion={filtros.length > 0 ? 'Prueba con menos filtros o revisa cómo está escrito el nombre.' : 'Invita a la primera persona y le llegará un correo con su enlace de acceso.'}
+            descripcion={filtros.length > 0 ? 'Prueba con menos filtros o revisa cómo está escrito el nombre.' : 'Crea la primera cuenta y entrégale su usuario y contraseña.'}
             accion={
               filtros.length > 0 ? (
                 <EnlaceBoton href="/admin/usuarios" variante="secundario">
                   Quitar los filtros
                 </EnlaceBoton>
               ) : (
-                <EnlaceBoton href="/admin/usuarios/invitar">Invitar a una persona</EnlaceBoton>
+                <EnlaceBoton href="/admin/usuarios/nueva">Crear cuenta</EnlaceBoton>
               )
             }
           />

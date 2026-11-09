@@ -26,7 +26,7 @@ const config: NextConfig = {
   // Sin la variable, es la `.next` de siempre.
   ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
   // Runtime Node (no Edge). Estos paquetes cargan binarios o WASM y no deben empaquetarse.
-  serverExternalPackages: ['@electric-sql/pglite', 'pg', 'sharp', 'exceljs', 'nodemailer'],
+  serverExternalPackages: ['@electric-sql/pglite', 'pg', 'sharp', 'exceljs'],
   experimental: {
     // CSRF (RV-20): Server Actions verifican `Origin`. En 16.4.2 la clave va dentro de `experimental`
     // (en la raiz de NextConfig no compila). El rechazo de peticiones SIN Origin lo hace `proxy.ts`.

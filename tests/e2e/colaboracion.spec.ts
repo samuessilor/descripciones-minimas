@@ -5,14 +5,14 @@
  *  - Restaurar un valor anterior con motivo desde el acceso «Historial» del campo.
  *  - Recordar con tope diario, comentarios con alcance y el pendiente vive en la bandeja sin correo.
  *  - Envio en lote, movil a 360 px y axe sin violaciones serias o criticas.
- * Corre contra el servidor de desarrollo (E2E_URL) con AVISOS_POR_CORREO apagado (el valor por defecto): los avisos
- * viven en la campana y en «Para mi». El modo con correo (outbox, reintentos, resumen del lote) lo cubre la integracion.
- * No abre la base: el enlace de acceso se lee por GET /api/dev/correo.
- * Cada persona entra UNA vez (en `beforeAll`) y las pruebas reutilizan su sesion: iniciar sesion por enlace magico es
- * lo mas lento de cada escenario.
+ * Corre contra el servidor de desarrollo (E2E_URL): los avisos
+ * viven en la campana y en «Para mi». No hay correo.
+ * Cada persona entra UNA vez (en `beforeAll`) y las pruebas reutilizan su sesion: iniciar sesion es lo mas lento de
+ * cada escenario.
  */
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { CLAVE_EJEMPLO, entrarComo, pulsarHidratado } from './ayudas';
 
 test.describe.configure({ mode: 'serial' });
 test.setTimeout(600_000);
@@ -27,45 +27,13 @@ type Quien = keyof typeof CORREOS;
 
 const SUFIJO = Date.now().toString(36).toUpperCase();
 
-interface CorreoDev {
-  id: string;
-  para: string;
-  asunto: string;
-  texto: string;
-  enlace: string | null;
-  creadoEn: string;
-}
-
 const sesiones = {} as Record<Quien, { contexto: BrowserContext; page: Page }>;
 const errores = {} as Record<Quien, string[]>;
 /** Lo que el primer escenario deja para el segundo (las pruebas corren en serie). */
 const compartido: { id?: string; enlace?: string } = {};
 
-async function correosDe(request: APIRequestContext, email: string): Promise<CorreoDev[]> {
-  const r = await request.get(`/api/dev/correo?para=${encodeURIComponent(email)}&limite=30`, { maxRetries: 3 });
-  return (await r.json()) as CorreoDev[];
-}
-
-/** El enlace de acceso (no el de una referencia): los avisos tambien guardan su enlace en `correo_dev`. */
-async function esperarEnlaceDeAcceso(request: APIRequestContext, email: string, desde: number): Promise<string> {
-  for (let i = 0; i < 90; i++) {
-    const f = (await correosDe(request, email)).find((c) => c.enlace?.includes('/entrar/confirmar') && new Date(c.creadoEn).getTime() >= desde);
-    if (f?.enlace) return f.enlace;
-    await new Promise((res) => setTimeout(res, 500));
-  }
-  throw new Error(`no llego el enlace de acceso a ${email}`);
-}
-
-async function entrar(page: Page, request: APIRequestContext, email: string): Promise<void> {
-  const desde = Date.now() - 1000;
-  await request.post('/api/dev/limites', { maxRetries: 3 });
-  await page.goto('/entrar');
-  await page.getByLabel('Correo').fill(email);
-  await page.getByRole('button', { name: 'Enviarme el enlace' }).click();
-  await expect(page.getByText('Si ese correo tiene acceso')).toBeVisible({ timeout: 60_000 });
-  await page.goto(await esperarEnlaceDeAcceso(request, email, desde));
-  await page.getByRole('button', { name: 'Entrar', exact: true }).click();
-  await expect(page).not.toHaveURL(/\/entrar/, { timeout: 120_000 });
+async function entrar(page: Page, request: APIRequestContext, email: string, siguiente = '/'): Promise<void> {
+  await entrarComo(page, request, email, siguiente);
 }
 
 function vigilar(page: Page, quien: Quien): void {
@@ -212,12 +180,10 @@ test('enlace directo a la ficha SIN sesion: pasa por /entrar conservando el dest
   const p = await c.newPage();
   await p.goto(enlace!);
   await expect(p).toHaveURL(`${new URL(enlace!).origin}/entrar?siguiente=${encodeURIComponent(`/referencias/${id}`)}`, { timeout: 60_000 });
-  const desde = Date.now() - 1000;
   await request.post('/api/dev/limites', { maxRetries: 3 });
-  await p.getByLabel('Correo').fill(CORREOS.B);
-  await p.getByRole('button', { name: 'Enviarme el enlace' }).click();
-  await p.goto(await esperarEnlaceDeAcceso(request, CORREOS.B, desde));
-  await p.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await p.getByLabel('Usuario').fill(CORREOS.B.split('@')[0]!);
+  await p.getByLabel('Contraseña', { exact: true }).fill(CLAVE_EJEMPLO);
+  await pulsarHidratado(p.getByRole('button', { name: 'Entrar', exact: true }));
   await expect(p).toHaveURL(new RegExp(`/referencias/${id}$`), { timeout: 120_000 });
   await expect(p.getByRole('heading', { name: 'Producto de la prueba de colaboración' })).toBeVisible();
   await c.close();
@@ -286,7 +252,6 @@ test('recordar con tope diario, comentarios con alcance y el pendiente vive en l
   await panel.getByRole('tab', { name: /Envíos/ }).click();
   const envio = panel.getByTestId('envio-abierto');
   await expect(envio).toContainText('Andrés Aduana A');
-  await expect(envio.getByText('Solo en la plataforma')).toBeVisible({ timeout: 60_000 });
   await a.keyboard.press('Escape');
 
   // El pendiente de la agencia NO depende del correo: esta en su bandeja.

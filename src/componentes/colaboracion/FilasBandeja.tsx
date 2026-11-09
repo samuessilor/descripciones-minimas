@@ -8,7 +8,7 @@ import { ETIQUETA_TIPO } from '@/dominio/campos';
 import { plural, tiempoRelativo } from '@/dominio/colaboracion';
 import type { FilaEsperando, FilaPendiente, FilaReciente } from '@/server/politicas/colaboracion';
 import { AccionesAsignacion } from './AccionesAsignacion';
-import { InsigniaCorreo, InsigniaPedido, textoSalidaCorreo } from './piezas';
+import { InsigniaPedido } from './piezas';
 
 /**
  * Filas de la bandeja de inicio (F7, 10.3). Cada fila es UNA tarjeta con UN solo enlace «Abrir» que cubre toda la
@@ -81,7 +81,6 @@ export function FilaPendienteUI({ f, ahora }: { f: FilaPendiente; ahora: Date })
 
 export function FilaEsperandoUI({ f }: { f: FilaEsperando }) {
   const destino = f.aUsuario;
-  const detalleSalida = textoSalidaCorreo(f.entrega);
   return (
     <li className={claseTarjeta} data-testid="fila-esperando">
       <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
@@ -109,13 +108,9 @@ export function FilaEsperandoUI({ f }: { f: FilaEsperando }) {
             </span>
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            <InsigniaCorreo entrega={f.entrega} />
             {f.estadoAsignacion === 'en_curso' ? <Insignia variante="azul">Ya la abrió</Insignia> : <Insignia variante="neutra">Sin abrir</Insignia>}
             {f.nRecordatorios > 0 ? <span className="text-xs text-tinta-suave">{plural(f.nRecordatorios, 'recordatorio', 'recordatorios')}</span> : null}
           </div>
-          {detalleSalida ? (
-            <p className={f.entrega.estado === 'no_entregable' ? 'text-sm font-medium text-error' : 'text-sm text-tinta-suave'}>{detalleSalida}</p>
-          ) : null}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-3 max-sm:w-full max-sm:flex-row max-sm:items-center max-sm:justify-between">
           <Dias dias={f.diasEnGestion} />

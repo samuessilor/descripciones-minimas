@@ -6,21 +6,27 @@
  * Los textos que ve el usuario salen de aqui y de los nucleos; nunca un codigo ni una traza.
  */
 import { revalidatePath } from 'next/cache';
-import { solicitarEnlace } from '@/server/acceso';
 import { activarItemCatalogo, guardarItemCatalogo, guardarPartida, guardarRestriccion, moverItemCatalogo } from '@/server/acciones/catalogos-admin';
-import { reintentarCorreo } from '@/server/acciones/correo-admin';
 import { cambiarEstadoOrganizacion, crearOrganizacion, editarOrganizacion, retirarAccesoAgencia } from '@/server/acciones/organizaciones';
-import { comoResultado, ErrorAccion } from '@/server/acciones/resultado';
-import { cambiarOrganizacion, cambiarRol, desactivarUsuario, invitarUsuario, reactivarUsuario } from '@/server/acciones/usuarios';
-import { cerrarSesionesDeUsuario, editarUsuario, marcarCorreoInvalido, reenviarInvitacion } from '@/server/acciones/usuarios-admin';
-import { getDepsAcceso } from '@/server/auth-app';
-import { programarEnvioInmediato } from '@/server/correo/inmediato';
+import { comoResultado } from '@/server/acciones/resultado';
+import { cambiarOrganizacion, cambiarRol, crearCuenta, desactivarUsuario, reactivarUsuario, restablecerClave } from '@/server/acciones/usuarios';
+import { cerrarSesionesDeUsuario, editarUsuario } from '@/server/acciones/usuarios-admin';
 import type { Contexto } from '@/server/politicas/actor';
 import { contextoDeAccion } from '@/server/sesion';
+
+/** Usuario y contrasena temporal que se muestran UNA vez a quien crea o restablece una cuenta. */
+export interface SecretoEntrega {
+  id: string;
+  nombre: string;
+  usuario: string;
+  clave: string;
+  accion: 'creada' | 'restablecida';
+}
 
 export interface EstadoAdmin {
   estado: 'inicial' | 'ok' | 'error';
   mensaje?: string;
+  secreto?: SecretoEntrega;
   /** Errores por campo (clave = nombre del campo del formulario). */
   errores?: Record<string, string>;
   /** Todos los mensajes de validacion (un campo puede tener varios). */
@@ -79,28 +85,17 @@ async function correr<T>(
 
 // ---- Usuarios -----------------------------------------------------------------------------------
 
-export async function invitarUsuarioAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
-  const r = await comoResultado(async () => {
-    const ctx = await contextoDeAccion();
-    const u = await invitarUsuario(ctx, {
+export async function crearCuentaAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
+  const r = await comoResultado(async () =>
+    crearCuenta(await contextoDeAccion(), {
       nombre: texto(datos, 'nombre'),
-      email: texto(datos, 'email'),
+      usuario: texto(datos, 'usuario'),
+      email: textoOpcional(datos, 'email'),
       organizacionId: texto(datos, 'organizacionId'),
       rol: texto(datos, 'rol'),
       area: textoOpcional(datos, 'area'),
-    });
-    // La invitacion ES el usuario creado + el correo de bienvenida con el enlace de acceso (10.6).
-    // El usuario ya esta confirmado en la base: si el envio falla (limite de espera del correo, proveedor caido)
-    // NO se responde error -un reintento daria DUPLICADO-, se avisa que falta el correo.
-    let correoEnviado = true;
-    try {
-      await solicitarEnlace(getDepsAcceso(), { email: u.email, ip: ctx.ip ?? null, plantilla: 'bienvenida', invitadoPor: ctx.actor.nombre });
-    } catch (e) {
-      correoEnviado = false;
-      if (!(e instanceof ErrorAccion && e.codigo === 'LIMITE_TASA')) console.error('[admin] no se pudo enviar la invitacion', e);
-    }
-    return { ...u, correoEnviado };
-  });
+    }),
+  );
   if (!r.ok) {
     const problemas = (r.detalle as { problemas?: Problema[] } | undefined)?.problemas;
     if (r.codigo === 'VALIDACION' && problemas?.length) {
@@ -108,32 +103,30 @@ export async function invitarUsuarioAccion(_previo: EstadoAdmin, datos: FormData
       for (const p of problemas) errores[p.ruta.split('.')[0] ?? 'general'] ??= p.mensaje;
       return { estado: 'error', mensaje: 'Revisa los datos marcados.', errores, marca: Date.now() };
     }
-    if (r.codigo === 'DUPLICADO') return { estado: 'error', mensaje: r.mensaje, errores: { email: r.mensaje }, marca: Date.now() };
+    if (r.codigo === 'DUPLICADO') return { estado: 'error', mensaje: r.mensaje, errores: { [r.mensaje.includes('correo') ? 'email' : 'usuario']: r.mensaje }, marca: Date.now() };
     return { estado: 'error', mensaje: r.mensaje, marca: Date.now() };
   }
   revalidatePath('/admin/usuarios');
   revalidatePath('/admin');
-  const irA = `/admin/usuarios/${r.data.id}`;
-  if (!r.data.correoEnviado) {
-    return {
-      estado: 'ok',
-      irA,
-      mensaje: `Creamos el usuario de ${r.data.nombre}, pero el correo con su enlace no salió. Reenvíalo desde su ficha o dile que pida su enlace en /entrar con ${r.data.email}.`,
-      marca: Date.now(),
-    };
-  }
-  return { estado: 'ok', irA, mensaje: `Invitamos a ${r.data.nombre}. Le llegó un correo con su enlace de acceso.`, marca: Date.now() };
+  return {
+    estado: 'ok',
+    mensaje: `Creamos la cuenta de ${r.data.nombre}. Copia el usuario y la contraseña ahora: no se vuelven a mostrar.`,
+    secreto: { id: r.data.id, nombre: r.data.nombre, usuario: r.data.usuario, clave: r.data.claveTemporal, accion: 'creada' },
+    marca: Date.now(),
+  };
 }
 
-export async function reenviarInvitacionAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
-  return correr(
-    (ctx) =>
-      reenviarInvitacion(ctx, { usuarioId: texto(datos, 'usuarioId') }, async (p) => {
-        await solicitarEnlace(getDepsAcceso(), { email: p.email, ip: null, plantilla: 'bienvenida', invitadoPor: ctx.actor.nombre });
-      }),
-    (p) => ({ mensaje: p.sinIngreso ? `Reenviamos la invitación a ${p.nombre}.` : `Enviamos un enlace de acceso nuevo a ${p.nombre}.` }),
-    ['/admin/usuarios', '/admin'],
-  );
+export async function restablecerClaveAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
+  const usuarioId = texto(datos, 'usuarioId');
+  const r = await comoResultado(async () => restablecerClave(await contextoDeAccion(), { usuarioId }));
+  if (!r.ok) return { estado: 'error', mensaje: r.mensaje, marca: Date.now() };
+  revalidatePath('/admin/usuarios');
+  return {
+    estado: 'ok',
+    mensaje: `Restablecimos la contraseña de ${r.data.nombre}. Cerramos ${r.data.sesionesCerradas} ${r.data.sesionesCerradas === 1 ? 'sesión' : 'sesiones'}.`,
+    secreto: { id: usuarioId, nombre: r.data.nombre, usuario: r.data.usuario, clave: r.data.claveTemporal, accion: 'restablecida' },
+    marca: Date.now(),
+  };
 }
 
 export async function editarUsuarioAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
@@ -154,15 +147,12 @@ export async function cambiarRolAccion(_previo: EstadoAdmin, datos: FormData): P
 
 export async function cambiarOrganizacionAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
   return correr(
-    async (ctx) => {
-      const r = await cambiarOrganizacion(ctx, {
+    (ctx) =>
+      cambiarOrganizacion(ctx, {
         usuarioId: texto(datos, 'usuarioId'),
         organizacionId: texto(datos, 'organizacionId'),
         reasignaciones: reasignaciones(datos),
-      });
-      programarEnvioInmediato(r.correoIds); // los avisos de las reasignaciones ya estan en el outbox
-      return r;
-    },
+      }),
     () => ({ mensaje: 'Cambiamos la organización.' }),
     ['/admin/usuarios', '/admin/organizaciones', '/admin'],
   );
@@ -170,11 +160,7 @@ export async function cambiarOrganizacionAccion(_previo: EstadoAdmin, datos: For
 
 export async function desactivarUsuarioAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
   return correr(
-    async (ctx) => {
-      const r = await desactivarUsuario(ctx, { usuarioId: texto(datos, 'usuarioId'), reasignaciones: reasignaciones(datos) });
-      programarEnvioInmediato(r.correoIds); // los avisos de las reasignaciones ya estan en el outbox
-      return r;
-    },
+    (ctx) => desactivarUsuario(ctx, { usuarioId: texto(datos, 'usuarioId'), reasignaciones: reasignaciones(datos) }),
     (r) => ({
       mensaje:
         r.reasignadas > 0
@@ -188,7 +174,7 @@ export async function desactivarUsuarioAccion(_previo: EstadoAdmin, datos: FormD
 export async function reactivarUsuarioAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
   return correr(
     (ctx) => reactivarUsuario(ctx, { usuarioId: texto(datos, 'usuarioId') }),
-    () => ({ mensaje: 'Reactivamos al usuario. Puede pedir su enlace en /entrar.' }),
+    () => ({ mensaje: 'Reactivamos al usuario. Si no recuerda su contraseña, restablécela desde su ficha.' }),
     ['/admin/usuarios', '/admin'],
   );
 }
@@ -199,15 +185,6 @@ export async function cerrarSesionesUsuarioAccion(_previo: EstadoAdmin, datos: F
     (ctx) => cerrarSesionesDeUsuario(ctx, { usuarioId: texto(datos, 'usuarioId'), ...(sesionId ? { sesionId } : {}) }),
     (r) => ({ mensaje: r.cerradas === 0 ? 'No tenía sesiones abiertas.' : `Cerramos ${r.cerradas} ${r.cerradas === 1 ? 'sesión' : 'sesiones'}. Tendrá que volver a entrar.` }),
     ['/admin/usuarios'],
-  );
-}
-
-export async function marcarCorreoInvalidoAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
-  const invalido = texto(datos, 'invalido') === 'si';
-  return correr(
-    (ctx) => marcarCorreoInvalido(ctx, { usuarioId: texto(datos, 'usuarioId'), invalido }),
-    () => ({ mensaje: invalido ? 'Marcamos el correo como inválido. No recibirá avisos.' : 'Quitamos la marca. Volverá a recibir avisos.' }),
-    ['/admin/usuarios', '/admin', '/admin/correo'],
   );
 }
 
@@ -302,15 +279,5 @@ export async function guardarPartidaAccion(_previo: EstadoAdmin, datos: FormData
       }),
     (r) => ({ mensaje: `Guardamos la partida ${r.codigo}.` }),
     ['/admin/catalogos'],
-  );
-}
-
-// ---- Correo -------------------------------------------------------------------------------------
-
-export async function reintentarCorreoAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
-  return correr(
-    (ctx) => reintentarCorreo(ctx, { entregaId: texto(datos, 'entregaId') }),
-    () => ({ mensaje: 'Lo devolvimos a la cola. El despachador lo toma en su próxima vuelta.' }),
-    ['/admin/correo', '/admin'],
   );
 }

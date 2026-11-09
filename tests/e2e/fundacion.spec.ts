@@ -5,7 +5,7 @@
  */
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { entrarComo, vigilarErrores } from './ayudas';
+import { CLAVE_EJEMPLO, entrarComo, pulsarHidratado, vigilarErrores } from './ayudas';
 
 async function graves(page: Page): Promise<string[]> {
   const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
@@ -23,46 +23,66 @@ async function sinDesbordeHorizontal(page: Page, ruta: string) {
 }
 
 test.describe('entrada', () => {
-  test('correo invalido: el error va debajo del campo, enlazado y con aria-invalid; sin errores de consola', async ({ page, request }) => {
+  test('la pantalla pide usuario y contrasena, con campos nombrados, mostrar/ocultar y cero violaciones', async ({ page, request }) => {
     const errores = vigilarErrores(page);
     await request.post('/api/dev/limites', { maxRetries: 3 });
     await page.goto('/entrar');
     await expect(page.getByRole('heading', { level: 1, name: 'Entrar' })).toBeVisible();
     await expect(page.getByRole('img', { name: 'EssilorLuxottica' }).first()).toBeVisible();
-    await page.getByLabel('Correo').fill('no-es-un-correo');
-    await page.getByRole('button', { name: 'Enviarme el enlace' }).click();
-    const campo = page.getByLabel('Correo');
-    await expect(page.getByText('Escribe un correo válido.')).toBeVisible();
-    await expect(campo).toHaveAttribute('aria-invalid', 'true');
-    const describe = await campo.getAttribute('aria-describedby');
-    expect(describe).toContain('-error');
+    await expect(page.getByLabel('Usuario')).toHaveAttribute('autocomplete', 'username');
+    const clave = page.getByLabel('Contraseña', { exact: true });
+    await expect(clave).toHaveAttribute('type', 'password');
+    await expect(clave).toHaveAttribute('autocomplete', 'current-password');
+    await page.getByRole('button', { name: 'Mostrar la contraseña' }).click();
+    await expect(clave).toHaveAttribute('type', 'text');
+    await page.getByRole('button', { name: 'Ocultar la contraseña' }).click();
+    await expect(clave).toHaveAttribute('type', 'password');
     expect(await graves(page)).toEqual([]);
     expect(errores, errores.join('\n')).toEqual([]);
   });
 
-  test('enlace pedido: confirmacion visible, boton «Reenviar en N s» y cero violaciones', async ({ page, request }) => {
+  test('credenciales incorrectas: un solo mensaje, anuncia el error, conserva el usuario y no revela si existe', async ({ page, request }) => {
     await request.post('/api/dev/limites', { maxRetries: 3 });
-    await page.goto('/entrar');
-    await page.getByLabel('Correo').fill('admin@desarrollo.invalid');
-    await page.getByRole('button', { name: 'Enviarme el enlace' }).click();
-    await expect(page.getByText('Revisa tu correo')).toBeVisible();
-    await expect(page.getByText(/Si ese correo tiene acceso/)).toBeVisible();
-    await expect(page.getByRole('button', { name: /Reenviar en \d+ s/ })).toBeDisabled();
+    for (const usuario of ['admin', 'nadie-existe']) {
+      await page.goto('/entrar');
+      await page.getByLabel('Usuario').fill(usuario);
+      await page.getByLabel('Contraseña', { exact: true }).fill('clave-equivocada-1');
+      await pulsarHidratado(page.getByRole('button', { name: 'Entrar', exact: true }));
+      await expect(page.getByRole('alert').getByText('Usuario o contraseña incorrectos.')).toBeVisible();
+      await expect(page.getByLabel('Usuario')).toHaveValue(usuario);
+      await expect(page).toHaveURL(/\/entrar/);
+    }
     expect(await graves(page)).toEqual([]);
   });
 
-  test('confirmar: sin token y con un token que no existe dicen que paso y ofrecen pedir otro', async ({ page }) => {
-    await page.goto('/entrar/confirmar');
-    await expect(page.getByRole('heading', { level: 1, name: 'No pudimos usar este enlace' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Pedir uno nuevo' })).toHaveAttribute('href', '/entrar');
+  test('sin escribir nada pide los dos datos; y ya no existe la confirmacion por enlace', async ({ page, request }) => {
+    await request.post('/api/dev/limites', { maxRetries: 3 });
+    await page.goto('/entrar');
+    await pulsarHidratado(page.getByRole('button', { name: 'Entrar', exact: true }));
+    await expect(page.getByText('Escribe tu usuario y tu contraseña.')).toBeVisible();
+    const r = await page.goto('/entrar/confirmar');
+    expect(r?.status()).toBe(404);
+  });
 
-    await page.goto('/entrar/confirmar?token=desconocido&siguiente=%2Freferencias');
-    await expect(page.getByRole('heading', { level: 1, name: 'Confirma que eres tú' })).toBeVisible();
-    expect(await graves(page)).toEqual([]);
-    await page.getByRole('button', { name: 'Entrar', exact: true }).click();
-    await expect(page.getByRole('heading', { level: 1 }).filter({ hasText: /enlace/ })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Pedir uno nuevo' })).toHaveAttribute('href', '/entrar?siguiente=%2Freferencias');
-    expect(await graves(page)).toEqual([]);
+  test('tras 10 intentos fallidos con el mismo usuario se frena, y entrar bien con otra cuenta sigue funcionando', async ({ page, request }) => {
+    test.setTimeout(240_000);
+    await request.post('/api/dev/limites', { maxRetries: 3 });
+    await page.goto('/entrar');
+    for (let i = 0; i < 10; i++) {
+      await page.getByLabel('Usuario').fill('lector');
+      await page.getByLabel('Contraseña', { exact: true }).fill(`mala-clave-${i}-xx`);
+      // Se espera la respuesta de ESTE intento: si no, el siguiente `fill` se pisa con el reinicio del formulario.
+      const respuesta = page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/entrar');
+      await pulsarHidratado(page.getByRole('button', { name: 'Entrar', exact: true }));
+      await respuesta;
+      await expect(page.getByText('Usuario o contraseña incorrectos.')).toBeVisible();
+      await page.waitForTimeout(500);
+    }
+    await page.getByLabel('Usuario').fill('lector');
+    await page.getByLabel('Contraseña', { exact: true }).fill(CLAVE_EJEMPLO); // la correcta, pero ya esta frenado
+    await pulsarHidratado(page.getByRole('button', { name: 'Entrar', exact: true }));
+    await expect(page.getByText(/Demasiados intentos\. Espera \d+ minutos? y vuelve a intentar\./)).toBeVisible();
+    await request.post('/api/dev/limites', { maxRetries: 3 }); // se libera para el resto de las pruebas
   });
 });
 
@@ -100,7 +120,7 @@ test.describe('armazon', () => {
     const menu = page.getByRole('dialog', { name: 'Cuenta' });
     await expect(menu).toBeVisible();
     await expect(menu.getByText('Administrador')).toBeVisible();
-    await expect(menu.getByText('admin@desarrollo.invalid')).toBeVisible();
+    await expect(menu.getByText('admin', { exact: true })).toBeVisible();
     expect(await graves(page)).toEqual([]);
     await page.keyboard.press('Escape');
     await expect(menu).toBeHidden();

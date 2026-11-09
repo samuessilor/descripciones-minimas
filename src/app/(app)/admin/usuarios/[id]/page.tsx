@@ -1,19 +1,18 @@
-import { KeyRound, MailCheck, MailX, Monitor, RotateCcw, Send, Smartphone } from 'lucide-react';
+import { Monitor, RotateCcw, Smartphone } from 'lucide-react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import {
   cambiarRolAccion,
   cerrarSesionesUsuarioAccion,
   editarUsuarioAccion,
-  marcarCorreoInvalidoAccion,
   reactivarUsuarioAccion,
-  reenviarInvitacionAccion,
 } from '@/app/acciones/admin';
 import { BotonAccion, FormularioAccion } from '@/componentes/admin/acciones';
 import { CampoAdmin, RadiosAdmin } from '@/componentes/admin/campos';
 import { describirNavegador, fechaHora, formatearIp, hace, plural, ROL_DESCRIPCION, ROL_ETIQUETA } from '@/componentes/admin/formato';
 import { Dato, Datos, EstadosUsuario, InsigniaRol, InsigniaTipoOrg, Seccion } from '@/componentes/admin/piezas';
 import { PanelCambiarOrganizacion, PanelDesactivar } from '@/componentes/admin/ReasignacionUsuario';
+import { RestablecerClave } from '@/componentes/admin/RestablecerClave';
 import { Aviso } from '@/componentes/ui/aviso';
 import { Avatar, nombreVisible } from '@/componentes/ui/avatar';
 import { EncabezadoPagina } from '@/componentes/ui/pagina';
@@ -72,20 +71,20 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
             <span className="min-w-0 break-words">{nombreVisible(u.nombre)}</span>
           </span>
         }
-        descripcion={<span className="break-all">{u.email}</span>}
+        descripcion={<span className="break-all font-mono">{u.username ?? 'sin usuario'}</span>}
         migas={[{ etiqueta: 'Usuarios', href: '/admin/usuarios' }, { etiqueta: nombreVisible(u.nombre) }]}
         meta={
           <span className="flex flex-wrap items-center gap-2">
             <InsigniaRol rol={u.rol} />
             <InsigniaTipoOrg tipo={u.organizacionTipo} />
-            <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} correoInvalido={u.correoInvalido} />
+            <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} />
           </span>
         }
       />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
         <div className="space-y-6">
-          <Seccion id="datos" titulo="Datos" descripcion="El correo identifica a la persona y no se cambia.">
+          <Seccion id="datos" titulo="Datos" descripcion="El usuario identifica a la cuenta y no se cambia.">
             <FormularioAccion accion={editarUsuarioAccion} enviar="Guardar datos" enviando="Guardando…" variante="secundario" className="space-y-5">
               <input type="hidden" name="usuarioId" value={u.id} />
               <div className="grid gap-5 sm:grid-cols-2">
@@ -110,7 +109,8 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
               </div>
               <Datos>
                 <Dato etiqueta="Organización">{nombreVisible(u.organizacion)}</Dato>
-                <Dato etiqueta="Invitado">{fechaHora(u.creadoEn)}</Dato>
+                <Dato etiqueta="Usuario"><span className="font-mono">{u.username ?? 'sin usuario'}</span></Dato>
+                <Dato etiqueta="Creada">{fechaHora(u.creadoEn)}</Dato>
                 <Dato etiqueta="Último ingreso">{u.ultimoIngreso ? `${hace(u.ultimoIngreso)} · ${fechaHora(u.ultimoIngreso)}` : 'Todavía no ha entrado'}</Dato>
               </Datos>
             </FormularioAccion>
@@ -155,7 +155,7 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
                   campos={{ usuarioId: u.id }}
                   confirmar={{
                     titulo: 'Cerrar todas sus sesiones',
-                    descripcion: `${nombreVisible(u.nombre)} tendrá que volver a pedir su enlace de acceso. Lo que ya llenó se conserva.`,
+                    descripcion: `${nombreVisible(u.nombre)} tendrá que volver a entrar con su contraseña. Lo que ya llenó se conserva.`,
                     confirmar: 'Cerrar sesiones',
                     cancelar: 'Todavía no',
                     peligro: true,
@@ -210,52 +210,21 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
               </Datos>
               {u.activo ? (
                 <div className="flex flex-col items-stretch gap-2">
-                  <BotonAccion
-                    accion={reenviarInvitacionAccion}
-                    campos={{ usuarioId: u.id }}
-                    variante={sinIngresar ? 'primario' : 'secundario'}
-                    tamano="md"
-                    deshabilitado={u.correoInvalido}
-                  >
-                    {sinIngresar ? <Send aria-hidden className="size-4" /> : <KeyRound aria-hidden className="size-4" />}
-                    {sinIngresar ? 'Reenviar invitación' : 'Enviar enlace de acceso'}
-                  </BotonAccion>
+                  <RestablecerClave usuarioId={u.id} nombre={nombreVisible(u.nombre)} variante={sinIngresar ? 'primario' : 'secundario'} />
                   <p className="text-sm text-tinta-suave">
-                    {u.correoInvalido
-                      ? 'El correo está marcado como inválido: quita la marca para enviarle algo.'
-                      : sinIngresar
-                        ? 'Nunca ha entrado. Se le envía un correo nuevo con un enlace de acceso.'
-                        : 'Se le envía un enlace nuevo. Los anteriores siguen valiendo hasta que venzan.'}
+                    {sinIngresar
+                      ? 'Nunca ha entrado. Genera una contraseña temporal para entregársela.'
+                      : 'Genera una contraseña nueva, cierra sus sesiones y te la muestra una vez. La anterior deja de servir.'}
                   </p>
                 </div>
               ) : null}
-              <div className="flex flex-col items-stretch gap-2 border-t border-borde-suave pt-4">
-                <BotonAccion
-                  accion={marcarCorreoInvalidoAccion}
-                  campos={{ usuarioId: u.id, invalido: u.correoInvalido ? 'no' : 'si' }}
-                  tamano="md"
-                  confirmar={
-                    u.correoInvalido
-                      ? undefined
-                      : {
-                          titulo: 'Marcar el correo como inválido',
-                          descripcion: `Si el correo de ${nombreVisible(u.nombre)} rebota, márcalo: no recibirá avisos hasta que quites la marca. Los pendientes siguen en su bandeja.`,
-                          confirmar: 'Marcar como inválido',
-                          cancelar: 'Todavía no',
-                        }
-                  }
-                >
-                  {u.correoInvalido ? <MailCheck aria-hidden className="size-4" /> : <MailX aria-hidden className="size-4" />}
-                  {u.correoInvalido ? 'Quitar la marca de correo inválido' : 'Marcar correo como inválido'}
-                </BotonAccion>
-              </div>
             </div>
           </Seccion>
 
           {!u.activo ? (
             <Seccion id="reactivar" titulo="Reactivar">
               <div className="space-y-3">
-                <p className="text-base text-tinta-suave">Vuelve a poder entrar pidiendo su enlace en la pantalla de entrada. Lo que llenó antes sigue ahí.</p>
+                <p className="text-base text-tinta-suave">Vuelve a poder entrar con su usuario y contraseña. Si no la recuerda, restablécela. Lo que llenó antes sigue ahí.</p>
                 <BotonAccion
                   accion={reactivarUsuarioAccion}
                   campos={{ usuarioId: u.id }}
@@ -263,7 +232,7 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
                   tamano="md"
                   confirmar={{
                     titulo: `Reactivar a ${nombreVisible(u.nombre)}`,
-                    descripcion: 'Podrá volver a entrar con un enlace de acceso. Sus pendientes anteriores no regresan: ya fueron reasignados.',
+                    descripcion: 'Podrá volver a entrar con su usuario y contraseña. Sus pendientes anteriores no regresan: ya fueron reasignados.',
                     confirmar: 'Reactivar',
                     cancelar: 'Todavía no',
                   }}

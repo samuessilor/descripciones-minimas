@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BLOQUEO_ENVIO_MS,
-  ESPERAS_REINTENTO_MS,
-  MAX_INTENTOS_CORREO,
   TransicionAsignacionInvalida,
   enlaceInicio,
   enlaceReferencia,
@@ -12,7 +9,6 @@ import {
   pedidoCompatible,
   pedidoPorDefecto,
   pedidosPermitidos,
-  planReintento,
   plural,
   puedeRecibirAsignacion,
   puedeTransicionarAsignacion,
@@ -82,26 +78,6 @@ describe('maquina de estados de la asignacion (8.3)', () => {
 
   it('activa = pendiente o en_curso', () => {
     expect(ESTADOS.filter(esAsignacionActiva)).toEqual(['pendiente', 'en_curso']);
-  });
-});
-
-describe('reintentos del correo (14, S-16)', () => {
-  const t = new Date('2026-10-21T15:00:00.000Z');
-
-  it('cinco esperas: 5 min, 30 min, 2 h, 12 h y 24 h; seis intentos en total', () => {
-    expect(ESPERAS_REINTENTO_MS).toEqual([300_000, 1_800_000, 7_200_000, 43_200_000, 86_400_000]);
-    expect(MAX_INTENTOS_CORREO).toBe(6);
-    expect(BLOQUEO_ENVIO_MS).toBe(120_000);
-  });
-
-  it('tras cada fallo se espera lo que toca y el sexto abandona', () => {
-    for (let intento = 1; intento <= 5; intento++) {
-      const plan = planReintento(intento, t);
-      expect(plan.estado).toBe('fallido');
-      if (plan.estado === 'fallido') expect(plan.proximoIntento.getTime()).toBe(t.getTime() + ESPERAS_REINTENTO_MS[intento - 1]!);
-    }
-    expect(planReintento(6, t)).toEqual({ estado: 'abandonado' });
-    expect(planReintento(9, t)).toEqual({ estado: 'abandonado' });
   });
 });
 

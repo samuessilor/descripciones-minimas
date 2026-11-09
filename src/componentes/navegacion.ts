@@ -36,7 +36,6 @@ export const DESTINOS: readonly DestinoNavegacion[] = [
       { href: '/admin/organizaciones', etiqueta: 'Organizaciones', icono: 'administracion', roles: ['admin'] },
       { href: '/admin/catalogos', etiqueta: 'Catálogos', icono: 'administracion', roles: ['admin'] },
       { href: '/admin/auditoria', etiqueta: 'Auditoría', icono: 'administracion', roles: ['admin'] },
-      { href: '/admin/correo', etiqueta: 'Cola de correo', icono: 'administracion', roles: ['admin'] },
       { href: '/admin/parametros', etiqueta: 'Parámetros', icono: 'administracion', roles: ['admin'] },
     ],
   },

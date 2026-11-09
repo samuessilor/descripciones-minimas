@@ -2,15 +2,13 @@
  * Lecturas de la colaboracion (13.2): bandeja "Mis pendientes", "Esperando a otros", recientes,
  * notificaciones, seguimiento de los envios de una ficha, historial y comentarios. TODA lectura recibe el
  * `Actor` y devuelve lo que ese actor puede ver: nombres de otra agencia como "Otra agencia", comentarios
- * internos solo a organizaciones internas, motivos ocultos a la aduana (PA-38) y el estado del correo solo
- * a quien envio, al administrador y a la persona que lleva el proceso.
+ * internos solo a organizaciones internas y motivos ocultos a la aduana (PA-38).
  */
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import {
   asignacion,
   campoHistorial,
   comentario,
-  entregaCorreo,
   notificacion,
   organizacion,
   referencia,
@@ -37,7 +35,6 @@ import { autorVisible, comentarioVisible, motivoVisible, puedeEscribirCampo, typ
 import { nombreDeArea } from '@/dominio/areas';
 import { agenciasConAcceso, idsPermitidosParaAduana } from '../acciones/asignaciones';
 import { cargarPerfiles, configAvisos, type Perfil } from '../colaboracion/comun';
-import { getConfig } from '../config';
 import type { Actor } from './actor';
 import {
   NOMBRE_OTRA_AGENCIA,
@@ -70,58 +67,6 @@ function personaVista(actor: Actor, p: Perfil | undefined): PersonaVista {
     enmascarada: false,
   };
 }
-
-export type EstadoCorreoVista = 'enviado' | 'en_cola' | 'reintentando' | 'no_entregable' | 'sin_correo';
-
-export interface EntregaVista {
-  estado: EstadoCorreoVista;
-  intentos: number;
-  enviadoEn: string | null;
-  error: string | null;
-}
-
-function estadoCorreoDe(estado: string): EstadoCorreoVista {
-  switch (estado) {
-    case 'enviado':
-      return 'enviado';
-    case 'fallido':
-      return 'reintentando';
-    case 'abandonado':
-      return 'no_entregable';
-    default:
-      return 'en_cola';
-  }
-}
-
-/** Ultimo correo de cada asignacion (aviso inicial, actualizacion o recordatorio). */
-async function entregasPorAsignacion(ej: Ejecutor, ids: readonly string[]): Promise<Map<string, EntregaVista>> {
-  const mapa = new Map<string, EntregaVista>();
-  if (ids.length === 0) return mapa;
-  const filas = await ej
-    .select({
-      asignacionId: notificacion.asignacionId,
-      estado: entregaCorreo.estado,
-      intentos: entregaCorreo.intentos,
-      enviadoEn: entregaCorreo.enviadoEn,
-      error: entregaCorreo.ultimoError,
-    })
-    .from(entregaCorreo)
-    .innerJoin(notificacion, eq(notificacion.id, entregaCorreo.notificacionId))
-    .where(inArray(notificacion.asignacionId, [...ids]))
-    .orderBy(desc(entregaCorreo.creadaEn), desc(entregaCorreo.id));
-  for (const f of filas) {
-    if (!f.asignacionId || mapa.has(f.asignacionId)) continue;
-    mapa.set(f.asignacionId, {
-      estado: estadoCorreoDe(f.estado),
-      intentos: f.intentos,
-      enviadoEn: f.enviadoEn ? f.enviadoEn.toISOString() : null,
-      error: f.error,
-    });
-  }
-  return mapa;
-}
-
-const SIN_CORREO: EntregaVista = { estado: 'sin_correo', intentos: 0, enviadoEn: null, error: null };
 
 function completitudDe(tipo: TipoProducto, datos: FilaReferencia['datos']): Completitud {
   const valores: Record<string, unknown> = {};
@@ -280,7 +225,6 @@ export interface FilaEsperando {
   diasEnGestion: number;
   color: ColorFicha;
   etiqueta: string;
-  entrega: EntregaVista;
   recordadaHoy: boolean;
   nRecordatorios: number;
   /** El actor puede recordar / cancelar / reasignar (segun 3.3). */
@@ -329,7 +273,6 @@ export async function esperandoDe(ej: Ejecutor, actor: Actor, ahora: Date, limit
     .limit(limite);
 
   const perfiles = await cargarPerfiles(ej, filas.flatMap((f) => [f.deId, f.aId]));
-  const entregas = await entregasPorAsignacion(ej, filas.map((f) => f.asignacionId));
   const hoyBogota = new Date(ahora.getTime() - 5 * 3_600_000).toISOString().slice(0, 10);
 
   return filas
@@ -354,7 +297,6 @@ export async function esperandoDe(ej: Ejecutor, actor: Actor, ahora: Date, limit
         diasEnGestion: diasEnGestion({ fechaSolicitud: f.fechaSolicitud, clasificadaEn: f.clasificadaEn, ahora, diasPausa: f.diasPausa }),
         color,
         etiqueta: etiquetaColor(color),
-        entrega: entregas.get(f.asignacionId) ?? SIN_CORREO,
         recordadaHoy: ultimo === hoyBogota && configAvisos().maxRecordatoriosDia <= 1,
         nRecordatorios: f.nRecordatorios,
         puedeRecordar,
@@ -548,8 +490,6 @@ export interface SeguimientoAsignacion {
   completadaEn: string | null;
   nRecordatorios: number;
   ultimoRecordatorioEn: string | null;
-  /** Solo para quien envio, el admin y quien lleva el proceso. */
-  entrega: EntregaVista | null;
   esMia: boolean;
   puedeRecordar: boolean;
   puedeCancelar: boolean;
@@ -565,8 +505,6 @@ export async function seguimientoDeFicha(ej: Ejecutor, actor: Actor, referenciaI
     .orderBy(desc(asignacion.creadaEn))
     .limit(40);
   const perfiles = await cargarPerfiles(ej, filas.flatMap((f) => [f.deUsuarioId, f.aUsuarioId]));
-  const activas = filas.filter((f) => esAsignacionActiva(f.estado)).map((f) => f.id);
-  const entregas = await entregasPorAsignacion(ej, activas);
 
   return filas
     .filter((f) => {
@@ -579,7 +517,6 @@ export async function seguimientoDeFicha(ej: Ejecutor, actor: Actor, referenciaI
     .map((f): SeguimientoAsignacion => {
       const activa = esAsignacionActiva(f.estado);
       const esMia = f.deUsuarioId === actor.usuarioId;
-      const veEntrega = esMia || actor.rol === 'admin' || actor.rol === 'lector';
       const parte = esMia || f.aUsuarioId === actor.usuarioId || actor.rol !== 'aduana';
       const ultimoRecordatorio = f.ultimoRecordatorioEn ? new Date(f.ultimoRecordatorioEn.getTime() - 5 * 3_600_000).toISOString().slice(0, 10) : null;
       return {
@@ -599,7 +536,6 @@ export async function seguimientoDeFicha(ej: Ejecutor, actor: Actor, referenciaI
         completadaEn: f.completadaEn ? f.completadaEn.toISOString() : null,
         nRecordatorios: f.nRecordatorios,
         ultimoRecordatorioEn: f.ultimoRecordatorioEn ? f.ultimoRecordatorioEn.toISOString() : null,
-        entrega: veEntrega && activa ? (entregas.get(f.id) ?? SIN_CORREO) : null,
         esMia,
         puedeRecordar: activa && (actor.rol === 'admin' || actor.rol === 'lector' || esMia),
         puedeCancelar: activa && (actor.rol === 'admin' || (esMia && (actor.rol === 'solicitante' || actor.rol === 'aduana'))),
@@ -622,8 +558,6 @@ export interface ContextoEnvio {
   faltanDelArea: number;
   /** Secciones del area que siguen en amarillo: lo que se ofrece dejar pendiente. */
   seccionesPendientes: Seccion[];
-  /** El aviso tambien sale por correo (modo completo). Apagado: solo campana y «Para mí». */
-  avisosPorCorreo: boolean;
   puedeEnviar: boolean;
   /** Puede escribir comentarios (el lector solo los lee). */
   puedeComentar: boolean;
@@ -667,7 +601,6 @@ export async function contextoEnvioDe(ej: Ejecutor, actor: Actor, referenciaId: 
     archivada: ficha.archivadaEn !== null,
     faltanDelArea: c.area.faltan,
     seccionesPendientes: SECCIONES.filter((s) => c.secciones[s].estado === 'amarillo'),
-    avisosPorCorreo: getConfig().AVISOS_POR_CORREO,
     puedeEnviar,
     puedeComentar: actor.rol !== 'lector' && !ficha.archivadaEn,
     comentaSoloParaTodos: actor.rol === 'aduana',

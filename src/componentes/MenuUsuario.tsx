@@ -14,6 +14,7 @@ import { Popover, useCerrarPopover } from './ui/popover';
 export interface UsuarioMenu {
   nombre: string;
   email: string;
+  username?: string | null;
   rol: Rol;
   organizacion: string;
   esAgencia: boolean;
@@ -71,7 +72,7 @@ export function MenuUsuario({
         <Avatar nombre={usuario.nombre} tamano="lg" />
         <div className="min-w-0">
           <p className="truncate font-display text-base font-extrabold text-tinta">{nombre}</p>
-          <p className="truncate text-sm text-tinta-suave">{usuario.email}</p>
+          <p className="truncate text-sm text-tinta-suave">{usuario.username ?? usuario.email}</p>
         </div>
       </div>
       <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 border-b border-borde-suave px-4 py-3 text-sm">

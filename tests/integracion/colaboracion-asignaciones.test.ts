@@ -1,5 +1,5 @@
 /**
- * H3 · Asignaciones "Enviar a" (SPEC 8.3, 12.4, 14): flujo completo con outbox, upsert, lote, visibilidad
+ * H3 · Asignaciones "Enviar a" (SPEC 8.3, 12.4, 14): flujo completo con avisos en la app, upsert, lote, visibilidad
  * por organizacion, recordatorios con tope, devolver, cancelar y reasignar. PGlite en memoria (logica;
  * las carreras reales viven en tests/db-real).
  */
@@ -12,7 +12,7 @@ import { ErrorAccion } from '@/server/acciones/resultado';
 import { cargarReferenciaVisible } from '@/server/politicas/referencias';
 import { cargarActorPorId } from '@/server/politicas/actor';
 import { nuevoEscenario, nuevaFicha, rechazaCon, type Escenario } from './ayudas';
-import { asignacionesDe, auditorias, correos, correosPara, d, estadoFicha, notificacionesDe } from './ayudas-colab';
+import { asignacionesDe, auditorias, d, estadoFicha, notificacionesDe } from './ayudas-colab';
 
 let e: Escenario;
 const T0 = new Date('2026-10-21T15:00:00.000Z');
@@ -34,8 +34,8 @@ async function codigoError(p: PromiseLike<unknown>): Promise<string> {
   return 'NINGUNO';
 }
 
-describe('enviarA: asignacion + notificacion + correo en la misma transaccion', () => {
-  it('Edward envia a Brian: queda el pendiente, el aviso y el correo, y la ficha sale de borrador', async () => {
+describe('enviarA: asignacion + notificacion en la misma transaccion', () => {
+  it('Edward envia a Brian: queda el pendiente y el aviso, y la ficha sale de borrador', async () => {
     const id = await nuevaFicha(e, { codigo: 'ENV-0001', nombre: 'Producto secreto' });
     expect(await estadoFicha(e.db, id)).toBe('BORRADOR');
 
@@ -43,8 +43,6 @@ describe('enviarA: asignacion + notificacion + correo en la misma transaccion', 
 
     expect(r.creadas).toBe(1);
     expect(r.actualizadas).toBe(0);
-    expect(r.destinatarios[0]?.canal).toBe('correo');
-    expect(r.correoIds).toHaveLength(1);
 
     const [a] = await asignacionesDe(e.db, id);
     expect(a?.estado).toBe('pendiente');
@@ -59,21 +57,7 @@ describe('enviarA: asignacion + notificacion + correo en la misma transaccion', 
     expect(n?.titulo).toContain('ENV-0001'); // la bandeja esta detras del login: puede llevar el codigo
     expect(n?.leidaEn).toBeNull();
 
-    const [c] = await correosPara(e.db, 'brian@prueba.invalid');
-    expect(c?.estado).toBe('pendiente');
-    expect(c?.plantilla).toBe('pendiente');
-    expect(c?.claveIdempotencia).toBe(`asig:${a?.id}:inicial`);
-    expect(c?.notificacionId).toBe(n?.id);
-    // D-23: sin datos de la mercancia ni el mensaje libre en el correo.
-    for (const texto of [c?.asunto ?? '', c?.cuerpoTexto ?? '', c?.cuerpoHtml ?? '']) {
-      expect(texto).not.toContain('ENV-0001');
-      expect(texto).not.toContain('Producto secreto');
-      expect(texto).not.toContain('falta la partida');
-    }
-    expect(c?.asunto).toBe('Tienes una descripción mínima pendiente');
-    expect(c?.cuerpoTexto).toContain(`/referencias/${id}`);
-    expect(c?.cuerpoTexto).toContain('Edward te envió una referencia para clasificar');
-    expect(c?.cuerpoHtml).toContain('Abrir la referencia');
+    expect(n?.titulo).toContain('Edward te envió ENV-0001 para clasificar');
 
     expect(await estadoFicha(e.db, id)).toBe('EN_GESTION');
     const aud = (await auditorias(e.db, 'enviar_a')).find((x) => x.entidadId === a?.id);
@@ -84,7 +68,7 @@ describe('enviarA: asignacion + notificacion + correo en la misma transaccion', 
     expect(ver.id).toBe(id);
   });
 
-  it('upsert: enviar dos veces lo mismo no duplica pendiente, aviso ni correo', async () => {
+  it('upsert: enviar dos veces lo mismo no duplica pendiente ni aviso', async () => {
     const id = await nuevaFicha(e);
     const entrada = { referenciaId: id, destinatarios: [{ usuarioId: e.brian.usuarioId }], mensaje: 'Hola' };
     await enviarA(e.ctx(e.edward, T0), entrada);
@@ -94,7 +78,6 @@ describe('enviarA: asignacion + notificacion + correo en la misma transaccion', 
     expect(r2.actualizadas).toBe(0);
     expect(r2.destinatarios[0]?.sinCambios).toBe(1);
     expect(r2.yaTenianPendiente).toEqual([e.brian.usuarioId]);
-    expect(r2.correoIds).toHaveLength(0);
     expect(await asignacionesDe(e.db, id)).toHaveLength(1);
     expect(await notificacionesDe(e.db, e.brian.usuarioId).then((x) => x.filter((n) => n.referenciaId === id))).toHaveLength(1);
   });
@@ -116,8 +99,6 @@ describe('enviarA: asignacion + notificacion + correo en la misma transaccion', 
     const delFicha = (await notificacionesDe(e.db, e.brian.usuarioId)).filter((n) => n.referenciaId === id);
     expect(delFicha).toHaveLength(2);
     expect(delFicha[1]?.titulo).toContain('actualizó lo que te pide');
-    const cs = (await correosPara(e.db, 'brian@prueba.invalid')).filter((c) => delFicha.some((n) => n.id === c.notificacionId));
-    expect(cs.map((c) => c.plantilla)).toEqual(['pendiente', 'pendiente_actualizada']);
   });
 
   it('varias personas a la vez, cada una con su pedido', async () => {
@@ -152,9 +133,8 @@ describe('enviarA: asignacion + notificacion + correo en la misma transaccion', 
     expect(await asignacionesDe(e.db, id)).toHaveLength(0);
   });
 
-  it('es atomico: si uno de los destinatarios es invalido no queda ni asignacion, ni aviso, ni correo', async () => {
+  it('es atomico: si uno de los destinatarios es invalido no queda ni asignacion ni aviso', async () => {
     const id = await nuevaFicha(e);
-    const antesCorreos = (await correos(e.db)).length;
     const antesNotif = (await notificacionesDe(e.db, e.brian.usuarioId)).length;
     await expect(
       enviarA(e.ctx(e.edward, T0), {
@@ -163,30 +143,11 @@ describe('enviarA: asignacion + notificacion + correo en la misma transaccion', 
       }),
     ).rejects.toBeInstanceOf(ErrorAccion);
     expect(await asignacionesDe(e.db, id)).toHaveLength(0);
-    expect((await correos(e.db)).length).toBe(antesCorreos);
     expect((await notificacionesDe(e.db, e.brian.usuarioId)).length).toBe(antesNotif);
     expect(await estadoFicha(e.db, id)).toBe('BORRADOR');
   });
 
-  it('respeta la preferencia "solo en la plataforma" y registra el correo invalido', async () => {
-    const id = await nuevaFicha(e);
-    await e.db.update(usuario).set({ preferenciaAviso: 'solo_bandeja' }).where(eq(usuario.id, e.charles.usuarioId));
-    const r1 = await enviarA(e.ctx(e.admin, T0), { referenciaId: id, destinatarios: [{ usuarioId: e.charles.usuarioId }] });
-    expect(r1.destinatarios[0]?.canal).toBe('solo_bandeja');
-    expect(r1.correoIds).toHaveLength(0);
-    expect(await notificacionesDe(e.db, e.charles.usuarioId).then((x) => x.filter((n) => n.referenciaId === id))).toHaveLength(1);
-    await e.db.update(usuario).set({ preferenciaAviso: 'inmediato' }).where(eq(usuario.id, e.charles.usuarioId));
-
-    const id2 = await nuevaFicha(e);
-    await e.db.update(usuario).set({ correoInvalido: true }).where(eq(usuario.id, e.brian.usuarioId));
-    const r2 = await enviarA(e.ctx(e.edward, T0), { referenciaId: id2, destinatarios: [{ usuarioId: e.brian.usuarioId }] });
-    expect(r2.destinatarios[0]?.canal).toBe('correo_invalido');
-    const [c] = (await correosPara(e.db, 'brian@prueba.invalid')).filter((x) => x.estado === 'abandonado');
-    expect(c?.ultimoError).toContain('inválido');
-    await e.db.update(usuario).set({ correoInvalido: false }).where(eq(usuario.id, e.brian.usuarioId));
-  });
-
-  it('un nombre con saltos de linea no se cuela en el asunto', async () => {
+  it('un nombre con saltos de linea queda en una sola linea en el aviso', async () => {
     const [u] = await e.db
       .insert(usuario)
       .values({ nombre: 'Eva\r\nBcc: x@y.z', email: 'eva@prueba.invalid', rol: 'solicitante', organizacionId: e.orgInterna, organizacionTipo: 'interna' })
@@ -194,10 +155,9 @@ describe('enviarA: asignacion + notificacion + correo en la misma transaccion', 
     const eva = await cargarActorPorId(e.db, (u as { id: string }).id);
     const id = await nuevaFicha(e);
     await enviarA(e.ctx(eva!, T0), { referenciaId: id, destinatarios: [{ usuarioId: e.charles.usuarioId }] });
-    const cs = await correosPara(e.db, 'charles@prueba.invalid');
-    const ultimo = cs[cs.length - 1];
-    expect(ultimo?.asunto).not.toMatch(/[\r\n]/);
-    expect(ultimo?.cuerpoTexto).toContain('Eva Bcc: x@y.z'); // aplanado en una linea, sin cabecera nueva
+    const titulos = (await notificacionesDe(e.db, e.charles.usuarioId)).filter((n) => n.referenciaId === id).map((n) => n.titulo);
+    expect(titulos).toHaveLength(1);
+    expect(titulos[0]).not.toMatch(/[\r\n]/);
   });
 });
 
@@ -252,10 +212,9 @@ describe('visibilidad por organizacion y una sola agencia a la vez (8.3 reglas 2
   });
 });
 
-describe('enviarALote (RV-37): hasta 25 fichas, UN correo resumen por destinatario', () => {
-  it('3 fichas a 2 personas: 6 asignaciones, 6 avisos y 2 correos de resumen', async () => {
+describe('enviarALote (RV-37): hasta 25 fichas a varias personas', () => {
+  it('3 fichas a 2 personas: 6 asignaciones y 6 avisos', async () => {
     const ids = [await nuevaFicha(e), await nuevaFicha(e), await nuevaFicha(e)];
-    const antes = (await correos(e.db)).length;
     const r = await enviarALote(e.ctx(e.edward, T0), {
       referenciaIds: ids,
       destinatarios: [
@@ -266,15 +225,6 @@ describe('enviarALote (RV-37): hasta 25 fichas, UN correo resumen por destinatar
     });
     expect(r.creadas).toBe(6);
     expect(r.loteId).toBeTruthy();
-    expect(r.correoIds).toHaveLength(2);
-    const nuevos = (await correos(e.db)).slice(antes);
-    expect(nuevos).toHaveLength(2);
-    for (const c of nuevos) {
-      expect(c.plantilla).toBe('resumen_lote');
-      expect(c.asunto).toBe('Tienes 3 descripciones mínimas pendientes');
-      expect(c.claveIdempotencia).toMatch(/^lote:/);
-      expect(c.cuerpoTexto).not.toContain('Para esta semana');
-    }
     for (const id of ids) {
       expect(await estadoFicha(e.db, id)).toBe('EN_GESTION');
       expect(await asignacionesDe(e.db, id)).toHaveLength(2);
@@ -288,8 +238,6 @@ describe('enviarALote (RV-37): hasta 25 fichas, UN correo resumen por destinatar
       mensaje: 'Para esta semana',
     });
     expect(rep.creadas).toBe(0);
-    expect(rep.correoIds).toHaveLength(0);
-    expect((await correos(e.db)).length).toBe(antes + 2);
   });
 
   it('mas de 25 fichas se rechaza; y si una ficha no se puede enviar no queda nada del lote', async () => {
@@ -299,12 +247,10 @@ describe('enviarALote (RV-37): hasta 25 fichas, UN correo resumen por destinatar
     const buena = await nuevaFicha(e);
     const archivada = await nuevaFicha(e);
     await e.db.update(referencia).set({ archivadaEn: T0 }).where(eq(referencia.id, archivada));
-    const antes = (await correos(e.db)).length;
     await expect(
       enviarALote(e.ctx(e.admin, T0), { referenciaIds: [buena, archivada], destinatarios: [{ usuarioId: e.charles.usuarioId }] }),
     ).rejects.toMatchObject({ codigo: 'FICHA_CERRADA' });
     expect(await asignacionesDe(e.db, buena)).toHaveLength(0);
-    expect((await correos(e.db)).length).toBe(antes);
   });
 });
 
@@ -317,9 +263,9 @@ describe('recordar: tope diario configurable (8.3 regla 8)', () => {
     const r1 = await recordar(e.ctx(e.edward, d(T0, 1)), { asignacionId: a!.id });
     expect(r1.hoy).toBe(1);
     expect(r1.maxPorDia).toBe(1);
-    const [c] = (await correosPara(e.db, 'brian@prueba.invalid')).filter((x) => x.plantilla === 'recordatorio');
-    expect(c?.asunto).toBe('Recordatorio: tienes una descripción mínima pendiente');
-    expect(c?.cuerpoTexto).toContain('desde hace 1 día');
+    const aviso = (await notificacionesDe(e.db, e.brian.usuarioId)).find((n) => n.tipo === 'recordatorio' && n.asignacionId === a!.id);
+    expect(aviso?.titulo).toContain('te recuerda');
+    expect(aviso?.titulo).toContain('desde hace 1 día');
 
     await rechazaCon(recordar(e.ctx(e.edward, d(T0, 1, 2)), { asignacionId: a!.id }), /Ya enviaste un recordatorio hoy/);
     expect(await codigoError(recordar(e.ctx(e.edward, d(T0, 1, 2)), { asignacionId: a!.id }))).toBe('LIMITE_TASA');
@@ -361,7 +307,7 @@ describe('recordar: tope diario configurable (8.3 regla 8)', () => {
 });
 
 describe('marcarListo, cancelar, reasignar, abrir', () => {
-  it('Brian marca listo: su asignacion queda hecha y Edward recibe aviso y correo; repetirlo no duplica', async () => {
+  it('Brian marca listo: su asignacion queda hecha y Edward recibe el aviso; repetirlo no duplica', async () => {
     const id = await nuevaFicha(e);
     await enviarA(e.ctx(e.edward, T0), { referenciaId: id, destinatarios: [{ usuarioId: e.brian.usuarioId }] });
     const r = await marcarListo(e.ctx(e.brian, d(T0, 1)), { referenciaId: id });
@@ -373,8 +319,6 @@ describe('marcarListo, cancelar, reasignar, abrir', () => {
     const delFicha = (await notificacionesDe(e.db, e.edward.usuarioId)).filter((n) => n.referenciaId === id);
     expect(delFicha).toHaveLength(1);
     expect(delFicha[0]?.titulo).toContain('Brian terminó su parte');
-    const cs = (await correosPara(e.db, 'edward@prueba.invalid')).filter((c) => c.notificacionId === delFicha[0]?.id);
-    expect(cs[0]?.plantilla).toBe('devuelta');
 
     const otra = await marcarListo(e.ctx(e.brian, d(T0, 1, 1)), { referenciaId: id });
     expect(otra.yaEstaba).toBe(true);
@@ -386,7 +330,7 @@ describe('marcarListo, cancelar, reasignar, abrir', () => {
     await rechazaCon(marcarListo(e.ctx(e.charles), { referenciaId: id }), /no está pendiente para ti/);
   });
 
-  it('cancelar: solo quien envio o un admin; el correo que aun no salio se retira; es idempotente', async () => {
+  it('cancelar: solo quien envio o un admin; avisa a quien lo tenia; es idempotente', async () => {
     const id = await nuevaFicha(e);
     await enviarA(e.ctx(e.edward, T0), { referenciaId: id, destinatarios: [{ usuarioId: e.charles.usuarioId, pedido: 'completar' }] });
     const [a] = await asignacionesDe(e.db, id);
@@ -396,10 +340,6 @@ describe('marcarListo, cancelar, reasignar, abrir', () => {
     const r = await cancelarAsignacion(e.ctx(e.edward, T0), { asignacionId: a!.id });
     expect(r.yaEstaba).toBe(false);
     expect((await asignacionesDe(e.db, id))[0]?.estado).toBe('cancelada');
-    const nInicial = (await notificacionesDe(e.db, e.charles.usuarioId)).find((n) => n.asignacionId === a!.id && n.tipo === 'asignacion');
-    const c = (await correosPara(e.db, 'charles@prueba.invalid')).find((x) => x.notificacionId === nInicial?.id);
-    expect(c?.estado).toBe('abandonado'); // el aviso viejo "tienes pendiente" ya no sale
-    expect(c?.ultimoError).toContain('canceló');
     const avisos = (await notificacionesDe(e.db, e.charles.usuarioId)).filter((n) => n.referenciaId === id);
     expect(avisos.some((n) => n.titulo.includes('canceló'))).toBe(true);
 
@@ -422,7 +362,6 @@ describe('marcarListo, cancelar, reasignar, abrir', () => {
     expect(nueva?.aUsuarioId).toBe(e.admin.usuarioId);
     expect(nueva?.deUsuarioId).toBe(e.edward.usuarioId);
     expect((await notificacionesDe(e.db, e.charles.usuarioId)).some((n) => n.titulo.includes('Ya no tienes nada pendiente'))).toBe(true);
-    expect((await correosPara(e.db, 'ana@prueba.invalid')).length).toBeGreaterThan(0);
     await rechazaCon(reasignar(e.ctx(e.edward, d(T0, 1)), { asignacionId: nueva!.id, aUsuarioId: e.admin.usuarioId }), /ya tiene la referencia/);
   });
 
@@ -463,19 +402,17 @@ describe('organizaciones: nada se cuela entre agencias', () => {
 });
 
 describe('asignaciones creadas por otra via (reasignar al desactivar a un usuario)', () => {
-  it('avisarAsignacionExistente deja el aviso y el correo en la misma transaccion y es idempotente', async () => {
+  it('avisarAsignacionExistente deja el aviso en la misma transaccion y es idempotente', async () => {
     const id = await nuevaFicha(e);
     const [a] = await e.db
       .insert(asignacion)
       .values({ referenciaId: id, deUsuarioId: e.edward.usuarioId, aUsuarioId: e.charles.usuarioId, pedido: 'completar', estado: 'pendiente' })
       .returning();
     const r = await e.db.transaction((tx) => avisarAsignacionExistente(tx, { asignacionId: a!.id, quien: 'Ana Admin', ahora: T0 }));
-    expect(r?.correoId).toBeTruthy();
+    expect(r?.notificacionId).toBeTruthy();
     const avisos = (await notificacionesDe(e.db, e.charles.usuarioId)).filter((n) => n.asignacionId === a!.id);
     expect(avisos).toHaveLength(1);
     expect(avisos[0]?.titulo).toContain('Ana Admin te envió');
-    const [c] = (await correosPara(e.db, 'charles@prueba.invalid')).filter((x) => x.notificacionId === avisos[0]!.id);
-    expect(c?.claveIdempotencia).toBe(`asig:${a!.id}:inicial`);
     // Una segunda llamada no duplica nada.
     expect(await e.db.transaction((tx) => avisarAsignacionExistente(tx, { asignacionId: a!.id, quien: 'Ana Admin', ahora: T0 }))).toBeNull();
     expect((await notificacionesDe(e.db, e.charles.usuarioId)).filter((n) => n.asignacionId === a!.id)).toHaveLength(1);

@@ -1,16 +1,17 @@
 /**
- * Flujo de acceso por enlace magico (10.6, 13.1) y resolucion del `Actor` desde las cabeceras de
- * la peticion. Es logica del servidor SIN dependencias de Next (recibe `Auth`, `Db`, `Mailer` y
- * cabeceras) para poder probarla de punta a punta contra PGlite.
+ * Acceso por usuario y contrasena (10.6, 13.1) y resolucion del `Actor` desde las cabeceras de la peticion.
+ * Es logica del servidor SIN dependencias de Next (recibe `Auth`, `Db` y cabeceras) para poder probarla de punta a
+ * punta contra PGlite.
  */
-import { createHash } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
-import { session, usuario, verification } from '@/db/esquema';
+import { and, eq, or } from 'drizzle-orm';
+import { organizacion, session, usuario } from '@/db/esquema';
 import type { Db } from '@/db/tipos';
+import { CLAVE_MAX, normalizarUsuario } from '@/dominio/credenciales';
 import { siguienteSeguro } from '@/dominio/redireccion';
-import type { Auth, MetadatosEnlace } from './auth';
+import type { Auth } from './auth';
 import type { Config } from './config';
-import { limitarTasa, REGLAS_TASA, type ReglaTasa } from './limite-tasa';
+import { hashearClave } from './claves';
+import { consultarTasa, limitarTasa, REGLAS_TASA } from './limite-tasa';
 import { auditar } from './auditoria';
 import { ErrorAccion } from './acciones/resultado';
 import { cargarActorPorId, type Actor } from './politicas/actor';
@@ -31,112 +32,79 @@ export function ipDeCabeceras(h: Headers): string | null {
   return h.get('x-real-ip');
 }
 
-// ---- Solicitar enlace ---------------------------------------------------------------------------------
+// ---- Iniciar sesion ------------------------------------------------------------------------------------
+
+export type ResultadoIniciar =
+  | { ok: true; siguiente: string; setCookie: string[] }
+  | { ok: false; motivo: 'credenciales' };
 
 /**
- * Pide un enlace de acceso. La respuesta es SIEMPRE la misma exista o no el correo (anti-enumeracion,
- * 10.6): solo si el usuario existe y esta activo se genera el token y se envia el correo; en los demas
- * casos se registra `login_fallido` y no pasa nada visible. Los limites de tasa aplican a cualquier
- * correo por igual (5/15 min por correo, 60/15 min por IP; 30 s entre solicitudes). Las solicitudes rechazadas por la
- * IP o por la espera no gastan el cupo del correo (ver el orden de las reglas abajo).
+ * Entra con usuario y contrasena. El mensaje de error es SIEMPRE el mismo exista o no el usuario (anti-enumeracion):
+ * solo se distingue en la auditoria (`login_fallido`). Limites (S-13): por IP (todo intento) y por usuario (solo los
+ * FALLOS: 10 por 15 min); quien PIDE paga primero, asi la IP desbordada no gasta el cupo del usuario. Un usuario
+ * desconocido tambien paga un hash, para que la latencia no delate si existe.
  */
-export async function solicitarEnlace(
+export async function iniciarSesion(
   d: DepsAcceso,
-  p: { email: string; siguiente?: string | undefined; ip?: string | null; plantilla?: 'acceso' | 'bienvenida'; invitadoPor?: string },
-): Promise<void> {
-  const email = p.email.trim().toLowerCase();
+  p: { usuario: string; clave: string; siguiente?: string | undefined; ip?: string | null; headers: Headers },
+): Promise<ResultadoIniciar> {
+  // Tope de largo: el identificador forma parte de la clave del limite de intentos y de una consulta.
+  const identificador = normalizarUsuario(p.usuario).slice(0, 100);
   const ahora = reloj(d);
 
-  // Orden de los limites: quien PIDE paga primero. Una solicitud rechazada por la IP o por la espera NO consume
-  // el cupo del correo: si no, un tercero anonimo agotaria el cupo de la victima solo insistiendo (el correo es
-  // publico y la entrada es solo por enlace). La IP cuenta siempre (aun rechazada): es el recurso del atacante.
-  // Una invitacion (`bienvenida`) la hace un admin y se envia a OTRA persona: no se cobra a la IP del admin.
-  const reglas: Array<{ clave: string; regla: ReglaTasa }> = [];
-  if (p.ip && p.plantilla !== 'bienvenida') reglas.push({ clave: `enlace-ip:${p.ip}`, regla: REGLAS_TASA.enlacePorIp });
-  reglas.push({ clave: `enlace-espera:${email}`, regla: REGLAS_TASA.enlaceEspera });
-  reglas.push({ clave: `enlace-correo:${email}`, regla: REGLAS_TASA.enlacePorCorreo });
-  for (const { clave, regla } of reglas) {
-    const r = await limitarTasa(d.db, clave, regla, ahora);
-    if (!r.permitido) {
-      const minutos = Math.max(1, Math.ceil(r.reintentarEnMs / 60_000));
-      throw new ErrorAccion('LIMITE_TASA', `Hiciste muchas solicitudes. Espera ${minutos} ${minutos === 1 ? 'minuto' : 'minutos'} y vuelve a intentar.`, {
-        reintentarEnMs: r.reintentarEnMs,
-      });
-    }
+  const rechazar = (reintentarEnMs: number): never => {
+    const minutos = Math.max(1, Math.ceil(reintentarEnMs / 60_000));
+    throw new ErrorAccion('LIMITE_TASA', `Demasiados intentos. Espera ${minutos} ${minutos === 1 ? 'minuto' : 'minutos'} y vuelve a intentar.`, {
+      reintentarEnMs,
+    });
+  };
+  // 1) Por IP: cuenta TODO lo que intenta (es el recurso del atacante). Si la IP se pasa, ni se mira al usuario.
+  if (p.ip) {
+    const r = await limitarTasa(d.db, `acceso-ip:${p.ip}`, REGLAS_TASA.accesoPorIp, ahora);
+    if (!r.permitido) rechazar(r.reintentarEnMs);
   }
+  // 2) Por usuario: solo cuentan los FALLOS (abajo, en `fallar`); entrar bien no gasta el cupo de una cuenta compartida.
+  const claveFallos = `acceso-fallos:${identificador}`;
+  const previo = await consultarTasa(d.db, claveFallos, REGLAS_TASA.accesoFallidoPorUsuario, ahora);
+  if (!previo.permitido) rechazar(previo.reintentarEnMs);
 
   const [u] = await d.db
-    .select({ id: usuario.id, activo: usuario.activo })
+    .select({ id: usuario.id, email: usuario.email, activo: usuario.activo, orgActiva: organizacion.activa })
     .from(usuario)
-    .where(eq(usuario.email, email))
+    .innerJoin(organizacion, eq(organizacion.id, usuario.organizacionId))
+    .where(or(eq(usuario.username, identificador), eq(usuario.email, identificador)))
     .limit(1);
-  if (!u || !u.activo) {
+
+  const fallar = async (motivo: string): Promise<ResultadoIniciar> => {
+    await limitarTasa(d.db, claveFallos, REGLAS_TASA.accesoFallidoPorUsuario, ahora);
     await auditar(d.db, {
       usuarioId: u?.id ?? null,
       accion: 'login_fallido',
       entidad: 'usuario',
       entidadId: u?.id ?? 'desconocido',
-      detalle: { motivo: u ? 'inactivo' : 'desconocido' },
+      detalle: { motivo },
       ip: p.ip ?? null,
     });
-    return; // misma respuesta que si hubiera existido
-  }
-
-  const metadata: MetadatosEnlace = {
-    siguiente: siguienteSeguro(p.siguiente),
-    plantilla: p.plantilla ?? 'acceso',
-    ...(p.invitadoPor ? { invitadoPor: p.invitadoPor } : {}),
-    ip: p.ip ?? null,
+    return { ok: false, motivo: 'credenciales' };
   };
-  await d.auth.api.signInMagicLink({
-    body: { email, metadata: metadata as Record<string, unknown> },
-    headers: new Headers(),
-  });
-}
 
-// ---- Confirmar enlace ---------------------------------------------------------------------------------
-
-/** Mismo hash que `storeToken: 'hashed'` del plugin (SHA-256, base64url sin relleno). */
-function identificadorDeToken(token: string): string {
-  return `magic-link:${createHash('sha256').update(token).digest('base64url')}`;
-}
-
-export type ResultadoConfirmar =
-  | { ok: true; siguiente: string; setCookie: string[] }
-  | { ok: false; motivo: 'vencido' | 'usado' | 'invalido' };
-
-/**
- * Confirma el enlace (el POST del boton "Entrar"). Distingue venció / ya se usó para mostrar los
- * textos de 10.6. El token se consume UNA vez, atomicamente, en Better Auth.
- */
-export async function confirmarEnlace(
-  d: DepsAcceso,
-  p: { token: string; siguiente?: string | undefined; headers: Headers },
-): Promise<ResultadoConfirmar> {
-  const token = p.token.trim();
-  if (token.length < 8 || token.length > 256) return { ok: false, motivo: 'invalido' };
-  const ahora = reloj(d);
-
-  const [pendiente] = await d.db
-    .select({ expiresAt: verification.expiresAt })
-    .from(verification)
-    .where(eq(verification.identifier, identificadorDeToken(token)))
-    .limit(1);
-  if (!pendiente) return { ok: false, motivo: 'usado' }; // no existe: ya se uso (o nunca fue valido)
-  if (pendiente.expiresAt.getTime() <= ahora.getTime()) return { ok: false, motivo: 'vencido' };
+  if (!u) {
+    await hashearClave(p.clave); // mismo costo que una verificacion real
+    return fallar('usuario_desconocido');
+  }
+  if (!u.activo || !u.orgActiva) return fallar('inactivo');
+  if (p.clave.length > CLAVE_MAX) return fallar('clave_demasiado_larga');
 
   try {
-    const r = await d.auth.api.magicLinkVerify({
-      query: { token },
+    const r = await d.auth.api.signInEmail({
+      body: { email: u.email, password: p.clave },
       headers: p.headers,
       returnHeaders: true,
     });
-    const setCookie = r.headers.getSetCookie?.() ?? [];
-    if (!r.response?.token) return { ok: false, motivo: 'invalido' };
-    return { ok: true, siguiente: siguienteSeguro(p.siguiente), setCookie };
+    if (!r.response?.token) return fallar('sin_sesion');
+    return { ok: true, siguiente: siguienteSeguro(p.siguiente), setCookie: r.headers.getSetCookie?.() ?? [] };
   } catch {
-    // Redireccion de error de Better Auth: usuario inexistente/inactivo, sesion rechazada, token ya consumido.
-    return { ok: false, motivo: 'usado' };
+    return fallar('clave_incorrecta');
   }
 }
 

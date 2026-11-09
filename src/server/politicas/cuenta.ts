@@ -15,19 +15,17 @@ export async function misSesiones(ej: Ejecutor, actor: Actor): Promise<SesionPro
 }
 
 export interface MisPreferencias {
-  preferenciaAviso: 'inmediato' | 'solo_bandeja';
   atajosTeclado: boolean;
   ultimoIngreso: string | null;
 }
 
 export async function misPreferencias(ej: Ejecutor, actor: Actor): Promise<MisPreferencias> {
   const [u] = await ej
-    .select({ preferenciaAviso: usuario.preferenciaAviso, atajosTeclado: usuario.atajosTeclado, ultimoIngreso: usuario.ultimoIngreso })
+    .select({ atajosTeclado: usuario.atajosTeclado, ultimoIngreso: usuario.ultimoIngreso })
     .from(usuario)
     .where(eq(usuario.id, actor.usuarioId))
     .limit(1);
   return {
-    preferenciaAviso: (u?.preferenciaAviso as MisPreferencias['preferenciaAviso']) ?? 'inmediato',
     atajosTeclado: u?.atajosTeclado ?? true,
     ultimoIngreso: u?.ultimoIngreso?.toISOString() ?? null,
   };

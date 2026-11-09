@@ -1,6 +1,6 @@
 'use client';
 
-import { Building2, LayoutDashboard, ListChecks, Mail, ScrollText, SlidersHorizontal, Users, type LucideIcon } from 'lucide-react';
+import { Building2, LayoutDashboard, ListChecks, ScrollText, SlidersHorizontal, Users, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -11,13 +11,12 @@ const SECCIONES: ReadonlyArray<{ href: string; etiqueta: string; icono: LucideIc
   { href: '/admin/organizaciones', etiqueta: 'Organizaciones', icono: Building2 },
   { href: '/admin/catalogos', etiqueta: 'Catálogos', icono: ListChecks },
   { href: '/admin/auditoria', etiqueta: 'Auditoría', icono: ScrollText },
-  { href: '/admin/correo', etiqueta: 'Cola de correo', icono: Mail },
   { href: '/admin/parametros', etiqueta: 'Parámetros', icono: SlidersHorizontal },
 ];
 
 /**
  * Navegacion local de la administracion (pestañas de seccion) para pantallas de menos de 1024 px, donde el menu lateral
- * no existe: se llega a las siete secciones con una barra que se desplaza sin partir la pagina. Desde 1024 px el menu
+ * no existe: se llega a las seis secciones con una barra que se desplaza sin partir la pagina. Desde 1024 px el menu
  * lateral ya despliega estas secciones, asi que aqui se oculta para no duplicar la navegacion. La activa va en negrita, con subrayado y `aria-current` (no solo color).
  */
 export function SubNavAdmin() {

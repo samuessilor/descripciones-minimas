@@ -1,4 +1,4 @@
-import { CircleAlert, Clock, MailX, ShieldCheck, UserX } from 'lucide-react';
+import { CircleAlert, Clock, ShieldCheck, UserX } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Insignia } from '@/componentes/ui/insignia';
@@ -59,7 +59,7 @@ export function InsigniaTipoOrg({ tipo }: { tipo: string }) {
 }
 
 /** Estado de una persona: siempre palabra + icono, nunca solo color. Pueden ir varias a la vez. */
-export function EstadosUsuario({ activo, ultimoIngreso, correoInvalido }: { activo: boolean; ultimoIngreso: string | null; correoInvalido: boolean }) {
+export function EstadosUsuario({ activo, ultimoIngreso }: { activo: boolean; ultimoIngreso: string | null }) {
   return (
     <span className="flex flex-wrap items-center gap-1.5">
       {!activo ? (
@@ -75,11 +75,6 @@ export function EstadosUsuario({ activo, ultimoIngreso, correoInvalido }: { acti
           Activo
         </Insignia>
       )}
-      {correoInvalido ? (
-        <Insignia variante="error" icono={<MailX aria-hidden className="size-3" />}>
-          Correo inválido
-        </Insignia>
-      ) : null}
     </span>
   );
 }

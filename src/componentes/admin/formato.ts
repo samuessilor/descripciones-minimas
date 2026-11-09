@@ -66,10 +66,10 @@ export const TIPO_ORG_ETIQUETA = { interna: 'Área interna', agencia: 'Agencia d
 export const ETIQUETA_ACCION: Record<string, string> = {
   login: 'Entró a la plataforma',
   login_fallido: 'Intento de entrada fallido',
-  solicitar_enlace: 'Pidió un enlace de acceso',
   cerrar_sesion: 'Cerró sesión',
-  invitar: 'Invitó a una persona',
-  reenviar_invitacion: 'Reenvió una invitación',
+  crear_cuenta: 'Creó una cuenta',
+  restablecer_clave: 'Restableció una contraseña',
+  cambiar_clave: 'Cambió su contraseña',
   editar_usuario: 'Editó los datos de una persona',
   desactivar: 'Desactivó a una persona',
   reactivar: 'Reactivó a una persona',
@@ -82,8 +82,6 @@ export const ETIQUETA_ACCION: Record<string, string> = {
   guardar_catalogo: 'Cambió un valor de lista',
   guardar_restriccion: 'Guardó una restricción',
   guardar_partida: 'Guardó una partida',
-  reintentar_correo: 'Reintentó un correo',
-  marcar_correo_invalido: 'Marcó o desmarcó un correo inválido',
   actualizar_preferencias: 'Cambió sus preferencias',
   enviar_a: 'Envió una referencia',
   enviar_lote: 'Envió varias referencias',
@@ -116,7 +114,6 @@ export const ETIQUETA_ENTIDAD: Record<string, string> = {
   catalogo_item: 'Valor de lista',
   restriccion_plantilla: 'Restricción',
   partida_arancelaria: 'Partida',
-  entrega_correo: 'Correo',
   auditoria: 'Auditoría',
   asignacion: 'Pendiente',
   lote: 'Envío en lote',
@@ -130,23 +127,6 @@ export const ETIQUETA_PEDIDO: Record<string, string> = {
   responder: 'Responder',
   revisar: 'Revisar',
 };
-
-export const ETIQUETA_PLANTILLA_CORREO: Record<string, string> = {
-  acceso: 'Enlace de acceso',
-  bienvenida: 'Invitación',
-  pendiente: 'Pendiente nuevo',
-  pendiente_actualizada: 'Pendiente actualizado',
-  recordatorio: 'Recordatorio',
-  clasificada: 'Clasificada',
-  reabierta: 'Reabierta',
-  reapertura_solicitada: 'Piden reabrir',
-  devuelta: 'Terminó su parte',
-  resumen_lote: 'Resumen de varias',
-};
-
-export function etiquetaPlantillaCorreo(p: string): string {
-  return ETIQUETA_PLANTILLA_CORREO[p] ?? p.replace(/_/g, ' ');
-}
 
 /** «Chrome en Windows», «Safari en iPhone»... a partir del agente de usuario, sin librerias. */
 export function describirNavegador(ua: string | null | undefined): string {

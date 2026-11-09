@@ -1,76 +1,43 @@
 'use client';
 
-import { Mail, MailCheck } from 'lucide-react';
-import { useActionState, useEffect, useState } from 'react';
-import { solicitarEnlaceAccion, type EstadoFormulario } from '@/app/acciones/sesion';
+import { Eye, EyeOff, UserRound } from 'lucide-react';
+import { useActionState, useState } from 'react';
+import { iniciarSesionAccion, type EstadoFormulario } from '@/app/acciones/sesion';
 import { Aviso } from '@/componentes/ui/aviso';
 import { Boton } from '@/componentes/ui/button';
 import { CampoFormulario } from '@/componentes/ui/campo-formulario';
 import { Campo } from '@/componentes/ui/input';
 
 const INICIAL: EstadoFormulario = { estado: 'inicial' };
-const ESPERA_REENVIO_S = 30;
 
-/**
- * Boton unico del formulario. Se vuelve a montar (por `key`) con cada respuesta "enviado", asi la
- * cuenta de 30 s para «Reenviar» arranca sola sin tocar estado dentro de un efecto.
- */
-function BotonEnviar({ pendiente, enviado }: { pendiente: boolean; enviado: boolean }) {
-  const [segundos, setSegundos] = useState(enviado ? ESPERA_REENVIO_S : 0);
-
-  useEffect(() => {
-    if (!enviado) return;
-    const t = setInterval(() => setSegundos((s) => (s > 0 ? s - 1 : 0)), 1000);
-    return () => clearInterval(t);
-  }, [enviado]);
-
-  return (
-    <Boton
-      type="submit"
-      tamano="lg"
-      variante={enviado ? 'secundario' : 'primario'}
-      className="w-full"
-      cargando={pendiente}
-      disabled={segundos > 0}
-    >
-      {pendiente
-        ? 'Enviando…'
-        : enviado
-          ? segundos > 0
-            ? `Reenviar en ${segundos} s`
-            : 'Reenviar el enlace'
-          : 'Enviarme el enlace'}
-    </Boton>
-  );
-}
-
-/** Un solo campo (correo, `autocomplete="email"`) y un solo boton (10.6). Funciona tambien sin JavaScript. */
+/** Dos campos (usuario y contrasena) y un boton. No hay registro: las cuentas las entrega un administrador. */
 export function FormularioEntrada({ siguiente, contacto }: { siguiente: string; contacto: string }) {
-  const [estado, accion, pendiente] = useActionState(solicitarEnlaceAccion, INICIAL);
-  const enviado = estado.estado === 'enviado';
-  const errorCorreo = estado.estado === 'error' && estado.mensaje?.startsWith('Escribe un correo') ? estado.mensaje : undefined;
-  const errorGeneral = estado.estado === 'error' && !errorCorreo;
+  const [estado, accion, pendiente] = useActionState(iniciarSesionAccion, INICIAL);
+  const [verClave, setVerClave] = useState(false);
 
   return (
     <form action={accion} className="space-y-6" noValidate>
       <div className="space-y-2">
         <h1 className="font-display text-2xl font-extrabold tracking-tight text-tinta sm:text-3xl">Entrar</h1>
-        <p className="text-base text-tinta-suave">Escribe tu correo y te enviamos un enlace para entrar. Sin contraseñas.</p>
+        <p className="text-base text-tinta-suave">Escribe el usuario y la contraseña que te entregó el administrador.</p>
       </div>
 
       <input type="hidden" name="siguiente" value={siguiente} />
 
-      <CampoFormulario etiqueta="Correo" ayuda="Usa el correo con el que te invitaron." error={errorCorreo}>
+      <CampoFormulario etiqueta="Usuario" ayuda="Por ejemplo: consumibles o aduana-a.">
         {(p) => (
           <div className="relative">
-            <Mail aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 size-5 -translate-y-1/2 text-tinta-suave" />
+            <UserRound aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 size-5 -translate-y-1/2 text-tinta-suave" />
             <Campo
               {...p}
-              name="email"
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              placeholder="nombre@empresa.com"
+              key={estado.marca ?? 0}
+              name="usuario"
+              defaultValue={estado.usuario ?? ''}
+              type="text"
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               autoFocus
               required
               className="pl-11"
@@ -79,23 +46,34 @@ export function FormularioEntrada({ siguiente, contacto }: { siguiente: string; 
         )}
       </CampoFormulario>
 
-      {enviado ? (
-        <div role="status" className="flex gap-3 rounded-xl border border-azul-200 bg-azul-50 p-4 text-azul-900">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-azul-700 text-white">
-            <MailCheck aria-hidden className="size-5" />
-          </span>
-          <div className="space-y-1 text-sm">
-            <p className="font-semibold">Revisa tu correo</p>
-            <p>{estado.mensaje}</p>
+      <CampoFormulario etiqueta="Contraseña">
+        {(p) => (
+          <div className="relative">
+            <Campo {...p} name="clave" type={verClave ? 'text' : 'password'} autoComplete="current-password" required className="pr-12" />
+            <button
+              type="button"
+              onClick={() => setVerClave((v) => !v)}
+              aria-label={verClave ? 'Ocultar la contraseña' : 'Mostrar la contraseña'}
+              aria-pressed={verClave}
+              className="absolute right-1.5 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-md text-tinta-suave hover:bg-azul-50 hover:text-tinta"
+            >
+              {verClave ? <EyeOff aria-hidden className="size-5" /> : <Eye aria-hidden className="size-5" />}
+            </button>
           </div>
+        )}
+      </CampoFormulario>
+
+      {estado.estado !== 'inicial' ? (
+        <div role="alert" key={estado.marca}>
+          <Aviso tipo="error">{estado.mensaje}</Aviso>
         </div>
       ) : null}
-      {estado.estado === 'limite' ? <Aviso tipo="error">{estado.mensaje}</Aviso> : null}
-      {errorGeneral ? <Aviso tipo="error">{estado.mensaje}</Aviso> : null}
 
-      <BotonEnviar key={estado.marca ?? 0} pendiente={pendiente} enviado={enviado} />
+      <Boton type="submit" tamano="lg" className="w-full" cargando={pendiente}>
+        {pendiente ? 'Entrando…' : 'Entrar'}
+      </Boton>
 
-      <p className="border-t border-borde-suave pt-4 text-sm text-tinta-suave">¿No llega? Pídele acceso a {contacto}.</p>
+      <p className="border-t border-borde-suave pt-4 text-sm text-tinta-suave">¿No tienes usuario o olvidaste la contraseña? Pídesela a {contacto}.</p>
     </form>
   );
 }

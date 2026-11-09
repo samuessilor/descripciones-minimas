@@ -1,12 +1,11 @@
 /**
  * Los avisos del lado aduana (clasificada, reabierta, reapertura solicitada) y el pedido de informacion de la aduana
- * al area («Enviar a…» con el pedido «Responder») usan el MISMO mecanismo que cualquier envio: aviso en la bandeja +
- * fila en el outbox de correo, en la misma transaccion, con enlace directo a la ficha y respetando la preferencia
- * «solo en la plataforma».
+ * al area («Enviar a…» con el pedido «Responder») usan el MISMO mecanismo que cualquier envio: aviso en la bandeja
+ * (campana y «Para mi»), en la misma transaccion de quien lo origina.
  */
 import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { asignacion, entregaCorreo, notificacion, usuario } from '@/db/esquema';
+import { asignacion, notificacion } from '@/db/esquema';
 import { avisarAduana } from '@/server/acciones/aduana-comun';
 import { agenciasConAcceso, enviarA, marcarListo } from '@/server/acciones/asignaciones';
 import { finalizar, reabrir, solicitarReapertura } from '@/server/acciones/aduana';
@@ -25,11 +24,6 @@ afterAll(async () => {
   await e.c.cerrar();
 });
 
-async function correoDe(aviso: { id: string }) {
-  const filas = await e.db.select().from(entregaCorreo).where(eq(entregaCorreo.notificacionId, aviso.id));
-  return filas;
-}
-
 async function unAviso(usuarioId: string, tipo: string, ficha: string) {
   const avisos = await avisosDe(e, usuarioId, tipo, ficha);
   expect(avisos, `aviso ${tipo}`).toHaveLength(1);
@@ -40,19 +34,15 @@ async function pedirInformacion(id: string, mensaje = 'Necesito el caudal nomina
   await enviarA(e.ctx(e.brian), { referenciaId: id, destinatarios: [{ usuarioId: e.edward.usuarioId, pedido: 'responder' }], mensaje });
 }
 
-describe('avisos de la aduana: bandeja + correo en la misma transaccion', () => {
+describe('avisos de la aduana: en la bandeja, en la misma transaccion', () => {
   it('pedir informacion -> area; parte lista -> vuelve a la aduana; clasificada; reapertura solicitada; reabierta', async () => {
     const id = await fichaEnAduana(e, { llena: true });
     await fijarPartida(e.ctx(e.brian), { referenciaId: id, partida: '9999.99.99.99', versionEsperada: await versionDe(e.db, id, 'partida_arancelaria') });
-    const enlace = new RegExp(`/referencias/${id}`);
 
-    // 1) La aduana pide un dato con «Enviar a» (pedido «Responder»): el area recibe aviso y correo con enlace.
+    // 1) La aduana pide un dato con «Enviar a» (pedido «Responder»): el area recibe el aviso.
     await pedirInformacion(id);
     const pedido = await unAviso(e.edward.usuarioId, 'asignacion', id);
-    const [cPedido] = await correoDe(pedido);
-    expect(cPedido).toMatchObject({ destinatario: e.edward.email, plantilla: 'pendiente', estado: 'pendiente' });
-    expect(cPedido!.cuerpoTexto).toMatch(/para responder lo que te piden/);
-    expect(cPedido!.cuerpoTexto).toMatch(enlace);
+    expect(pedido.titulo).toMatch(/para responder lo que te piden/);
     const [delArea] = await e.db
       .select()
       .from(asignacion)
@@ -62,7 +52,6 @@ describe('avisos de la aduana: bandeja + correo en la misma transaccion', () => 
     // 2) El area marca «Listo por mi parte»: la aduana recibe el aviso y la ficha vuelve a ella para clasificar.
     await marcarListo(e.ctx(e.edward), { referenciaId: id });
     const respuesta = await unAviso(e.brian.usuarioId, 'respuesta', id);
-    expect(await correoDe(respuesta)).toEqual([expect.objectContaining({ destinatario: e.brian.email, plantilla: 'devuelta' })]);
     const activasBrian = await e.db
       .select()
       .from(asignacion)
@@ -72,22 +61,16 @@ describe('avisos de la aduana: bandeja + correo en la misma transaccion', () => 
 
     // 3) La aduana cierra: avisa a quien creo la ficha.
     await finalizar(e.ctx(e.brian), { referenciaId: id, motivoCerrarDeTodosModos: 'Cierre con lo disponible.' });
-    const clasificada = await unAviso(e.edward.usuarioId, 'clasificada', id);
-    const [cClasif] = await correoDe(clasificada);
-    expect(cClasif).toMatchObject({ destinatario: e.edward.email, plantilla: 'clasificada' });
-    expect(cClasif!.cuerpoTexto).toMatch(enlace);
+    await unAviso(e.edward.usuarioId, 'clasificada', id);
 
     // 4) El solicitante pide reabrir: avisan el administrador y quien clasifico.
     await solicitarReapertura(e.ctx(e.edward), { referenciaId: id, motivo: 'Cambio de proveedor.' });
-    const adminAviso = await unAviso(e.admin.usuarioId, 'reapertura_solicitada', id);
-    expect(await correoDe(adminAviso)).toEqual([expect.objectContaining({ destinatario: e.admin.email, plantilla: 'reapertura_solicitada' })]);
-    const brianAviso = await unAviso(e.brian.usuarioId, 'reapertura_solicitada', id);
-    expect(await correoDe(brianAviso)).toHaveLength(1);
+    await unAviso(e.admin.usuarioId, 'reapertura_solicitada', id);
+    await unAviso(e.brian.usuarioId, 'reapertura_solicitada', id);
 
     // 5) La aduana reabre: avisa a quien creo la ficha.
     await reabrir(e.ctx(e.brian), { referenciaId: id, motivo: 'Atendiendo la solicitud.' });
-    const reabierta = await unAviso(e.edward.usuarioId, 'reabierta', id);
-    expect(await correoDe(reabierta)).toEqual([expect.objectContaining({ destinatario: e.edward.email, plantilla: 'reabierta' })]);
+    await unAviso(e.edward.usuarioId, 'reabierta', id);
   });
 
   it('si la aduana aun tiene la ficha en la mano, «Listo» del area no abre otro pendiente para ella', async () => {
@@ -123,22 +106,9 @@ describe('avisos de la aduana: bandeja + correo en la misma transaccion', () => 
     expect(deBrian).toHaveLength(0);
   });
 
-  it('quien eligio «solo en la plataforma» recibe el aviso en la campana pero no el correo', async () => {
-    await e.db.update(usuario).set({ preferenciaAviso: 'solo_bandeja' }).where(eq(usuario.id, e.edward.usuarioId));
-    try {
-      const id = await fichaEnAduana(e, { llena: true });
-      await pedirInformacion(id, 'Falta el tipo de aceite.');
-      const aviso = await unAviso(e.edward.usuarioId, 'asignacion', id);
-      expect(await correoDe(aviso)).toHaveLength(0);
-    } finally {
-      await e.db.update(usuario).set({ preferenciaAviso: 'inmediato' }).where(eq(usuario.id, e.edward.usuarioId));
-    }
-  });
-
-  it('si la transaccion se revierte no queda ni aviso ni correo', async () => {
+  it('si la transaccion se revierte no queda el aviso', async () => {
     const id = await fichaEnAduana(e, { llena: true });
     const antesAvisos = (await e.db.select().from(notificacion).where(eq(notificacion.referenciaId, id))).length;
-    const antesCorreos = (await e.db.select().from(entregaCorreo)).length;
     const persona = { id: e.edward.usuarioId, nombre: e.edward.nombre, rol: e.edward.rol, organizacionId: e.edward.organizacionId, organizacionTipo: e.edward.organizacionTipo };
     await expect(
       e.db.transaction(async (tx) => {
@@ -147,6 +117,5 @@ describe('avisos de la aduana: bandeja + correo en la misma transaccion', () => 
       }),
     ).rejects.toThrow('falla despues de avisar');
     expect((await e.db.select().from(notificacion).where(eq(notificacion.referenciaId, id))).length).toBe(antesAvisos);
-    expect((await e.db.select().from(entregaCorreo)).length).toBe(antesCorreos);
   });
 });

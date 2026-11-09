@@ -1,6 +1,5 @@
 /**
- * Alta de una notificacion en la bandeja (fuente de verdad del pendiente, A6/14). Devuelve el id para
- * que quien la crea pueda colgarle el correo del outbox (`notificaciones/avisar.ts`).
+ * Alta de una notificacion en la bandeja (fuente de verdad del pendiente, A6/14): campana y «Para mi».
  */
 import { notificacion } from '@/db/esquema';
 import type { Ejecutor } from '@/db/tipos';

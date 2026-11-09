@@ -1,16 +1,19 @@
 'use client';
 
+import { Check } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
-import { invitarUsuarioAccion } from '@/app/acciones/admin';
+import { useCallback, useState } from 'react';
+import { crearCuentaAccion, type EstadoAdmin, type SecretoEntrega } from '@/app/acciones/admin';
 import { Aviso } from '@/componentes/ui/aviso';
 import { botonVariantes } from '@/componentes/ui/button';
 import { CampoFormulario } from '@/componentes/ui/campo-formulario';
 import { GrupoRadios } from '@/componentes/ui/casilla';
 import { Campo, Seleccion } from '@/componentes/ui/input';
-import { AREAS } from '@/dominio/areas';
+import { AREAS, nombreDeArea } from '@/dominio/areas';
+import { normalizarUsuario } from '@/dominio/credenciales';
 import { ROLES, type Rol } from '@/dominio/permisos';
 import { FormularioAccion } from './acciones';
+import { CredencialesEntrega } from './CredencialesEntrega';
 import { ROL_DESCRIPCION, ROL_ETIQUETA } from './formato';
 
 interface Org {
@@ -20,13 +23,13 @@ interface Org {
 }
 
 /**
- * Invitar a una persona (10.4): nombre, correo, organizacion y rol. Si la organizacion es una agencia, el unico
- * rol que se ofrece es `aduana` (D-28): se explica en pantalla en vez de dejar un radio sin opciones.
+ * Crear una cuenta (10.4): nombre, usuario, organizacion, rol y area. La contrasena la genera el servidor y se muestra
+ * UNA vez. Una cuenta de area (Consumibles, Mantenimiento...) es la forma normal: a esa cuenta se le envian las
+ * referencias de su area. Si la organizacion es una agencia, el unico rol es `aduana` (D-28).
  */
-export function FormularioInvitar({ organizaciones, organizacionInicial, vigenciaMinutos }: { organizaciones: Org[]; organizacionInicial?: string; vigenciaMinutos: number }) {
+export function FormularioCrearCuenta({ organizaciones, organizacionInicial }: { organizaciones: Org[]; organizacionInicial?: string }) {
   const internas = organizaciones.filter((o) => o.tipo === 'interna');
   const agencias = organizaciones.filter((o) => o.tipo === 'agencia');
-  // Por defecto, la primera opcion que se pinta (las areas internas van primero), no la primera del arreglo.
   const [orgId, setOrgId] = useState(
     organizacionInicial && organizaciones.some((o) => o.id === organizacionInicial) ? organizacionInicial : (internas[0]?.id ?? agencias[0]?.id ?? ''),
   );
@@ -34,6 +37,37 @@ export function FormularioInvitar({ organizaciones, organizacionInicial, vigenci
   const esAgencia = org?.tipo === 'agencia';
   const [rolElegido, setRolElegido] = useState<Rol>('solicitante');
   const rol: Rol = esAgencia ? 'aduana' : rolElegido;
+  const [creada, setCreada] = useState<SecretoEntrega | null>(null);
+  const [usuario, setUsuario] = useState('');
+
+  // La cuenta recien creada reemplaza al formulario: asi no se puede enviar dos veces ni perder la contrasena.
+  const accion = useCallback(async (previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> => {
+    const r = await crearCuentaAccion(previo, datos);
+    if (r.estado === 'ok' && r.secreto) setCreada(r.secreto);
+    return r;
+  }, []);
+
+  if (creada) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          <span className="flex size-9 items-center justify-center rounded-full bg-azul-700 text-white">
+            <Check aria-hidden className="size-5" />
+          </span>
+          <h2 className="font-display text-xl font-extrabold text-tinta">Cuenta creada: {creada.nombre}</h2>
+        </div>
+        <CredencialesEntrega secreto={creada} />
+        <div className="flex flex-wrap gap-3">
+          <Link href={`/admin/usuarios/${creada.id}`} className={botonVariantes({ variante: 'primario' })}>
+            Ver la cuenta
+          </Link>
+          <button type="button" onClick={() => { setCreada(null); setUsuario(''); }} className={botonVariantes({ variante: 'secundario' })}>
+            Crear otra cuenta
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (organizaciones.length === 0) {
     return (
@@ -46,16 +80,16 @@ export function FormularioInvitar({ organizaciones, organizacionInicial, vigenci
           </Link>
         }
       >
-        Cada persona pertenece a una organización interna o a una agencia de aduana.
+        Cada cuenta pertenece a una organización interna o a una agencia de aduana.
       </Aviso>
     );
   }
 
   return (
     <FormularioAccion
-      accion={invitarUsuarioAccion}
-      enviar="Invitar y enviar el enlace"
-      enviando="Invitando…"
+      accion={accion}
+      enviar="Crear la cuenta"
+      enviando="Creando…"
       className="space-y-6"
       secundario={
         <Link href="/admin/usuarios" className={botonVariantes({ variante: 'terciario' })}>
@@ -66,11 +100,23 @@ export function FormularioInvitar({ organizaciones, organizacionInicial, vigenci
       {(estado) => (
         <>
           <div className="grid gap-5 sm:grid-cols-2">
-            <CampoFormulario etiqueta={esAgencia ? 'Nombre de la cuenta (ej. Agencia X)' : 'Nombre completo'} error={estado.errores?.nombre}>
+            <CampoFormulario etiqueta={esAgencia ? 'Nombre de la cuenta (ej. Agencia X)' : 'Nombre (ej. Área Consumibles o Ana Pérez)'} error={estado.errores?.nombre}>
               {(p) => <Campo {...p} name="nombre" autoComplete="off" required maxLength={200} />}
             </CampoFormulario>
-            <CampoFormulario etiqueta="Correo" ayuda="Aquí le llega el enlace para entrar." error={estado.errores?.email}>
-              {(p) => <Campo {...p} name="email" type="email" inputMode="email" autoComplete="off" required maxLength={254} />}
+            <CampoFormulario etiqueta="Usuario" ayuda="Con esto entra. Ej.: consumibles, aduana-a, ana.perez." error={estado.errores?.usuario}>
+              {(p) => (
+                <Campo
+                  {...p}
+                  name="usuario"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  required
+                  maxLength={40}
+                  value={usuario}
+                  onChange={(e) => setUsuario(normalizarUsuario(e.target.value))}
+                />
+              )}
             </CampoFormulario>
           </div>
 
@@ -103,8 +149,7 @@ export function FormularioInvitar({ organizaciones, organizacionInicial, vigenci
             <div className="space-y-2">
               <input type="hidden" name="rol" value="aduana" />
               <Aviso tipo="info" titulo="Rol: Aduana">
-                Esta es la cuenta general de la agencia (un correo de la empresa, sin datos personales). Solo tiene el rol de aduana
-                y ve únicamente las referencias que le envíen.
+                Esta es la cuenta general de la agencia. Solo tiene el rol de aduana y ve únicamente las referencias que le envíen.
               </Aviso>
             </div>
           ) : (
@@ -121,7 +166,7 @@ export function FormularioInvitar({ organizaciones, organizacionInicial, vigenci
           {!esAgencia ? (
             <CampoFormulario
               etiqueta="Área"
-              ayuda="Ve en «Para mí» las referencias de su área y recibe las solicitudes de la aduana sobre ellas."
+              ayuda="La cuenta de un área ve en «Para mí» las referencias de esa área y recibe lo que le envíen."
               opcional
               error={estado.errores?.area}
             >
@@ -130,7 +175,7 @@ export function FormularioInvitar({ organizaciones, organizacionInicial, vigenci
                   <option value="">Sin área</option>
                   {AREAS.map((a) => (
                     <option key={a} value={a}>
-                      {a}
+                      {nombreDeArea(a)}
                     </option>
                   ))}
                 </Seleccion>
@@ -138,10 +183,11 @@ export function FormularioInvitar({ organizaciones, organizacionInicial, vigenci
             </CampoFormulario>
           ) : null}
 
-          <p className="text-sm text-tinta-suave">
-            Al invitar, enviamos {esAgencia ? 'al correo de la cuenta' : 'un correo'} un enlace que dura {vigenciaMinutos} minutos. Después se puede pedir otro desde la
-            pantalla de entrada.
-          </p>
+          <CampoFormulario etiqueta="Correo de contacto" ayuda="No se usa para entrar ni para avisos. Déjalo vacío en las cuentas de área." opcional error={estado.errores?.email}>
+            {(p) => <Campo {...p} name="email" type="email" inputMode="email" autoComplete="off" maxLength={254} />}
+          </CampoFormulario>
+
+          <p className="text-sm text-tinta-suave">Al crear la cuenta generamos una contraseña temporal y te la mostramos una vez para que se la entregues.</p>
         </>
       )}
     </FormularioAccion>

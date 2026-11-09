@@ -2,8 +2,7 @@
  * Configuracion validada con zod (12.2, 12.3). La aplicacion falla al arrancar con un mensaje
  * claro si falta algo. Las variables vacias (`FOO=`) se tratan como ausentes.
  *
- * Local sin credenciales: sin DATABASE_URL se usa PGlite; sin llaves de correo el mensaje sale
- * por consola; ALMACEN=local guarda las fotos en `.data/uploads/`.
+ * Local sin credenciales: sin DATABASE_URL se usa PGlite; ALMACEN=local guarda las fotos en `.data/uploads/`.
  */
 import { z } from 'zod';
 
@@ -35,25 +34,13 @@ const esquema = z.object({
   BLOB_READ_WRITE_TOKEN: texto(),
   UPLOADS_DIR: z.preprocess(vacioComoAusente, z.string().default('.data/uploads')),
 
-  RESEND_API_KEY: texto(),
-  SMTP_URL: texto(),
-  CORREO_REMITENTE: z.preprocess(
-    vacioComoAusente,
-    z.string().default('Descripciones mínimas <no-responder@desarrollo.invalid>'),
-  ),
-  CORREO_INCLUIR_REFERENCIA: booleano(false),
-  /** Avisos por correo ademas de la campana de la app. Apagado por defecto: «Enviar a» deja el pendiente en la app. */
-  AVISOS_POR_CORREO: booleano(false),
   CONTACTO_ADMIN: z.preprocess(vacioComoAusente, z.string().default('el administrador de la plataforma')),
-
-  CRON_SECRET: texto(),
 
   RECORDATORIO_MANUAL_MAX_DIA: entero(1),
   SESION_INACTIVIDAD_HORAS_INTERNO: entero(8),
   SESION_INACTIVIDAD_HORAS_EXTERNO: entero(8),
   SESION_ABSOLUTA_HORAS_INTERNO: entero(168),
   SESION_ABSOLUTA_HORAS_EXTERNO: entero(72),
-  ENLACE_VIGENCIA_MINUTOS: entero(30),
   CIERRE_MODO: z.preprocess(vacioComoAusente, z.enum(['advertir', 'bloquear']).default('advertir')),
   ACCESO_AGENCIA_DIAS_TRAS_CLASIFICAR: entero(30),
 
@@ -97,9 +84,6 @@ export function cargarConfig(env: Record<string, string | undefined> = process.e
   }
   if (c.NODE_ENV === 'production' && (c.ALMACEN !== 'blob' || !c.BLOB_READ_WRITE_TOKEN)) {
     throw new Error('En producción las fotos van a Vercel Blob: define ALMACEN=blob y BLOB_READ_WRITE_TOKEN (el disco de Vercel es de solo lectura).');
-  }
-  if (c.NODE_ENV === 'production' && c.AVISOS_POR_CORREO && !c.CRON_SECRET) {
-    throw new Error('En producción CRON_SECRET es obligatorio para /api/cron/*.');
   }
   return { ...c, BETTER_AUTH_SECRET: secreto };
 }

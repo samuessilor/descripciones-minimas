@@ -1,17 +1,19 @@
 import { expect, type APIRequestContext, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test';
 
-/** Pide el enlace en la pantalla de entrada y lo lee de `GET /api/dev/correo` (sin abrir la base). */
-export async function entrarComo(page: Page, request: APIRequestContext, email: string, siguiente = '/'): Promise<void> {
-  // Los limites de tasa son una regla del producto; en desarrollo se reinician entre solicitudes de prueba.
+/** Contrasena de las cuentas de ejemplo (`@desarrollo.invalid`): ver `CLAVE_DESARROLLO` en `server/cuentas-demo.ts`. */
+export const CLAVE_EJEMPLO = 'desarrollo-2026';
+
+/**
+ * Entra por la pantalla de entrada REAL (usuario y contrasena). `quien` es el usuario (`admin`) o el correo de ejemplo
+ * (`admin@desarrollo.invalid`, de donde sale el usuario). Para cuentas creadas en la prueba, pasa su contrasena.
+ */
+export async function entrarComo(page: Page, request: APIRequestContext, quien: string, siguiente = '/', clave: string = CLAVE_EJEMPLO): Promise<void> {
+  // Los limites de intentos son una regla del producto; en desarrollo se reinician entre solicitudes de prueba.
   await request.post('/api/dev/limites', { maxRetries: 3 });
   await page.goto(siguiente === '/' ? '/entrar' : `/entrar?siguiente=${encodeURIComponent(siguiente)}`);
-  await page.getByLabel('Correo').fill(email);
-  await page.getByRole('button', { name: 'Enviarme el enlace' }).click();
-  await expect(page.getByText('Si ese correo tiene acceso')).toBeVisible();
-
-  const enlace = await esperarEnlace(request, email);
-  await page.goto(enlace);
-  await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await page.getByLabel('Usuario').fill(quien.includes('@') ? quien.split('@')[0]! : quien);
+  await page.getByLabel('Contraseña', { exact: true }).fill(clave);
+  await pulsarHidratado(page.getByRole('button', { name: 'Entrar', exact: true }));
   // En desarrollo la primera visita compila la pagina destino (puede tardar): margen amplio.
   await expect(page).not.toHaveURL(/\/entrar/, { timeout: 60_000 });
 }
@@ -33,20 +35,10 @@ export async function pulsarHidratado(boton: Locator): Promise<void> {
   await boton.click();
 }
 
-export async function esperarEnlace(request: APIRequestContext, email: string): Promise<string> {
-  for (let i = 0; i < 30; i++) {
-    const r = await request.get(`/api/dev/correo?para=${encodeURIComponent(email)}&limite=1`, { maxRetries: 3 });
-    const lista = (await r.json()) as Array<{ enlace: string | null }>;
-    if (lista[0]?.enlace) return lista[0].enlace;
-    await new Promise((res) => setTimeout(res, 300));
-  }
-  throw new Error(`no llego el correo a ${email}`);
-}
-
-export async function contextoAutenticado(browser: Browser, request: APIRequestContext, email: string): Promise<{ contexto: BrowserContext; page: Page }> {
+export async function contextoAutenticado(browser: Browser, request: APIRequestContext, quien: string, clave: string = CLAVE_EJEMPLO): Promise<{ contexto: BrowserContext; page: Page }> {
   const contexto = await browser.newContext({ locale: 'es-CO', timezoneId: 'America/Bogota' });
   const page = await contexto.newPage();
-  await entrarComo(page, request, email);
+  await entrarComo(page, request, quien, '/', clave);
   return { contexto, page };
 }
 

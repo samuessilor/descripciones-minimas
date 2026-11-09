@@ -1,9 +1,9 @@
 import { LogOut, Monitor, Smartphone } from 'lucide-react';
 import type { Metadata } from 'next';
-import { actualizarPreferenciasAccion, cerrarOtrasSesionesAccion, cerrarSesionPropiaAccion } from '@/app/acciones/cuenta';
+import { actualizarPreferenciasAccion, cambiarMiClaveAccion, cerrarOtrasSesionesAccion, cerrarSesionPropiaAccion } from '@/app/acciones/cuenta';
 import { cerrarSesionAccion, cerrarTodasLasSesionesAccion } from '@/app/acciones/sesion';
 import { BotonAccion, FormularioAccion } from '@/componentes/admin/acciones';
-import { RadiosAdmin } from '@/componentes/admin/campos';
+import { CampoAdmin } from '@/componentes/admin/campos';
 import { describirNavegador, fechaHora, formatearIp, hace } from '@/componentes/admin/formato';
 import { Dato, Datos, InsigniaRol, InsigniaTipoOrg, Seccion } from '@/componentes/admin/piezas';
 import { Avatar, nombreVisible } from '@/componentes/ui/avatar';
@@ -11,7 +11,6 @@ import { Boton } from '@/componentes/ui/button';
 import { Interruptor } from '@/componentes/ui/casilla';
 import { Insignia } from '@/componentes/ui/insignia';
 import { ContenedorLectura, EncabezadoPagina } from '@/componentes/ui/pagina';
-import { getConfig } from '@/server/config';
 import { misPreferencias, misSesiones } from '@/server/politicas/cuenta';
 import { exigirContexto } from '@/server/sesion';
 
@@ -22,11 +21,10 @@ export default async function Cuenta() {
   const [prefs, sesiones] = await Promise.all([misPreferencias(db, actor), misSesiones(db, actor)]);
   const ahora = new Date();
   const otras = sesiones.filter((s) => !s.esActual);
-  const avisosPorCorreo = getConfig().AVISOS_POR_CORREO;
 
   return (
     <ContenedorLectura>
-      <EncabezadoPagina titulo="Mi cuenta" descripcion="Tus datos, cómo quieres que te avisemos y dónde tienes abierta la plataforma." />
+      <EncabezadoPagina titulo="Mi cuenta" descripcion="Tus datos, tu contraseña y dónde tienes abierta la plataforma." />
 
       <div className="space-y-6">
         <Seccion id="datos" titulo="Tus datos" descripcion="Si algo está mal, pídele el cambio a un administrador.">
@@ -34,7 +32,7 @@ export default async function Cuenta() {
             <Avatar nombre={actor.nombre} tamano="lg" />
             <div className="min-w-0">
               <p className="break-words font-display text-xl font-extrabold leading-tight text-tinta">{nombreVisible(actor.nombre)}</p>
-              <p className="break-all text-base text-tinta-suave">{actor.email}</p>
+              <p className="break-all font-mono text-base text-tinta-suave">{actor.username ?? actor.email}</p>
             </div>
           </div>
           <Datos>
@@ -52,26 +50,18 @@ export default async function Cuenta() {
           </Datos>
         </Seccion>
 
-        <Seccion id="avisos" titulo="Avisos y atajos" descripcion="Se guardan al pulsar «Guardar preferencias».">
+        <Seccion id="clave" titulo="Contraseña" descripcion="Cámbiala cuando quieras. Al cambiarla cerramos tus otras sesiones.">
+          <FormularioAccion accion={cambiarMiClaveAccion} enviar="Cambiar contraseña" enviando="Cambiando…" variante="secundario" className="space-y-5" reiniciar>
+            <div className="grid gap-5 sm:max-w-sm">
+              <CampoAdmin nombre="actual" etiqueta="Contraseña actual" control="clave" autoComplete="current-password" required />
+              <CampoAdmin nombre="nueva" etiqueta="Contraseña nueva" ayuda="Mínimo 10 caracteres." control="clave" autoComplete="new-password" required />
+              <CampoAdmin nombre="repetir" etiqueta="Repite la contraseña nueva" control="clave" autoComplete="new-password" required />
+            </div>
+          </FormularioAccion>
+        </Seccion>
+
+        <Seccion id="atajos" titulo="Atajos" descripcion="Se guarda al pulsar «Guardar preferencias».">
           <FormularioAccion accion={actualizarPreferenciasAccion} enviar="Guardar preferencias" enviando="Guardando…" variante="secundario" className="space-y-5">
-            {avisosPorCorreo ? (
-              <RadiosAdmin
-                leyenda="Cuando te envían una referencia"
-                nombre="preferenciaAviso"
-                valorInicial={prefs.preferenciaAviso}
-                opciones={[
-                  { valor: 'inmediato', etiqueta: 'Avísame por correo', descripcion: 'Te llega un correo con el enlace directo, además de verlo en la campana.' },
-                  { valor: 'solo_bandeja', etiqueta: 'Solo en la plataforma', descripcion: 'Lo ves en la campana y en tus pendientes, sin correos. El enlace para entrar siempre llega por correo.' },
-                ]}
-              />
-            ) : (
-              <div>
-                {/* Con el correo de avisos apagado la preferencia no tiene efecto: se conserva tal cual sin ofrecerla */}
-                <input type="hidden" name="preferenciaAviso" value={prefs.preferenciaAviso} />
-                <p className="mb-1 text-sm font-semibold text-tinta">Cuando te envían una referencia</p>
-                <p className="text-sm text-tinta-suave">Los avisos llegan a la campana y a «Para mí». El enlace para entrar siempre llega por correo.</p>
-              </div>
-            )}
             <Interruptor
               name="atajosTeclado"
               value="si"
@@ -93,7 +83,7 @@ export default async function Cuenta() {
                 campos={{}}
                 confirmar={{
                   titulo: 'Cerrar las otras sesiones',
-                  descripcion: 'Esta sesión sigue abierta. En los demás dispositivos tendrás que volver a pedir tu enlace.',
+                  descripcion: 'Esta sesión sigue abierta. En los demás dispositivos tendrás que volver a entrar con tu contraseña.',
                   confirmar: 'Cerrar las otras',
                   cancelar: 'Todavía no',
                   peligro: true,

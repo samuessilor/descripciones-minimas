@@ -1,15 +1,15 @@
 {
   "administradores": [
-    { "correo": "administradora@empresa.com", "nombre": "Nombre de quien administra (dueña del proceso)" }
+    { "usuario": "admin", "nombre": "Nombre de quien administra (dueña del proceso)" }
   ],
   "areas": [
-    { "area": "Consumibles", "correo": "consumibles@empresa.com", "nombre": "Consumibles" },
-    { "area": "Mantenimiento", "correo": "mantenimiento@empresa.com", "nombre": "Mantenimiento" },
-    { "area": "Instrumentos", "correo": "instrumentos@empresa.com", "nombre": "Instrumentos" },
-    { "area": "Marketing", "correo": "marketing@empresa.com", "nombre": "Marketing" }
+    { "area": "Consumibles", "usuario": "consumibles", "nombre": "Área Consumibles" },
+    { "area": "Mantenimiento", "usuario": "mantenimiento", "nombre": "Área Mantenimiento" },
+    { "area": "Instrumentos", "usuario": "instrumentos", "nombre": "Área Instrumentos" },
+    { "area": "Marketing", "usuario": "marketing", "nombre": "Área Marketing" }
   ],
   "agencias": [
-    { "empresa": "Agencia de aduanas X", "correo": "clasificacion@agencia-x.com", "nombre": "Agencia de aduanas X" }
+    { "empresa": "Agencia de aduanas X", "usuario": "agencia-x", "nombre": "Agencia de aduanas X" }
   ],
   "lectores": []
 }

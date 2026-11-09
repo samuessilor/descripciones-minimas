@@ -8,6 +8,12 @@ export interface CuentaDemo {
   detalle: string;
 }
 
+/**
+ * Contrasena de TODAS las cuentas de ejemplo (`@desarrollo.invalid`). Solo existe en desarrollo y pruebas: las semillas
+ * no corren en produccion, donde cada cuenta tiene su propia contrasena temporal generada. No es un secreto.
+ */
+export const CLAVE_DESARROLLO = 'desarrollo-2026';
+
 export function sinLogin(): boolean {
   return process.env.NODE_ENV === 'development' && process.env.SIN_LOGIN === '1';
 }

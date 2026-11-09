@@ -2,7 +2,6 @@
 import { describe, expect, it } from 'vitest';
 import { aCsv, celdaCsv, neutralizarFormula } from '@/server/csv';
 import { dentroDe, describirNavegador, etiquetaAccion, fechaHora, formatearIp, hace, plural } from '@/componentes/admin/formato';
-import { taparTokens } from '@/server/politicas/administracion-correo';
 import { inicioDia } from '@/server/politicas/administracion-auditoria';
 
 describe('CSV: neutralizar formulas (13.4)', () => {
@@ -72,20 +71,12 @@ describe('formato', () => {
   });
 
   it('etiquetaAccion cae a texto legible si no la conoce', () => {
-    expect(etiquetaAccion('invitar')).toBe('Invitó a una persona');
+    expect(etiquetaAccion('crear_cuenta')).toBe('Creó una cuenta');
     expect(etiquetaAccion('algo_nuevo')).toBe('algo nuevo');
   });
 });
 
-describe('tapar tokens y fechas de auditoria', () => {
-  it('tapa el valor de cualquier token= (enlace de acceso)', () => {
-    const t = taparTokens('Entra: http://x/entrar/confirmar?token=abc123XYZ_-&siguiente=%2F y <a href="http://x?token=zzz">ir</a>');
-    expect(t).not.toContain('abc123XYZ');
-    expect(t).not.toContain('zzz');
-    expect(t).toContain('siguiente=%2F');
-    expect(t).toContain('token=••••••');
-  });
-
+describe('fechas de auditoria', () => {
   it('inicioDia: 00:00 de Bogota (UTC-5) y rechaza formatos raros', () => {
     expect(inicioDia('2026-10-21')?.toISOString()).toBe('2026-10-21T05:00:00.000Z');
     expect(inicioDia('21/10/2026')).toBeNull();

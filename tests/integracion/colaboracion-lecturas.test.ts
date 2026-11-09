@@ -4,14 +4,12 @@
  */
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { asignacion, comentario, entregaCorreo, referencia, usuario } from '@/db/esquema';
+import { asignacion, comentario, referencia, usuario } from '@/db/esquema';
 import { enviarA, marcarListo } from '@/server/acciones/asignaciones';
 import { comentar, listarMisPendientes, listarNotificaciones, marcarNotificacionLeida, marcarTodasLeidas } from '@/server/acciones/comentarios-y-bandeja';
 import { guardarCampo } from '@/server/acciones/guardar-campo';
 import { restaurarCampo } from '@/server/acciones/restaurar-campo';
 import { ErrorAccion } from '@/server/acciones/resultado';
-import { crearMailerMemoria } from '@/server/correo/consola';
-import { despachar } from '@/server/correo/despachar';
 import {
   candidatosDestinoDe,
   comentariosDe,
@@ -92,9 +90,6 @@ describe('comentarios con alcance (RV-29)', () => {
     // Brian responde: avisa a quien creo la ficha y a quien se la envio (la misma persona, una vez).
     const r3 = await comentar(e.ctx(e.brian, d(T0, 0, 0.02)), { referenciaId: id, texto: 'Recibido', visibilidad: 'todos' });
     expect(r3.notificados).toBe(1);
-    // Los comentarios de la bandeja no salen por correo (14).
-    const correosDeComentario = (await e.db.select().from(entregaCorreo)).filter((c) => c.plantilla === 'comentario');
-    expect(correosDeComentario).toHaveLength(0);
   });
 
   it('un comentario sobre un campo guarda el campo y valida que exista', async () => {
@@ -198,7 +193,7 @@ describe('bandeja: Mis pendientes, Esperando a otros, recientes y resumen (10.3)
     expect((await pendientesDe(e.db, e.charles, T0)).some((f) => f.codigo === 'BAN-VIEJA')).toBe(false);
   });
 
-  it('Esperando a otros: quien envio ve lo suyo; el lector y el admin ven todo; el estado del correo sigue al outbox', async () => {
+  it('Esperando a otros: quien envio ve lo suyo; el lector y el admin ven todo', async () => {
     const id = await nuevaFicha(e, { codigo: 'ESP-0001' });
     await enviarA(e.ctx(e.edward, T0), { referenciaId: id, destinatarios: [{ usuarioId: e.brian.usuarioId }] });
 
@@ -208,7 +203,6 @@ describe('bandeja: Mis pendientes, Esperando a otros, recientes y resumen (10.3)
     expect(fila.esMia).toBe(true);
     expect(fila.puedeRecordar).toBe(true);
     expect(fila.puedeGestionar).toBe(true);
-    expect(fila.entrega.estado).toBe('en_cola');
     // Charles no envio nada: no la ve en su lista... pero la dueña del proceso si.
     expect((await esperandoDe(e.db, e.charles, T0)).some((f) => f.codigo === 'ESP-0001')).toBe(false);
     const delLector = (await esperandoDe(e.db, e.lector, T0)).find((f) => f.codigo === 'ESP-0001')!;
@@ -216,14 +210,6 @@ describe('bandeja: Mis pendientes, Esperando a otros, recientes y resumen (10.3)
     expect(delLector.puedeRecordar).toBe(true);
     expect(delLector.puedeGestionar).toBe(false);
     expect((await esperandoDe(e.db, e.admin, T0)).some((f) => f.codigo === 'ESP-0001')).toBe(true);
-
-    // El correo sale -> "enviado".
-    await despachar({ db: e.db, mailer: crearMailerMemoria(), ahora: new Date(Date.now() + 5000) });
-    expect((await esperandoDe(e.db, e.edward, T0)).find((f) => f.codigo === 'ESP-0001')?.entrega.estado).toBe('enviado');
-    // Si el correo no sale del todo -> "no_entregable" visible para quien envio.
-    const [a] = await e.db.select().from(asignacion).where(eq(asignacion.referenciaId, id));
-    await e.db.update(entregaCorreo).set({ estado: 'abandonado', ultimoError: 'ECONNREFUSED' }).where(eq(entregaCorreo.destinatario, 'brian@prueba.invalid'));
-    expect((await esperandoDe(e.db, e.edward, T0)).find((f) => f.asignacionId === a!.id)?.entrega.estado).toBe('no_entregable');
   });
 
   it('un envio entre dos personas internas no aparece en la lista de otra agencia', async () => {
@@ -256,28 +242,26 @@ describe('bandeja: Mis pendientes, Esperando a otros, recientes y resumen (10.3)
 });
 
 describe('seguimiento de los envios de una ficha', () => {
-  it('quien envio ve el estado del correo; el destinatario no; la aduana solo ve a su organizacion', async () => {
+  it('quien envio puede gestionar sus envios; el destinatario no; la aduana solo ve a su organizacion', async () => {
     const id = await nuevaFicha(e);
     await enviarA(e.ctx(e.edward, T0), { referenciaId: id, destinatarios: [{ usuarioId: e.brian.usuarioId }, { usuarioId: e.charles.usuarioId, pedido: 'completar' }] });
 
     const paraEdward = await seguimientoDeFicha(e.db, e.edward, id, T0);
     expect(paraEdward).toHaveLength(2);
-    expect(paraEdward.every((s) => s.entrega !== null && s.esMia)).toBe(true);
+    expect(paraEdward.every((s) => s.esMia)).toBe(true);
     expect(paraEdward.every((s) => s.puedeRecordar && s.puedeCancelar && s.puedeReasignar)).toBe(true);
     expect(paraEdward.find((s) => s.a.nombre === 'Brian')?.codigo).toBeTruthy();
 
-    // Charles ve las dos asignaciones (es interno) pero NO el estado del correo ni puede gestionarlas.
+    // Charles ve las dos asignaciones (es interno) pero no puede gestionarlas.
     const paraCharles = await seguimientoDeFicha(e.db, e.charles, id, T0);
-    expect(paraCharles.every((s) => s.entrega === null)).toBe(true);
     expect(paraCharles.every((s) => !s.puedeCancelar && !s.puedeReasignar)).toBe(true);
 
-    // Brian (aduana) solo ve la asignacion de su organizacion, y sin el estado del correo.
+    // Brian (aduana) solo ve la asignacion de su organizacion.
     const paraBrian = await seguimientoDeFicha(e.db, e.brian, id, T0);
     expect(paraBrian.map((s) => s.a.nombre)).toEqual(['Brian']);
-    expect(paraBrian[0]?.entrega).toBeNull();
-    // La dueña del proceso ve el correo y puede recordar, pero no cancelar.
+    // La dueña del proceso puede recordar, pero no cancelar.
     const paraLector = await seguimientoDeFicha(e.db, e.lector, id, T0);
-    expect(paraLector.every((s) => s.entrega !== null && s.puedeRecordar && !s.puedeCancelar)).toBe(true);
+    expect(paraLector.every((s) => s.puedeRecordar && !s.puedeCancelar)).toBe(true);
 
     await expect(seguimientoDeFicha(e.db, e.brianB, id, T0)).rejects.toMatchObject({ codigo: 'NO_ENCONTRADO' });
   });

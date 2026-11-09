@@ -1,10 +1,10 @@
-/** Administracion de personas (H5): reenviar invitacion, editar, cerrar sesiones, correo invalido, lecturas y permisos. */
-import { and, eq, inArray } from 'drizzle-orm';
+/** Administracion de personas (H5): crear cuenta, restablecer contrasena, editar, cerrar sesiones, lecturas y permisos. */
+import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { asignacion, auditoria, entregaCorreo, notificacion, session, usuario } from '@/db/esquema';
+import { asignacion, auditoria, notificacion, session, usuario } from '@/db/esquema';
 import { ErrorAccion } from '@/server/acciones/resultado';
-import { cambiarOrganizacion, cambiarRol, desactivarUsuario, invitarUsuario } from '@/server/acciones/usuarios';
-import { cerrarSesionesDeUsuario, editarUsuario, marcarCorreoInvalido, REGLAS_REENVIO, reenviarInvitacion } from '@/server/acciones/usuarios-admin';
+import { cambiarOrganizacion, cambiarRol, crearCuenta, desactivarUsuario, restablecerClave } from '@/server/acciones/usuarios';
+import { cerrarSesionesDeUsuario, editarUsuario } from '@/server/acciones/usuarios-admin';
 import {
   candidatosReasignacion,
   contarAdminsActivos,
@@ -51,10 +51,10 @@ describe('permisos: ningun rol salvo admin puede administrar personas', () => {
       const ctx = e.ctx(actor);
       const objetivo = e.charles.usuarioId;
       const intentos: Array<[string, () => Promise<unknown>]> = [
-        ['reenviar', () => reenviarInvitacion(ctx, { usuarioId: objetivo }, async () => {})],
+        ['crear cuenta', () => crearCuenta(ctx, { nombre: 'X', usuario: 'xxx', organizacionId: e.orgInterna, rol: 'lector' })],
+        ['restablecer clave', () => restablecerClave(ctx, { usuarioId: objetivo })],
         ['editar', () => editarUsuario(ctx, { usuarioId: objetivo, nombre: 'X' })],
         ['cerrar sesiones', () => cerrarSesionesDeUsuario(ctx, { usuarioId: objetivo })],
-        ['correo invalido', () => marcarCorreoInvalido(ctx, { usuarioId: objetivo, invalido: true })],
         ['listar', () => listarUsuariosAdmin(e.db, actor)],
         ['obtener', () => obtenerUsuarioAdmin(e.db, actor, objetivo)],
         ['pendientes', () => pendientesDeUsuario(e.db, actor, objetivo)],
@@ -68,72 +68,45 @@ describe('permisos: ningun rol salvo admin puede administrar personas', () => {
   });
 });
 
-describe('reenviar invitacion', () => {
-  it('envia por el callback, audita y avisa si es la primera vez', async () => {
-    const nuevo = await invitarUsuario(e.ctx(e.admin), { nombre: 'Marta Nueva', email: 'marta@prueba.invalid', organizacionId: e.orgInterna, rol: 'solicitante' });
-    const enviados: string[] = [];
-    const r = await reenviarInvitacion(e.ctx(e.admin), { usuarioId: nuevo.id }, async (p) => void enviados.push(p.email));
-    expect(r).toMatchObject({ email: 'marta@prueba.invalid', sinIngreso: true });
-    expect(enviados).toEqual(['marta@prueba.invalid']);
-    const a = await auditoriasDe('reenviar_invitacion', nuevo.id);
+describe('crear y restablecer cuentas', () => {
+  it('crea la cuenta con contrasena temporal, audita quien la creo y queda como «sin ingresar»', async () => {
+    const nuevo = await crearCuenta(e.ctx(e.admin), { nombre: 'Marta Nueva', usuario: 'marta', email: 'marta@prueba.invalid', organizacionId: e.orgInterna, rol: 'solicitante' });
+    expect(nuevo).toMatchObject({ usuario: 'marta', nombre: 'Marta Nueva', rol: 'solicitante' });
+    expect(nuevo.claveTemporal.length).toBeGreaterThanOrEqual(12);
+    const [u] = await e.db.select().from(usuario).where(eq(usuario.id, nuevo.id));
+    expect(u).toMatchObject({ username: 'marta', email: 'marta@prueba.invalid', ultimoIngreso: null, creadoPor: e.admin.usuarioId });
+    const a = await auditoriasDe('crear_cuenta', nuevo.id);
     expect(a).toHaveLength(1);
     expect(a[0]!.usuarioId).toBe(e.admin.usuarioId);
-    expect(a[0]!.detalle).toMatchObject({ enviado: true, sinIngreso: true });
+    expect(a[0]!.detalle).toMatchObject({ usuario: 'marta', rol: 'solicitante' });
   });
 
-  it('quien ya ingreso no es una invitacion pendiente', async () => {
-    await e.db.update(usuario).set({ ultimoIngreso: new Date() }).where(eq(usuario.id, e.charles.usuarioId));
-    const r = await reenviarInvitacion(e.ctx(e.admin), { usuarioId: e.charles.usuarioId }, async () => {});
-    expect(r.sinIngreso).toBe(false);
+  it('las cuentas de area no necesitan correo: usa uno reservado que nunca recibe nada', async () => {
+    const c = await crearCuenta(e.ctx(e.admin), { nombre: 'Área Instrumentos', usuario: 'instrumentos-x', organizacionId: e.orgInterna, rol: 'solicitante', area: 'Instrumentos' });
+    const [u] = await e.db.select().from(usuario).where(eq(usuario.id, c.id));
+    expect(u).toMatchObject({ email: 'instrumentos-x@sin-correo.invalid', area: 'Instrumentos' });
   });
 
-  it('limita los reenvios a la misma persona (3 por hora) y no llama al envio cuando se pasa', async () => {
-    const u = await invitarUsuario(e.ctx(e.admin), { nombre: 'Insistente', email: 'insistente@prueba.invalid', organizacionId: e.orgInterna, rol: 'lector' });
-    let llamadas = 0;
-    const ahora = new Date('2026-10-21T15:00:00Z');
-    for (let i = 0; i < REGLAS_REENVIO.porPersona.max; i++) {
-      await reenviarInvitacion(e.ctx(e.admin, ahora), { usuarioId: u.id }, async () => void llamadas++);
-    }
-    expect(llamadas).toBe(3);
-    let fallo: unknown;
-    try {
-      await reenviarInvitacion(e.ctx(e.admin, ahora), { usuarioId: u.id }, async () => void llamadas++);
-    } catch (err) {
-      fallo = err;
-    }
-    expect(fallo).toBeInstanceOf(ErrorAccion);
-    expect((fallo as ErrorAccion).codigo).toBe('LIMITE_TASA');
-    expect((fallo as ErrorAccion).message).toMatch(/Espera \d+ minutos? antes de reenviar/);
-    expect(llamadas).toBe(3);
-    // una hora despues vuelve a poder
-    const luego = new Date(ahora.getTime() + 3_600_000 + 1000);
-    await reenviarInvitacion(e.ctx(e.admin, luego), { usuarioId: u.id }, async () => void llamadas++);
-    expect(llamadas).toBe(4);
+  it('restablecer: genera otra contrasena, cierra las sesiones, audita sin guardar la clave', async () => {
+    const c = await crearCuenta(e.ctx(e.admin), { nombre: 'Insistente', usuario: 'insistente', organizacionId: e.orgInterna, rol: 'lector' });
+    await abrirSesion(c.id);
+    const r = await restablecerClave(e.ctx(e.admin), { usuarioId: c.id });
+    expect(r).toMatchObject({ usuario: 'insistente', nombre: 'Insistente', sesionesCerradas: 1 });
+    expect(r.claveTemporal).not.toBe(c.claveTemporal);
+    const a = await auditoriasDe('restablecer_clave', c.id);
+    expect(a).toHaveLength(1);
+    expect(JSON.stringify(a[0]!.detalle)).not.toContain(r.claveTemporal);
+    expect(await codigoDe(restablecerClave(e.ctx(e.admin), { usuarioId: '00000000-0000-4000-8000-000000000000' }))).toBe('NO_ENCONTRADO');
   });
 
-  it('rechaza a quien esta desactivado, tiene correo invalido o no existe', async () => {
-    const u = await invitarUsuario(e.ctx(e.admin), { nombre: 'Inactiva', email: 'inactiva@prueba.invalid', organizacionId: e.orgInterna, rol: 'lector' });
-    await marcarCorreoInvalido(e.ctx(e.admin), { usuarioId: u.id, invalido: true });
-    expect(await codigoDe(reenviarInvitacion(e.ctx(e.admin), { usuarioId: u.id }, async () => {}))).toBe('VALIDACION');
-    await marcarCorreoInvalido(e.ctx(e.admin), { usuarioId: u.id, invalido: false });
+  it('una cuenta desactivada queda para los filtros (se usa mas abajo)', async () => {
+    const u = await crearCuenta(e.ctx(e.admin), { nombre: 'Inactiva', usuario: 'inactiva', email: 'inactiva@prueba.invalid', organizacionId: e.orgInterna, rol: 'lector' });
     await desactivarUsuario(e.ctx(e.admin), { usuarioId: u.id });
-    expect(await codigoDe(reenviarInvitacion(e.ctx(e.admin), { usuarioId: u.id }, async () => {}))).toBe('VALIDACION');
-    expect(await codigoDe(reenviarInvitacion(e.ctx(e.admin), { usuarioId: '00000000-0000-4000-8000-000000000000' }, async () => {}))).toBe('NO_ENCONTRADO');
-  });
-
-  it('si el envio falla, el error sube y la auditoria dice que no salio', async () => {
-    const u = await invitarUsuario(e.ctx(e.admin), { nombre: 'Sin proveedor', email: 'sinproveedor@prueba.invalid', organizacionId: e.orgInterna, rol: 'lector' });
-    await expect(
-      reenviarInvitacion(e.ctx(e.admin), { usuarioId: u.id }, async () => {
-        throw new Error('proveedor caido');
-      }),
-    ).rejects.toThrow('proveedor caido');
-    const a = await auditoriasDe('reenviar_invitacion', u.id);
-    expect(a[0]!.detalle).toMatchObject({ enviado: false });
+    expect((await e.db.select().from(usuario).where(eq(usuario.id, u.id)))[0]!.activo).toBe(false);
   });
 });
 
-describe('editar datos y correo invalido', () => {
+describe('editar datos', () => {
   it('cambia nombre y area, audita el antes y el despues, y no audita si no hay cambio', async () => {
     await editarUsuario(e.ctx(e.admin), { usuarioId: e.charles.usuarioId, nombre: 'Charles Mantenimiento', area: 'Mantenimiento' });
     const [u] = await e.db.select().from(usuario).where(eq(usuario.id, e.charles.usuarioId));
@@ -147,14 +120,6 @@ describe('editar datos y correo invalido', () => {
 
   it('valida el nombre', async () => {
     expect(await codigoDe(editarUsuario(e.ctx(e.admin), { usuarioId: e.charles.usuarioId, nombre: '   ' }))).toBe('VALIDACION');
-  });
-
-  it('marca y desmarca el correo invalido con auditoria', async () => {
-    await marcarCorreoInvalido(e.ctx(e.admin), { usuarioId: e.lector.usuarioId, invalido: true });
-    expect((await e.db.select().from(usuario).where(eq(usuario.id, e.lector.usuarioId)))[0]!.correoInvalido).toBe(true);
-    await marcarCorreoInvalido(e.ctx(e.admin), { usuarioId: e.lector.usuarioId, invalido: false });
-    expect((await e.db.select().from(usuario).where(eq(usuario.id, e.lector.usuarioId)))[0]!.correoInvalido).toBe(false);
-    expect(await auditoriasDe('marcar_correo_invalido', e.lector.usuarioId)).toHaveLength(2);
   });
 });
 
@@ -248,17 +213,13 @@ describe('pendientes y candidatos de reasignacion', () => {
     const viejas = await e.db.select().from(asignacion).where(and(eq(asignacion.aUsuarioId, e.brian.usuarioId), eq(asignacion.estado, 'reasignada')));
     expect(viejas).toHaveLength(2);
 
-    // El nuevo responsable se entera: aviso en la campana + correo en el outbox, creados en la misma transaccion.
+    // El nuevo responsable se entera: aviso en la campana, creado en la misma transaccion.
     const avisos = await e.db
       .select()
       .from(notificacion)
       .where(and(eq(notificacion.usuarioId, e.brianB.usuarioId), eq(notificacion.tipo, 'asignacion')));
     expect(avisos).toHaveLength(2);
     expect(avisos.every((a) => a.asignacionId !== null && a.leidaEn === null)).toBe(true);
-    expect(r.correoIds).toHaveLength(2);
-    const correos = await e.db.select().from(entregaCorreo).where(inArray(entregaCorreo.id, r.correoIds));
-    expect(correos).toHaveLength(2);
-    expect(correos.every((c) => c.plantilla === 'pendiente' && c.estado === 'pendiente')).toBe(true);
     // La auditoria dice QUE referencias se movieron y A QUIEN (no solo cuantas).
     const [evento] = await auditoriasDe('desactivar', e.brian.usuarioId);
     const detalle = evento!.detalle as { reasignadas: number; movidas: Array<{ referenciaId: string; aUsuarioId: string }> };
@@ -282,7 +243,7 @@ describe('cambios sin efecto no ensucian la auditoria', () => {
 });
 
 describe('resumen del administrador', () => {
-  it('cuenta personas sin ingresar, agencias sin gente activa y correos con fallo', async () => {
+  it('cuenta cuentas sin ingresar y agencias sin gente activa', async () => {
     const r = await resumenAdmin(e.db, e.admin);
     expect(r.usuarios.activos).toBeGreaterThan(0);
     expect(r.usuarios.inactivos).toBeGreaterThanOrEqual(2);

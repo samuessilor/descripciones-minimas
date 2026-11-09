@@ -1,40 +1,33 @@
 /**
- * Modo basico: «Enviar a» deja el pendiente en la app (sin correo ni cola) y reparte PARTES de la ficha entre
- * personas; el tablero dice de quien esta pendiente cada parte y quien falta.
+ * «Enviar a» deja el pendiente en la app (campana y «Para mi») y reparte PARTES de la ficha entre personas; el tablero
+ * dice de quien esta pendiente cada parte y quien falta.
  */
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asignacion } from '@/db/esquema';
 import { enviarA } from '@/server/acciones/asignaciones';
-import { reiniciarConfig } from '@/server/config';
 import { pendientesDe } from '@/server/politicas/colaboracion';
 import { responsablesPorParte, tableroDe } from '@/server/politicas/tablero';
 import { nuevoEscenario, nuevaFicha, type Escenario } from './ayudas';
-import { asignacionesDe, correos, notificacionesDe } from './ayudas-colab';
+import { asignacionesDe, notificacionesDe } from './ayudas-colab';
 
 let e: Escenario;
 const T0 = new Date('2026-10-21T15:00:00.000Z');
 const DIAS = 86_400_000;
 
 beforeAll(async () => {
-  process.env.AVISOS_POR_CORREO = 'false'; // el valor por defecto de la app; el resto de la suite prueba el modo con correo
-  reiniciarConfig();
   e = await nuevoEscenario();
 });
 afterAll(async () => {
-  process.env.AVISOS_POR_CORREO = 'true';
-  reiniciarConfig();
   await e.c.cerrar();
 });
 
-describe('modo basico: aviso solo dentro de la app', () => {
-  it('enviar deja asignacion y notificacion, y no escribe nada en la cola de correo', async () => {
+describe('aviso dentro de la app', () => {
+  it('enviar deja asignacion y notificacion en la bandeja de quien la recibe', async () => {
     const id = await nuevaFicha(e, { codigo: 'BAS-0001' });
     const r = await enviarA(e.ctx(e.edward, T0), { referenciaId: id, destinatarios: [{ usuarioId: e.charles.usuarioId }] });
     expect(r.creadas).toBe(1);
-    expect(r.destinatarios[0]?.canal).toBe('sin_correo');
-    expect(r.correoIds).toHaveLength(0);
-    expect(await correos(e.db)).toHaveLength(0);
+    expect(r.destinatarios[0]).toMatchObject({ creadas: 1, actualizadas: 0, sinCambios: 0 });
     const [n] = await notificacionesDe(e.db, e.charles.usuarioId);
     expect(n?.tipo).toBe('asignacion');
     expect(n?.titulo).toContain('BAS-0001');

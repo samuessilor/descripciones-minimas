@@ -1,6 +1,6 @@
-/** Ayudas de las pruebas de colaboracion (H3): lecturas directas de la base para verificar el outbox. */
+/** Ayudas de las pruebas de colaboracion (H3): lecturas directas de la base para verificar asignaciones y avisos. */
 import { asc, eq } from 'drizzle-orm';
-import { asignacion, auditoria, entregaCorreo, notificacion, referencia } from '@/db/esquema';
+import { asignacion, auditoria, notificacion, referencia } from '@/db/esquema';
 import type { Db } from '@/db/tipos';
 import type { Actor } from '@/server/politicas/actor';
 import type { Escenario } from './ayudas';
@@ -11,14 +11,6 @@ export async function asignacionesDe(db: Db, referenciaId: string) {
 
 export async function notificacionesDe(db: Db, usuarioId: string) {
   return db.select().from(notificacion).where(eq(notificacion.usuarioId, usuarioId)).orderBy(asc(notificacion.creadaEn));
-}
-
-export async function correos(db: Db) {
-  return db.select().from(entregaCorreo).orderBy(asc(entregaCorreo.creadaEn));
-}
-
-export async function correosPara(db: Db, email: string) {
-  return db.select().from(entregaCorreo).where(eq(entregaCorreo.destinatario, email)).orderBy(asc(entregaCorreo.creadaEn));
 }
 
 export async function estadoFicha(db: Db, id: string): Promise<string> {

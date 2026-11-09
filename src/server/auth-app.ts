@@ -5,7 +5,6 @@
 import { getDb } from '@/db';
 import { crearAuth, type Auth } from './auth';
 import { getConfig } from './config';
-import { getMailer } from './correo';
 import type { DepsAcceso } from './acceso';
 
 const CLAVE = Symbol.for('descripciones-minimas.auth');
@@ -13,7 +12,7 @@ type ConGlobal = typeof globalThis & { [CLAVE]?: Auth };
 
 export function getAuth(): Auth {
   const g = globalThis as ConGlobal;
-  g[CLAVE] ??= crearAuth({ db: getDb(), config: getConfig(), mailer: getMailer() });
+  g[CLAVE] ??= crearAuth({ db: getDb(), config: getConfig() });
   return g[CLAVE];
 }
 

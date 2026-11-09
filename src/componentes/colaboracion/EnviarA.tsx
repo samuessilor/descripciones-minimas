@@ -1,8 +1,8 @@
 'use client';
 
-import { Bell, CircleCheck, Info, Mail, Search, Send, Users, X } from 'lucide-react';
+import { Bell, CircleCheck, Info, Search, Send, Users, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { enviarAAccion, enviarALoteAccion, marcarListoAccion } from '@/app/acciones/colaboracion';
 import { Aviso } from '@/componentes/ui/aviso';
 import { Avatar, nombreVisible, Persona } from '@/componentes/ui/avatar';
@@ -18,9 +18,8 @@ import { ETIQUETA_SECCION, SECCIONES, type Seccion } from '@/dominio/campos';
 import { ETIQUETA_PEDIDO, VERBO_PEDIDO, listaHumana, plural, type Pedido } from '@/dominio/colaboracion';
 import { normalizarTexto } from '@/dominio/normalizacion';
 import type { ResultadoEnviarA, ResumenDestinatario } from '@/server/acciones/asignaciones';
-import type { CandidatoDestino, ContextoEnvio, SeguimientoAsignacion } from '@/server/politicas/colaboracion';
+import type { CandidatoDestino, ContextoEnvio } from '@/server/politicas/colaboracion';
 import { abrirActividad, avisarCambioDeFicha } from './api';
-import { InsigniaCorreo } from './piezas';
 import { useLectura } from './usar-lectura';
 
 const MAX_MENSAJE = 500;
@@ -195,7 +194,6 @@ function ContenidoEnviarA({ referenciaIds, abierto, onCerrar, onEnviado, seccion
         ? contexto.seccionesPendientes
         : [...SECCIONES]);
   const ofrecePartes = !lote && seleccionados.some((c) => c.rol !== 'aduana');
-  const correoActivo = contexto?.avisosPorCorreo ?? false;
 
   function alternar(c: CandidatoDestino) {
     setSel((s) => {
@@ -266,13 +264,7 @@ function ContenidoEnviarA({ referenciaIds, abierto, onCerrar, onEnviado, seccion
       titulo={titulo}
       tamano="md"
       bloquear={fase === 'enviando'}
-      descripcion={
-        fase === 'listo'
-          ? undefined
-          : correoActivo
-            ? 'Le llegará un aviso con el enlace directo. No necesitas escribir un correo.'
-            : 'Le queda como pendiente en la plataforma, con aviso en la campana. No necesitas escribir un correo.'
-      }
+      descripcion={fase === 'listo' ? undefined : 'Le queda como pendiente en la plataforma, con aviso en la campana.'}
       pie={
         fase === 'listo' ? (
           <>
@@ -310,7 +302,7 @@ function ContenidoEnviarA({ referenciaIds, abierto, onCerrar, onEnviado, seccion
       }
     >
       {fase === 'listo' && resultado ? (
-        <ResultadoEnvio resultado={resultado} referenciaId={lote ? null : baseId} lote={lote} fichas={referenciaIds.length} />
+        <ResultadoEnvio resultado={resultado} lote={lote} fichas={referenciaIds.length} />
       ) : (
         <div className="space-y-5">
           {error ? (
@@ -436,7 +428,7 @@ function ContenidoEnviarA({ referenciaIds, abierto, onCerrar, onEnviado, seccion
           <CampoFormulario
             etiqueta="Mensaje"
             opcional
-            ayuda={correoActivo ? 'Lo ve en la plataforma al abrir la referencia. No va en el correo.' : 'Lo ve en la plataforma al abrir la referencia.'}
+            ayuda="Lo ve en la plataforma al abrir la referencia."
             acciones={
               <span className="text-xs tabular-nums text-tinta-suave" aria-live="off">
                 {mensaje.length}/{MAX_MENSAJE}
@@ -469,7 +461,7 @@ function ContenidoEnviarA({ referenciaIds, abierto, onCerrar, onEnviado, seccion
   );
 }
 
-/** Lo que le va a llegar a la persona, tal cual (sin datos de la mercancia en el correo). */
+/** Lo que le va a llegar a la persona, tal cual. */
 function VistaPreviaAviso({
   contexto,
   destino,
@@ -503,21 +495,6 @@ function VistaPreviaAviso({
             </span>
           </span>
         </li>
-        {contexto?.avisosPorCorreo ? (
-          <li className="flex gap-2.5">
-            <Mail aria-hidden className="mt-0.5 size-4 shrink-0 text-azul-700" />
-            <span>
-              <span className="font-semibold text-tinta">Por correo: </span>
-              <span className="text-tinta">
-                {lote ? `«Tienes ${fichas} descripciones mínimas pendientes»` : '«Tienes una descripción mínima pendiente»'}
-              </span>
-              <span className="block text-tinta-suave">
-                Con un botón «Abrir {lote ? 'mis pendientes' : 'la referencia'}
-                ». El correo no lleva el código ni tu mensaje: se ven al entrar.
-              </span>
-            </span>
-          </li>
-        ) : null}
       </ul>
     </section>
   );
@@ -530,32 +507,7 @@ function sinCambios(r: ResultadoEnviarA): boolean {
   return r.destinatarios.every((d) => d.creadas + d.actualizadas === 0);
 }
 
-function ResultadoEnvio({
-  resultado,
-  referenciaId,
-  lote,
-  fichas,
-}: {
-  resultado: ResultadoEnviarA;
-  referenciaId: string | null;
-  lote: boolean;
-  fichas: number;
-}) {
-  // Sondeo corto del estado real del correo: «en camino» -> «enviado» (o «reintentando»). Se detiene cuando
-  // todos los correos llegaron a un estado final.
-  const asignaciones = resultado.destinatarios.flatMap((d) => d.asignacionIds);
-  const seguimiento = useLectura<SeguimientoAsignacion[]>(referenciaId ? `/api/colaboracion/ficha/${referenciaId}/seguimiento` : null, {
-    intervaloMs: 2500,
-    parar: (lista) =>
-      asignaciones.length > 0 &&
-      asignaciones.every((id) => {
-        const e = lista.find((x) => x.asignacionId === id)?.entrega;
-        return !!e && (e.estado === 'enviado' || e.estado === 'no_entregable' || e.estado === 'sin_correo');
-      }),
-  });
-  const porAsignacion = new Map<string, SeguimientoAsignacion>();
-  if (seguimiento.estado.tipo === 'ok') for (const s of seguimiento.estado.data) porAsignacion.set(s.asignacionId, s);
-
+function ResultadoEnvio({ resultado, lote, fichas }: { resultado: ResultadoEnviarA; lote: boolean; fichas: number }) {
   const total = resultado.destinatarios.length;
   const ya = resultado.yaTenianPendiente.length;
   const nombres = resultado.destinatarios.map((d) => primerNombre(d.nombre));
@@ -581,52 +533,24 @@ function ResultadoEnvio({
       </p>
       <ul className="divide-y divide-borde-suave rounded-xl border border-borde-suave">
         {resultado.destinatarios.map((d) => (
-          <FilaResultado
-            key={d.usuarioId}
-            d={d}
-            lote={lote}
-            seguimiento={d.asignacionIds.map((id) => porAsignacion.get(id)).find(Boolean)}
-          />
+          <FilaResultado key={d.usuarioId} d={d} lote={lote} />
         ))}
       </ul>
     </div>
   );
 }
 
-function FilaResultado({
-  d,
-  lote,
-  seguimiento,
-}: {
-  d: ResumenDestinatario;
-  lote: boolean;
-  seguimiento: SeguimientoAsignacion | undefined;
-}) {
+function FilaResultado({ d, lote }: { d: ResumenDestinatario; lote: boolean }) {
   let linea: string;
   if (d.creadas > 0 && d.actualizadas === 0)
     linea = lote ? `Ya tiene ${plural(d.creadas, 'pendiente', 'pendientes')} en su bandeja.` : 'Ya tiene el pendiente en su bandeja.';
   else if (d.actualizadas > 0) linea = 'Ya la tenía pendiente; actualizamos lo que le pides y le avisamos.';
   else linea = 'Ya la tenía pendiente con lo mismo, así que no le avisamos otra vez.';
 
-  let canal: ReactNode = null;
-  if (d.creadas + d.actualizadas > 0) {
-    if (d.canal === 'solo_bandeja') canal = <span className="text-tinta-suave">Prefiere recibir los avisos solo en la plataforma.</span>;
-    else if (d.canal === 'correo_invalido') {
-      canal = <span className="font-medium text-error">Su correo está marcado como inválido: avísale por otro medio.</span>;
-    } else if (d.canal === 'correo') {
-      canal = seguimiento?.entrega ? (
-        <InsigniaCorreo entrega={seguimiento.entrega} />
-      ) : (
-        <span className="text-tinta-suave">{lote ? 'Un correo con el resumen va en camino.' : 'El correo va en camino.'}</span>
-      );
-    }
-  }
-
   return (
     <li className="space-y-1.5 px-3.5 py-3">
       <Persona nombre={d.nombre} organizacion={d.organizacion} tamano="sm" />
       <p className="pl-9 text-sm text-tinta">{linea}</p>
-      {canal ? <div className="pl-9 text-sm">{canal}</div> : null}
     </li>
   );
 }

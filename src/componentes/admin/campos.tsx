@@ -24,7 +24,7 @@ interface PropsCampoAdmin {
   etiqueta: ReactNode;
   ayuda?: ReactNode;
   opcional?: boolean;
-  control?: 'texto' | 'correo' | 'numerico' | 'area' | 'seleccion' | 'buscar';
+  control?: 'texto' | 'correo' | 'numerico' | 'area' | 'seleccion' | 'buscar' | 'clave';
   defaultValue?: string;
   placeholder?: string;
   required?: boolean;
@@ -75,7 +75,7 @@ export function CampoAdmin({
           <Campo
             {...p}
             name={nombre}
-            type={control === 'correo' ? 'email' : control === 'buscar' ? 'search' : 'text'}
+            type={control === 'correo' ? 'email' : control === 'buscar' ? 'search' : control === 'clave' ? 'password' : 'text'}
             inputMode={control === 'correo' ? 'email' : control === 'numerico' ? 'numeric' : undefined}
             defaultValue={defaultValue}
             placeholder={placeholder}

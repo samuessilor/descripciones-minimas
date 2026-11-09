@@ -10,15 +10,15 @@ Este repositorio contiene **solo la aplicación**. La especificación, los insum
 
 Producto funcionando de punta a punta **en local**, en su versión básica (se mejora a medida que se aprueba):
 
-1. se entra con un enlace al correo (sin contraseña);
+1. se entra con **usuario y contraseña** (sin correo): las cuentas las crea un administrador, una por área y una por agencia de aduana;
 2. se crea una referencia y se llena la ficha (autoguardado por campo, historial por campo, nadie borra lo de otra persona);
-3. «Enviar a…» otra persona: le queda como pendiente con aviso en la campana (y, con `AVISOS_POR_CORREO` encendido, un correo con enlace directo a la ficha);
+3. «Enviar a…» una persona o un área: le queda como pendiente con aviso en la campana y en «Para mí» (no hay correo);
 4. la aduana pone la partida (se copia su restricción), pide lo que le falte saber en «Descripciones mínimas adicionales» (le llega al área responsable como pendiente «Responder» y esta contesta en la misma zona), completa restricciones y observaciones y finaliza: la ficha pasa a verde;
 5. se busca con la lupa, se ve el listado (amarillos y verdes) y se descarga la base en Excel;
-6. la administración invita y gestiona usuarios.
+6. la administración crea cuentas (con contraseña temporal que entrega a mano), restablece contraseñas y gestiona usuarios; el resumen muestra qué falta y de quién.
 
-Todo corre sin credenciales externas: base PGlite embebida, correo de desarrollo y archivos locales. Antes de usar datos
-reales hacen falta las aprobaciones de TI, el dominio y remitente autenticado del correo y el logo oficial (ver «Producción»).
+Todo corre sin credenciales externas: base PGlite embebida y archivos locales. Antes de usar datos reales hacen falta las
+aprobaciones de TI y el logo oficial (ver «Producción» y `docs/DESPLIEGUE-VERCEL.md`).
 
 ## Requisitos
 
@@ -57,52 +57,44 @@ $env:APP_URL = 'http://localhost:3010'; npx next dev -p 3010                    
 ```
 
 `npm run setup` escribe `APP_URL=http://localhost:3000` en `.env.local` la primera vez y no lo cambia si el archivo ya
-existe. `npm run worker` también lee `APP_URL` (de `.env.local`): si el servidor corre en otro puerto, el worker
-responderá «el servidor no responde» hasta que alinees `APP_URL`.
+existe. Si el servidor corre en otro puerto, `APP_URL` debe coincidir con él.
 
-### Entrar sin credenciales: usuarios de desarrollo
+### Entrar en local: cuentas de desarrollo
 
-La base local es **PGlite** (Postgres embebido en `.data/pglite`), el correo sale por una bandeja de desarrollo y por la
-consola del servidor, y el almacén de archivos es local. No hay registro abierto: solo entra quien un administrador
-invitó (`/admin/usuarios`). En desarrollo ya están estas diez cuentas (todas `@desarrollo.invalid`, nombre marcado
-`[DESARROLLO]`):
+La base local es **PGlite** (Postgres embebido en `.data/pglite`) y el almacén de archivos es local. No hay registro
+abierto: solo entra quien un administrador creó (`/admin/usuarios`). En desarrollo ya están estas diez cuentas (usuario
+= la parte antes de la `@`; todas con el correo `@desarrollo.invalid` y el nombre marcado `[DESARROLLO]`), **todas con la
+contraseña de ejemplo `desarrollo-2026`**:
 
-| Correo | Rol | Organización | Para qué sirve |
+| Usuario | Rol | Organización | Para qué sirve |
 |---|---|---|---|
-| `admin@` | Administradora | EssilorLuxottica | invitar usuarios, catálogos (listas, restricciones, partidas), auditoría, cola de correo |
-| `solicitante@` | Solicitante (Consumibles) | EssilorLuxottica | crear y llenar fichas, enviarlas |
-| `solicitante2@` | Solicitante (Mantenimiento) | EssilorLuxottica | idem; segunda persona para ver historial y conflictos |
-| `lector@` | Lector | EssilorLuxottica | solo consulta y descarga el Excel |
-| `aduana-a@` | Aduana | Agencia Demo A | clasifica lo que le envían; no ve lo de la agencia B |
-| `aduana-b@` | Aduana | Agencia Demo B | idem, en otra agencia |
-| `consumibles@`, `mantenimiento@`, `instrumentos@`, `marketing@` | Solicitante (cuenta general de cada área) | EssilorLuxottica | ve en «Para mí» lo de su área aunque nadie se lo envíe y recibe las solicitudes de la aduana |
+| `admin` | Administradora | EssilorLuxottica | crear cuentas, restablecer contraseñas, catálogos (listas, restricciones, partidas), auditoría |
+| `solicitante` | Solicitante (Consumibles) | EssilorLuxottica | crear y llenar fichas, enviarlas |
+| `solicitante2` | Solicitante (Mantenimiento) | EssilorLuxottica | idem; segunda persona para ver historial y conflictos |
+| `lector` | Lector | EssilorLuxottica | solo consulta y descarga el Excel |
+| `aduana-a` | Aduana | Agencia Demo A | clasifica lo que le envían; no ve lo de la agencia B |
+| `aduana-b` | Aduana | Agencia Demo B | idem, en otra agencia |
+| `consumibles`, `mantenimiento`, `instrumentos`, `marketing` | Solicitante (cuenta general de cada área) | EssilorLuxottica | ve en «Para mí» lo de su área aunque nadie se lo envíe y recibe las solicitudes de la aduana |
 
-Para entrar: escribe el correo en `/entrar`, abre el enlace en la **bandeja de correo de desarrollo**
-(`/api/dev/correo?formato=html`; también se imprime en la consola del servidor) y pulsa **Entrar**. El enlace dura 30
-minutos y sirve una sola vez.
+Con `npm run inicio` no se escribe nada: entras como administradora y cambias de cuenta desde el menú de arriba a la
+derecha («Ver como», con las diez cuentas). Para probar el acceso real, `CON_LOGIN=1 npm run inicio` pide usuario y
+contraseña como en producción. La contraseña de ejemplo no existe en producción: allí cada cuenta tiene la suya, generada.
 
 ### Datos de ejemplo
 
 Al arrancar con la base vacía se siembran, además de los usuarios, **15 referencias inventadas** (`TEST-0001..0003` y
 `EJ-0001..EJ-0012`: resinas, filtros, motores, sensores, cintas…) en todos los estados —borrador, en gestión, pendiente
 de información, clasificada (verde) y reabierta—, con varios autores, comentarios, historial con ediciones de personas
-distintas, pendientes para cada rol, avisos y correos. No hay ningún dato de los Excel de trabajo. Para volver a ese
+distintas, pendientes para cada rol y avisos. No hay ningún dato de los Excel de trabajo. Para volver a ese
 punto de partida con el servidor encendido: `POST /api/dev/reset` (con `?ejemplos=0` deja solo los usuarios y las
 tres `TEST-*`, que es la semilla que usan las pruebas E2E).
 
-### Correo y despachador (solo desarrollo)
-
-| Qué | Dónde |
-|---|---|
-| Bandeja de correos de desarrollo (vista previa de cada correo) | `GET /api/dev/correo?formato=html` (`?para=<correo>` filtra, `?id=<id>&ver=html|texto`) |
-| Cola de envío (pendientes, fallidos, enviados) | `GET /api/dev/correo/cola` y, como administradora, `/admin/correo` |
-| Despachador | corre solo cada 5 s mientras el servidor está encendido; «procesar ahora»: `POST /api/dev/correo/despachar` |
-| Simular que el proveedor de correo se cae | `POST /api/dev/correo/falla` con `{"activa": true}` |
+### Avisos
 
 Los avisos de «Enviar a» (también la solicitud de información de la aduana, que le abre al área el pedido «Responder»), de
-«Listo por mi parte», de la aduana (clasificada, reabierta, reapertura solicitada) y de las
-reasignaciones al desactivar a una persona pasan por el mismo mecanismo: aviso en la campana y en «Para mí», en la misma
-transacción. El correo solo se encola si `AVISOS_POR_CORREO` está encendido (por defecto, apagado).
+«Listo por mi parte», de la aduana (clasificada, reabierta, reapertura solicitada) y de las reasignaciones al desactivar
+a una persona pasan por el mismo mecanismo: aviso en la campana y en «Para mí», en la misma transacción. **No hay
+correo** en ninguna parte de la plataforma.
 
 ### PGlite es de un solo proceso
 
@@ -112,15 +104,14 @@ Dos procesos sobre el mismo `.data/pglite` no comparten estado y pueden corrompe
 - `npm run seed`, `npm run db:reset` y `npm run db:migrate` se ejecutan **con el servidor detenido** (se niegan a
   abrir la base si detectan que está en uso); con el servidor en marcha usa `POST /api/dev/seed` y
   `POST /api/dev/reset` (solo desarrollo);
-- `npm run worker` es un cliente HTTP del despachador (no abre la base);
-- las pruebas E2E no abren la base: leen el enlace por `/api/dev/correo`.
+- las pruebas E2E no abren la base: entran por la pantalla de entrada con usuario y contraseña de ejemplo.
 
 ## Scripts
 
 | Comando | Qué hace |
 |---|---|
 | `npm run inicio` | **Todo en uno para ver la aplicación:** `setup` + servidor de desarrollo en un puerto libre + abre el navegador (ver «Arrancar con UN comando») |
-| `npm run dev` / `build` / `start` | Servidor de desarrollo, compilación y servidor de producción. **`start` exige `DATABASE_URL`** (Postgres con el rol `app`, p. ej. Neon) además de `BETTER_AUTH_SECRET` (y `CRON_SECRET` solo si `AVISOS_POR_CORREO` está encendido): sin ella el servidor imprime al arrancar `[config] El servidor no puede arrancar. En producción DATABASE_URL es obligatoria…` y todas las páginas responden 500 hasta que la definas. Para probar en local usa `npm run dev` (PGlite) |
+| `npm run dev` / `build` / `start` | Servidor de desarrollo, compilación y servidor de producción. **`start` exige `DATABASE_URL`** (Postgres con el rol `app`, p. ej. Neon) además de `BETTER_AUTH_SECRET`, y las fotos en Vercel Blob (`ALMACEN=blob` + `BLOB_READ_WRITE_TOKEN`): sin ellas el servidor imprime al arrancar `[config] El servidor no puede arrancar. En producción DATABASE_URL es obligatoria…` y todas las páginas responden 500 hasta que la definas. Para probar en local usa `npm run dev` (PGlite) |
 | `npm run lint` / `typecheck` | ESLint (incluye las reglas de capas) y TypeScript estricto (pasa desde cero, sin compilar ni generar nada antes) |
 | `npm test` | Pruebas unitarias del dominio puro (Vitest) |
 | `npm run test:integ` | Pruebas de integración sobre PGlite en memoria (una instancia por archivo) |
@@ -131,7 +122,8 @@ Dos procesos sobre el mismo `.data/pglite` no comparten estado y pueden corrompe
 | `npm run db:reset` | Borra y recrea la base **local** con semillas (`--sin-ejemplos`: solo usuarios y las 3 `TEST-*`; `--sin-datos-de-desarrollo`: solo datos maestros) |
 | `npm run db:roles` | Crea los roles `migrador` y `app` en un Postgres propio |
 | `npm run seed` | Datos maestros y, en desarrollo, usuarios y referencias de ejemplo |
-| `npm run worker` | Llama cada minuto a `/api/cron/despachar` |
+| `npm run admin:inicial` | Crea el primer administrador (usuario y contraseña temporal que se muestra una vez) |
+| `npm run cuentas:iniciales` | Crea las cuentas por área y por agencia desde un archivo; deja usuarios y contraseñas en un archivo **fuera del repositorio** (`--salida`) |
 
 ### Pruebas con Postgres real
 
@@ -146,12 +138,12 @@ reconstrucción de la proyección. En CI se usa el servicio Postgres del flujo d
 src/
   dominio/      PURO (sin Next ni base): campos, estado, completitud, permisos, partida, días de gestión, cantidad, valores
   db/           esquema de Drizzle, conexión (PGlite / Neon / pg), migraciones y semillas maestras
-  server/       políticas (lecturas ya filtradas por el Actor), acciones (núcleo transaccional), acceso, auth, correo
+  server/       políticas (lecturas ya filtradas por el Actor), acciones (núcleo transaccional), acceso, auth, claves
   app/          páginas, Route Handlers y Server Actions (capa delgada)
   componentes/  interfaz (shadcn/ui, Estado, ficha de prueba)
 drizzle/        migraciones SQL (generadas + escritas a mano: triggers y permisos)
 tests/          unit · integracion · db-real · e2e · fixtures
-scripts/        setup, db-migrate, db-reset, db-roles, seed, worker
+scripts/        setup, inicio, db-migrate, db-reset, db-roles, seed, admin-inicial, cuentas-iniciales
 ```
 
 Capas impuestas por ESLint: `dominio` no importa de `db` ni de `server`; `server` importa de `dominio` y `db`; las
@@ -168,21 +160,25 @@ páginas y componentes no acceden a la base (usan `server/politicas` y `server/a
   vigente. Nunca hay «el último gana» en silencio.
 - **Dos colores de estado** (amarillo y verde, siempre con icono y palabra). Rojo solo para errores de validación.
 - **Aislamiento entre agencias** en la capa de políticas del servidor (no con RLS): una ficha ajena responde 404.
-- **Enlace mágico** con confirmación por botón (POST): abrir el enlace no consume el token.
+- **Acceso por usuario y contraseña, sin correo.** Better Auth (contraseña con scrypt). Sin registro abierto: las crea un
+  administrador con una contraseña temporal que se muestra **una sola vez** (en la base solo queda su hash). Mensaje de
+  error único (no revela si el usuario existe); 10 intentos fallidos por usuario y 100 por IP cada 15 min; entrar bien no
+  gasta el cupo (varias personas comparten la cuenta de un área). «Restablecer contraseña» cierra las sesiones de esa cuenta.
 
 ## Producción (resumen)
 
 Vercel + Neon. La aplicación usa `DATABASE_URL` con el rol `app` (no dueño); las migraciones corren en CI con
 `DATABASE_URL_UNPOOLED` como `migrador` (`npm run db:migrate`). Variables: ver `.env.example`. Antes de usar datos
-reales hacen falta las aprobaciones de TI, el dominio y remitente autenticado del correo y el logo oficial.
+reales hacen falta las aprobaciones de TI y el logo oficial. Pasos detallados: `docs/DESPLIEGUE-VERCEL.md`.
 
 Al actualizar una base que ya existía (local o Neon), `npm run db:migrate` aplica solo lo pendiente. La migración
 0003 retira las preguntas y plantillas de descripciones mínimas (ahora son un campo de texto de la ficha): borra sus
 tablas y conserva el historial (`docs/DESVIACIONES.md`, Parte 8). La 0004 añade el tipo Montura. La 0005 pasa
 `usuario.area` al catálogo de cuatro áreas (Consumibles, Mantenimiento, Instrumentos, Marketing; «Insumos» pasa a
 Consumibles): el texto libre que no corresponda a ninguna queda vacío, y cada ficha existente toma como área responsable
-la de quien la creó. Después de migrar, revisa las áreas en Administración › Usuarios. Con PGlite local, con el
-servidor detenido.
+la de quien la creó. Después de migrar, revisa las áreas en Administración › Usuarios. La 0006 añade `usuario.username` (con lo que se entra)
+y la 0007 retira la cola de correo y las preferencias de aviso, que ya no existen. Con PGlite local, con el servidor
+detenido.
 
 ### Despliegue básico (gratis, sin CI ni roles separados)
 
@@ -212,12 +208,9 @@ despierta.
    |---|---|
    | `APP_URL` | la URL final, p. ej. `https://descripciones-minimas.vercel.app`. Se lee al compilar (orígenes de Server Actions) |
    | `BETTER_AUTH_SECRET` | 32+ caracteres aleatorios: `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
-   | `SMTP_URL` o `RESEND_API_KEY` | el correo del enlace de acceso; sin uno de los dos nadie puede entrar |
-   | `CORREO_REMITENTE` | la cuenta que envía, p. ej. `Descripciones mínimas <cuenta@empresa.com>` |
-   | `AVISOS_POR_CORREO` | vacío: los avisos quedan en la campana, sin cron |
+   | `ALMACEN` y `BLOB_READ_WRITE_TOKEN` | `blob` y el token que agrega Vercel al conectar el Blob |
 
-   Correo gratis: `SMTP_URL=smtps://cuenta%40gmail.com:<clave-de-aplicacion>@smtp.gmail.com:465` (Gmail con
-   verificación en dos pasos) o Resend (sin dominio propio solo entrega al correo dueño de la cuenta Resend).
+   No hace falta ningún proveedor de correo: no se envía correo en ninguna parte.
 5. **Base lista**, una vez y desde este equipo, con las URLs de Neon en la consola. Estos scripts exigen un
    `BETTER_AUTH_SECRET` aunque no lo usan: lo toman de `.env.local` (lo crea `npm run setup` o `npm run inicio`); en
    un clon nuevo sin ese archivo, defínelo en la misma consola con cualquier valor de 32+ caracteres.
@@ -226,16 +219,17 @@ despierta.
    $env:DATABASE_URL = '<url de Neon>'; $env:DATABASE_URL_UNPOOLED = '<url directa de Neon>'
    $env:NODE_ENV = 'production'   # sin esto, seed cargaría también los usuarios y fichas [DESARROLLO]
    # $env:BETTER_AUTH_SECRET = '<32+ caracteres>'   # solo si este equipo no tiene .env.local
-   npm run db:migrate                             # aplica todas las migraciones de drizzle/ (hoy 0000-0005)
+   npm run db:migrate                             # aplica todas las migraciones de drizzle/ (hoy 0000-0007)
    npm run seed                                   # en producción solo carga catálogos, restricciones y partidas
-   npm run admin:inicial -- tu.correo@empresa.com "Nombre Apellido"
-   npm run cuentas:iniciales -- ..\datos\cuentas.json   # cuentas por area y por empresa de aduana (formato: cuentas.ejemplo.json)
+   npm run admin:inicial -- tu.usuario "Nombre Apellido"      # muestra la contraseña temporal UNA vez
+   npm run cuentas:iniciales -- ..\datos\cuentas.json --salida ..\datos\claves-entregables.txt   # una cuenta por area y por agencia (formato: cuentas.ejemplo.json)
    ```
 
    Cierra esa consola al terminar: las variables solo viven ahí y `npm run inicio` volvería a usar Neon.
 
-6. **Desplegar** y entrar en `APP_URL/entrar` con ese correo. Los demás usuarios se crean desde
-   *Administración → Usuarios*. Si configuraste fotos, sube una a una ficha y ábrela una vez: así compruebas el
+6. **Desplegar** y entrar en `APP_URL/entrar` con ese usuario y contraseña. Las demás cuentas se crean desde
+   *Administración → Usuarios → Crear cuenta*, o ya quedaron creadas con `cuentas:iniciales`; las contraseñas se
+   entregan a mano y cada persona puede cambiar la suya en «Mi cuenta». Si configuraste fotos, sube una a una ficha y ábrela una vez: así compruebas el
    almacén privado de Blob.
 
 El modo «Ver como» (sin login) y las rutas `/api/dev/*` solo existen con `npm run inicio` en local.
