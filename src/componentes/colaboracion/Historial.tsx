@@ -14,7 +14,8 @@ import { cn } from '@/lib/utils';
 import type { EntradaHistorialFicha, HistorialFicha, ResumenCampo } from '@/server/politicas/colaboracion';
 import { PopoverEnPortal, useEnCliente } from './PopoverEnPortal';
 import { abrirActividad, avisarCambioDeFicha, EVENTO_FICHA_CAMBIADA, fechaHora, hace, leer } from './api';
-import { presente } from './presencia';
+import { EVENTO_PRESENCIA, presente } from './presencia';
+import { SONDEO } from './sondeo';
 import { useLectura } from './usar-lectura';
 
 // ---- Restaurar un valor (siempre con motivo) ----------------------------------------------------------------
@@ -200,6 +201,8 @@ class AlmacenResumen {
   private ultimaCarga = 0;
   private enCurso = false;
   private alCambiarFicha = () => void this.cargar();
+  /** Al volver tras una ausencia el sondeo estaba detenido: se lee en el acto. */
+  private alVolver = () => void this.cargar();
 
   constructor(private readonly referenciaId: string) {}
 
@@ -214,8 +217,9 @@ class AlmacenResumen {
       if (!this.estado.cargado || Date.now() - this.ultimaCarga > 15_000) void this.cargar();
       this.temporizador = setInterval(() => {
         if (presente()) void this.cargar();
-      }, 20_000);
+      }, SONDEO.historial);
       window.addEventListener(EVENTO_FICHA_CAMBIADA, this.alCambiarFicha);
+      window.addEventListener(EVENTO_PRESENCIA, this.alVolver);
     }
     return () => {
       this.suscriptores.delete(cb);
@@ -223,6 +227,7 @@ class AlmacenResumen {
         if (this.temporizador) clearInterval(this.temporizador);
         this.temporizador = null;
         window.removeEventListener(EVENTO_FICHA_CAMBIADA, this.alCambiarFicha);
+        window.removeEventListener(EVENTO_PRESENCIA, this.alVolver);
         // Se conserva unos segundos: un remontaje inmediato (cambio de seccion, modo estricto) no vuelve a leer.
         this.baja = setTimeout(() => almacenes.delete(this.referenciaId), 8000);
       }

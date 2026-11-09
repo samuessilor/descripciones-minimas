@@ -3,7 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
 import { Pestanas } from '@/componentes/ui/pestanas';
+import { EVENTO_AVISOS_NUEVOS } from './api';
 import { EVENTO_PRESENCIA, presente } from './presencia';
+import { SONDEO } from './sondeo';
 
 /**
  * Pestañas del inicio: «Para mí · Esperando a otros · Recientes» (F7). El contenido de cada una llega ya
@@ -26,18 +28,26 @@ export function BandejaTabs({
   const router = useRouter();
 
   useEffect(() => {
+    // Al volver a la pestana con un aviso nuevo llegan DOS motivos a la vez (presencia y campana): un solo render.
+    let ultimo = 0;
     const refrescar = () => {
-      if (document.visibilityState === 'visible') router.refresh();
+      if (document.visibilityState !== 'visible' || Date.now() - ultimo < 3000) return;
+      ultimo = Date.now();
+      router.refresh();
     };
+    // Refrescar Inicio es volver a renderizar la pagina entera en el servidor (lo mas caro de la app): solo cuando hay
+    // motivo (la campana vio un aviso nuevo, o se vuelve a la pestana) y, de respaldo, cada varios minutos.
     const t = setInterval(() => {
       if (presente()) router.refresh();
-    }, 45_000);
+    }, SONDEO.bandeja);
     document.addEventListener('visibilitychange', refrescar);
     window.addEventListener(EVENTO_PRESENCIA, refrescar);
+    window.addEventListener(EVENTO_AVISOS_NUEVOS, refrescar);
     return () => {
       clearInterval(t);
       document.removeEventListener('visibilitychange', refrescar);
       window.removeEventListener(EVENTO_PRESENCIA, refrescar);
+      window.removeEventListener(EVENTO_AVISOS_NUEVOS, refrescar);
     };
   }, [router]);
 

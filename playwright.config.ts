@@ -33,6 +33,7 @@ export default defineConfig({
         url: `${url}/entrar`,
         reuseExistingServer: true,
         timeout: 120_000,
-        env: { APP_URL: url },
+        // Los sondeos de la plataforma van a la mitad de tiempo para no esperar en las pruebas (ver sondeo.ts).
+        env: { APP_URL: url, NEXT_PUBLIC_SONDEO_FACTOR: '0.5' },
       },
 });

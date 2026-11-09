@@ -23,7 +23,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         'content-length': String(f.bytes.length),
         'content-disposition': `inline; filename="${nombreSeguro}"`,
         'x-content-type-options': 'nosniff',
-        'cache-control': 'private, max-age=300',
+        // El contenido de un id no cambia nunca: el navegador la guarda una hora (menos invocaciones y menos lecturas del
+        // Blob, que en el plan gratuito tiene tope). El permiso se comprueba en cada peticion que llega al servidor, asi que
+        // una foto retirada o un acceso vencido siguen viendose, en un navegador que ya la tenia, a lo sumo esa hora.
+        'cache-control': 'private, max-age=3600',
         'content-security-policy': "default-src 'none'; img-src 'self'; sandbox",
       },
     });

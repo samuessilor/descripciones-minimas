@@ -4,9 +4,10 @@
  * cobra horas de computo) y cuenta como actividad de la sesion, asi que la regla de 8 h de inactividad nunca vencia.
  *
  * Se considera presente si la pestana esta visible y hubo una interaccion (puntero, teclado, rueda) en los ultimos
- * 10 min. Al volver tras mas tiempo se emite `EVENTO_PRESENCIA`, para que los sondeos lean en el acto.
+ * 3 min. Al volver tras mas tiempo se emite `EVENTO_PRESENCIA`, para que los sondeos lean en el acto: dejar de sondear
+ * pronto a quien solo mira la pantalla no le quita nada y ahorra CPU del servidor.
  */
-export const INACTIVO_MS = 10 * 60_000;
+export const INACTIVO_MS = 3 * 60_000;
 export const EVENTO_PRESENCIA = 'presencia-vuelve';
 
 let ultima = Date.now();

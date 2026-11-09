@@ -1,7 +1,7 @@
 /**
  * Presencia y sondeo (D-17, 12.4): sin websockets (Vercel). Al enfocar un campo el cliente envia un
- * latido cada 15 s (`edicion_activa.hasta = ahora + 45 s`); la ficha abierta consulta `estadoFicha`
- * cada ~15 s y, si cambio `version`, refresca los campos modificados. Es un AVISO, no un candado:
+ * latido cada ~20 s (`edicion_activa.hasta = ahora + 45 s`); la ficha abierta consulta `estadoFicha` (intervalos en sondeo.ts)
+ * cada ~30 s y, si cambio `version`, refresca los campos modificados. Es un AVISO, no un candado:
  * el conflicto real lo cubre `versionEsperada`.
  */
 import { and, asc, desc, eq, gt, inArray, lt, ne } from 'drizzle-orm';

@@ -4,6 +4,7 @@ import { Copy, EllipsisVertical, Lock, Pencil, TriangleAlert, CircleCheck, WifiO
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { EVENTO_FICHA_CAMBIADA } from '@/componentes/colaboracion/api';
 import { EVENTO_PRESENCIA, presente } from '@/componentes/colaboracion/presencia';
+import { SONDEO } from '@/componentes/colaboracion/sondeo';
 import { Estado } from '@/componentes/Estado';
 import { PanelActividad } from '@/componentes/slots/PanelActividad';
 import { BotonEnviarA } from '@/componentes/slots/BotonEnviarA';
@@ -42,7 +43,7 @@ import { pedirEstado, pedirFicha } from './api-cliente';
 import { FotosFicha } from './FotosFicha';
 import { SiguientePaso } from './SiguientePaso';
 
-const SONDEO_MS = 15_000;
+const SONDEO_MS = SONDEO.estadoFicha;
 
 /** Campos que la ficha no pinta como campo de formulario (van en la cabecera, en su propio bloque o los calcula el sistema). */
 const NO_ES_CAMPO: ReadonlySet<string> = new Set(['calculado', 'codigo']);
@@ -141,6 +142,8 @@ export function FichaFormulario({
     const t = setInterval(() => {
       if (presente()) void tick();
     }, SONDEO_MS);
+    // Un primer vistazo a los pocos segundos: sin el, quien abre la ficha no veria quien esta escribiendo hasta el primer tic.
+    const primero = setTimeout(() => void tick(), 3000);
     const alVolver = () => {
       if (document.visibilityState === 'visible') void tick();
     };
@@ -149,6 +152,7 @@ export function FichaFormulario({
     return () => {
       vivo = false;
       clearInterval(t);
+      clearTimeout(primero);
       document.removeEventListener('visibilitychange', alVolver);
       window.removeEventListener(EVENTO_PRESENCIA, alVolver);
       if (temporizadorRefresco.current) clearTimeout(temporizadorRefresco.current);

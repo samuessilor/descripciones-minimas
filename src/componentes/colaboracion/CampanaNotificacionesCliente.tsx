@@ -11,16 +11,19 @@ import { Popover, useCerrarPopover } from '@/componentes/ui/popover';
 import { tituloSinMarca } from '@/dominio/colaboracion';
 import { cn } from '@/lib/utils';
 import type { ListaNotificaciones, NotificacionVista } from '@/server/politicas/colaboracion';
-import { hace, leer } from './api';
+import { EVENTO_AVISOS_LEIDOS, EVENTO_AVISOS_NUEVOS, hace, leerUnaVez, MARGEN_ORDEN_MS } from './api';
 import { IconoAviso } from './piezas';
 import { EVENTO_PRESENCIA, presente } from './presencia';
+import { SONDEO } from './sondeo';
 
-const SONDEO_MS = 30_000;
+const SONDEO_MS = SONDEO.campana;
 
 /**
  * Campana de la barra superior: contador de no leidas, desplegable con las ultimas, marcar leidas y
- * enlace a la pagina completa. Se actualiza por sondeo (cada 30 s mientras la pestana esta visible y en uso, y al
- * volver a ella): sin websockets, que Vercel no sostiene. Sobre fondo OSCURO (barra azul).
+ * enlace a la pagina completa. Se actualiza por sondeo (cada minuto mientras la pestana esta visible y en uso, y al
+ * volver a ella): sin websockets, que Vercel no sostiene. Si hay mas de una campana en pantalla (barra de escritorio y de
+ * movil) comparten la lectura. Cuando llegan avisos nuevos avisa a Inicio para que renueve sus listas. Sobre fondo
+ * OSCURO (barra azul).
  */
 export function CampanaCliente() {
   const [datos, setDatos] = useState<ListaNotificaciones | null>(null);
@@ -29,8 +32,9 @@ export function CampanaCliente() {
   const [, setLatido] = useState(0);
   const previo = useRef<number | null>(null);
 
-  const cargar = useCallback(async () => {
-    const r = await leer<ListaNotificaciones>('/api/colaboracion/notificaciones?limite=8');
+  const cargar = useCallback(async (reloj = false) => {
+    const url = '/api/colaboracion/notificaciones?limite=8';
+    const r = reloj ? await leerUnaVez<ListaNotificaciones>(url, Math.round(SONDEO_MS * 0.7)) : await leerUnaVez<ListaNotificaciones>(url, 500, Date.now() - MARGEN_ORDEN_MS);
     if (!r.ok) {
       if (r.mensaje) setError(r.mensaje);
       return;
@@ -42,6 +46,7 @@ export function CampanaCliente() {
     if (antes !== null && r.data.noLeidas > antes) {
       const nuevos = r.data.noLeidas - antes;
       setAnuncio(nuevos === 1 ? 'Tienes un aviso nuevo.' : `Tienes ${nuevos} avisos nuevos.`);
+      window.dispatchEvent(new Event(EVENTO_AVISOS_NUEVOS));
     }
     previo.current = r.data.noLeidas;
   }, []);
@@ -50,7 +55,7 @@ export function CampanaCliente() {
     // La primera lectura corre fuera del cuerpo del efecto para no encadenar renders sincronos.
     const inicio = setTimeout(() => void cargar(), 0);
     const cadaVez = setInterval(() => {
-      if (presente()) void cargar();
+      if (presente()) void cargar(true);
     }, SONDEO_MS);
     const alVolver = () => {
       if (document.visibilityState === 'visible') void cargar();
@@ -58,12 +63,17 @@ export function CampanaCliente() {
     document.addEventListener('visibilitychange', alVolver);
     window.addEventListener('focus', alVolver);
     window.addEventListener(EVENTO_PRESENCIA, alVolver);
+    // Marcar avisos como leidos en la pagina de notificaciones: recontar ya, o `previo` quedaria alto y un aviso nuevo
+    // posterior no se anunciaria.
+    const alLeer = () => void cargar();
+    window.addEventListener(EVENTO_AVISOS_LEIDOS, alLeer);
     return () => {
       clearTimeout(inicio);
       clearInterval(cadaVez);
       document.removeEventListener('visibilitychange', alVolver);
       window.removeEventListener('focus', alVolver);
       window.removeEventListener(EVENTO_PRESENCIA, alVolver);
+      window.removeEventListener(EVENTO_AVISOS_LEIDOS, alLeer);
     };
   }, [cargar]);
 

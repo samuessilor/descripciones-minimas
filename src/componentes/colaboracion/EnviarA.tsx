@@ -20,6 +20,7 @@ import { normalizarTexto } from '@/dominio/normalizacion';
 import type { ResultadoEnviarA, ResumenDestinatario } from '@/server/acciones/asignaciones';
 import type { CandidatoDestino, ContextoEnvio } from '@/server/politicas/colaboracion';
 import { abrirActividad, avisarCambioDeFicha } from './api';
+import { SONDEO } from './sondeo';
 import { useLectura } from './usar-lectura';
 
 const MAX_MENSAJE = 500;
@@ -566,7 +567,7 @@ export function BotonEnviarACliente({ referenciaId }: { referenciaId: string }) 
   /** Asignacion ya marcada como lista: el boton se oculta en el acto, sin esperar la recarga del contexto. */
   const [marcadaId, setMarcadaId] = useState<string | null>(null);
   const raiz = useRef<HTMLDivElement>(null);
-  const contexto = useLectura<ContextoEnvio>(`/api/colaboracion/ficha/${referenciaId}/contexto`, { referenciaId, intervaloMs: 30_000 });
+  const contexto = useLectura<ContextoEnvio>(`/api/colaboracion/ficha/${referenciaId}/contexto`, { referenciaId, intervaloMs: SONDEO.contexto });
   const datos = contexto.estado.tipo === 'ok' ? contexto.estado.data : null;
 
   // Escucha el pedido de abrir el dialogo desde otros lados (p. ej. un atajo de la ficha). La ficha monta este boton

@@ -2,6 +2,8 @@
 
 import { CircleAlert, Lock, LoaderCircle, Check, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { presente } from '@/componentes/colaboracion/presencia';
+import { LATIDO_EDICION_MS } from '@/componentes/colaboracion/sondeo';
 import { nombreVisible } from '@/componentes/ui/avatar';
 import { Boton } from '@/componentes/ui/button';
 import { Combobox } from '@/componentes/ui/combobox';
@@ -69,7 +71,7 @@ export interface PropsCampo {
   alGuardar: () => void;
 }
 
-const LATIDO_MS = 15_000;
+const LATIDO_MS = LATIDO_EDICION_MS;
 const ESPERAS_REINTENTO = [3_000, 6_000, 12_000, 20_000, 30_000];
 
 const claveBorrador = (referenciaId: string, campo: string) => `dm-borrador:${referenciaId}:${campo}`;
@@ -346,6 +348,8 @@ export function CampoFicha(props: PropsCampo) {
         void terminarLatido(referenciaId, def.clave).catch(() => undefined);
         return;
       }
+      // Una ficha desatendida (PC bloqueado con el cursor en el campo) no avisa ni mantiene viva la sesion: el aviso vence solo.
+      if (!presente()) return;
       void enviarLatido(referenciaId, def.clave).catch(() => undefined);
     }, LATIDO_MS);
   }

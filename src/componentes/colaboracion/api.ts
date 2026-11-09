@@ -29,7 +29,39 @@ export async function leer<T>(url: string, senal?: AbortSignal): Promise<Respues
   }
 }
 
+const recientes = new Map<string, { t: number; p: Promise<RespuestaLectura<unknown>> }>();
+
+/**
+ * Como `leer`, pero si OTRO componente pidio la misma URL hace menos de `ventanaMs`, reutiliza esa respuesta en vez de
+ * pedirla otra vez. Hay pantallas que montan el mismo componente varias veces (el boton «Enviar a…» va tres veces en la
+ * ficha) y cada copia sondeaba por su cuenta: tres peticiones iguales por tic. Las lecturas de reloj usan una ventana
+ * larga. Las que vienen de una accion propia (guardar, enviar, comentar) pasan `desde` (el instante de la orden): solo
+ * reutilizan una respuesta cuya peticion SALIO despues de la orden, porque una anterior pudo leer antes de la escritura.
+ */
+export function leerUnaVez<T>(url: string, ventanaMs: number, desde = 0): Promise<RespuestaLectura<T>> {
+  const ahora = Date.now();
+  const previa = recientes.get(url);
+  if (previa && ahora - previa.t < ventanaMs && previa.t >= desde) return previa.p as Promise<RespuestaLectura<T>>;
+  if (recientes.size > 40) for (const [k, v] of recientes) if (ahora - v.t > 120_000) recientes.delete(k);
+  const p = leer<T>(url);
+  recientes.set(url, { t: ahora, p });
+  return p;
+}
+
 // ---- Eventos entre componentes (la ficha los escucha para refrescarse) ------------------------------------
+
+/** La campana vio avisos nuevos: Inicio (Para mi / Esperando) vuelve a pedir sus listas al servidor. */
+export const EVENTO_AVISOS_NUEVOS = 'dm:avisos-nuevos';
+/** Se marcaron avisos como leidos fuera de la campana (pagina de notificaciones): la campana vuelve a contar. */
+export const EVENTO_AVISOS_LEIDOS = 'dm:avisos-leidos';
+
+export function avisarAvisosLeidos(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(EVENTO_AVISOS_LEIDOS));
+}
+
+/** Margen para que varias copias que reciben el mismo evento a la vez compartan una sola lectura. */
+export const MARGEN_ORDEN_MS = 20;
 
 /** Algo cambio en la ficha (envio, restauracion, comentario): quien la muestre puede volver a leerla. */
 export const EVENTO_FICHA_CAMBIADA = 'dm:ficha-cambiada';

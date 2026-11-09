@@ -217,10 +217,10 @@ despierta.
 
    ```powershell
    $env:DATABASE_URL = '<url de Neon>'; $env:DATABASE_URL_UNPOOLED = '<url directa de Neon>'
-   $env:NODE_ENV = 'production'   # sin esto, seed cargaría también los usuarios y fichas [DESARROLLO]
+   # No definas NODE_ENV=production aquí: en ese modo los scripts exigen también el token de Blob, que se crea después.
    # $env:BETTER_AUTH_SECRET = '<32+ caracteres>'   # solo si este equipo no tiene .env.local
    npm run db:migrate                             # aplica todas las migraciones de drizzle/ (hoy 0000-0009)
-   npm run seed                                   # en producción solo carga catálogos, restricciones y partidas
+   npm run seed -- --solo-maestros                # solo catálogos, restricciones y partidas (sin usuarios ni fichas [DESARROLLO])
    npm run cuentas:iniciales -- ..\datos\cuentas.json --salida ..\datos\claves-entregables.txt   # administrador, una cuenta por area y por agencia (formato: cuentas.ejemplo.json)
    # Contraseña inicial: la de cada cuenta en el archivo (o, sin ella, la convención de docs/DESPLIEGUE-VERCEL.md); se cambia al primer ingreso.
    # (Solo el administrador, con contraseña aleatoria: npm run admin:inicial -- usuario "Nombre Apellido")

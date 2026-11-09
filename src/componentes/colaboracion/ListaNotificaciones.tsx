@@ -10,7 +10,7 @@ import { useAvisos } from '@/componentes/ui/toast';
 import { tituloSinMarca } from '@/dominio/colaboracion';
 import { cn } from '@/lib/utils';
 import type { NotificacionVista } from '@/server/politicas/colaboracion';
-import { fechaHora, hace } from './api';
+import { avisarAvisosLeidos, fechaHora, hace } from './api';
 import { IconoAviso } from './piezas';
 
 const ETIQUETA_TIPO: Record<string, string> = {
@@ -34,7 +34,7 @@ export function FilaNotificacion({ n }: { n: NotificacionVista }) {
         onClick={() => {
           if (!leida) {
             setLeida(true);
-            void marcarNotificacionLeidaAccion({ notificacionId: n.id });
+            void marcarNotificacionLeidaAccion({ notificacionId: n.id }).then(avisarAvisosLeidos);
           }
         }}
         className={cn(
@@ -84,6 +84,7 @@ export function BotonMarcarTodas({ hayNoLeidas }: { hayNoLeidas: boolean }) {
         setCargando(false);
         if (r.ok) {
           avisar({ tipo: 'exito', titulo: r.data.marcadas === 1 ? 'Marcaste 1 aviso como leído' : `Marcaste ${r.data.marcadas} avisos como leídos` });
+          avisarAvisosLeidos();
           router.refresh();
         } else {
           avisar({ tipo: 'error', titulo: 'No pudimos marcar los avisos', descripcion: r.mensaje });

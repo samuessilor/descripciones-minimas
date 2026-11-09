@@ -4,6 +4,7 @@ import { Check, Landmark } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { avisarCambioDeFicha, EVENTO_FICHA_CAMBIADA } from '@/componentes/colaboracion/api';
 import { EVENTO_PRESENCIA, presente } from '@/componentes/colaboracion/presencia';
+import { SONDEO } from '@/componentes/colaboracion/sondeo';
 import { pedirVistaAduana } from '@/componentes/ficha/api-cliente';
 import { Estado } from '@/componentes/Estado';
 import { Aviso } from '@/componentes/ui/aviso';
@@ -18,7 +19,7 @@ import { BloquePartida } from './BloquePartida';
 import { BloqueRestricciones } from './BloqueRestricciones';
 import { diligenciado, sinTexto } from './comun';
 
-const SONDEO_MS = 20_000;
+const SONDEO_MS = SONDEO.aduana;
 
 /**
  * ZONA DE LA ADUANA: el cuarto bloque de la ficha. En el formato de la agencia lo amarillo es lo que completa la

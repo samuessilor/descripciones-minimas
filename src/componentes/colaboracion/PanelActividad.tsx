@@ -28,6 +28,7 @@ import {
 } from './api';
 import { DialogoRestaurar, LineaDeTiempo, type ObjetivoRestaurar } from './Historial';
 import { InsigniaPedido } from './piezas';
+import { SONDEO } from './sondeo';
 import { useLectura } from './usar-lectura';
 
 type IdPestana = 'historial' | 'comentarios' | 'envios';
@@ -103,7 +104,7 @@ function ContenidoPanel({
   campo: string | null;
   onCampo: (c: string | null) => void;
 }) {
-  const envios = useLectura<SeguimientoAsignacion[]>(`/api/colaboracion/ficha/${referenciaId}/seguimiento`, { referenciaId, intervaloMs: 15_000 });
+  const envios = useLectura<SeguimientoAsignacion[]>(`/api/colaboracion/ficha/${referenciaId}/seguimiento`, { referenciaId, intervaloMs: SONDEO.seguimiento });
   const activas = envios.estado.tipo === 'ok' ? envios.estado.data.filter((s) => s.activa).length : undefined;
 
   return (
@@ -216,7 +217,7 @@ function PestanaHistorial({ referenciaId, campo, onCampo }: { referenciaId: stri
 
 function PestanaComentarios({ referenciaId, campo, onCampo }: { referenciaId: string; campo: string | null; onCampo: (c: string | null) => void }) {
   const url = `/api/colaboracion/ficha/${referenciaId}/comentarios${campo ? `?campo=${encodeURIComponent(campo)}` : ''}`;
-  const lectura = useLectura<ComentarioVista[]>(url, { referenciaId, intervaloMs: 20_000 });
+  const lectura = useLectura<ComentarioVista[]>(url, { referenciaId, intervaloMs: SONDEO.comentarios });
   const contexto = useLectura<ContextoEnvio>(`/api/colaboracion/ficha/${referenciaId}/contexto`);
   const fin = useRef<HTMLDivElement | null>(null);
   const comentarios = lectura.estado.tipo === 'ok' ? lectura.estado.data : [];
