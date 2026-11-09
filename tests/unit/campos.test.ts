@@ -165,7 +165,7 @@ describe('catalogo de campos contra la matriz del SPEC 7 con los cambios de la r
 
   it('las etiquetas de nombre_producto y descripcion_factura se intercambian sin cambiar las claves (reunion 2026-11-09)', () => {
     const titulo = getCampo('nombre_producto')!;
-    expect(titulo).toMatchObject({ etiqueta: 'Descripción según factura', maximo: 500, tipoDato: 'texto' });
+    expect(titulo).toMatchObject({ etiqueta: 'Descripción según factura', maximo: 500, tipoDato: 'texto_largo' });
     expect(titulo.ayuda).toMatch(/FILTRO/);
     const comercial = getCampo('descripcion_factura')!;
     expect(comercial).toMatchObject({ etiqueta: 'Nombre comercial', seccion: 'producto' });

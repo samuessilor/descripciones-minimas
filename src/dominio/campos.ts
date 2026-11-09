@@ -123,7 +123,7 @@ export const CAMPOS: readonly CampoDef[] = [
   // app) y la de `descripcion_factura` es «Nombre comercial». Las claves guardadas no cambian.
   def({
     clave: 'nombre_producto', etiqueta: 'Descripción según factura', seccion: 'producto', grupo: 'C', fila: 2, confianza: 'F',
-    tipoDato: 'texto', reglas: TODOS_O, maximo: 500, ayuda: 'Ej.: FILTRO ABSOLUTO -AIRE NUEVO',
+    tipoDato: 'texto_largo', reglas: TODOS_O, maximo: 500, ayuda: 'Ej.: FILTRO ABSOLUTO -AIRE NUEVO',
   }),
   def({
     clave: 'descripcion_factura', etiqueta: 'Nombre comercial', seccion: 'producto', grupo: 'C', fila: 6,

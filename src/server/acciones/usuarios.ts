@@ -3,9 +3,9 @@
  * revocacion inmediata de sesiones, cambiar rol u organizacion. SIN registro abierto: entra quien un admin creo. La
  * regla rol x tipo de organizacion (D-28) se valida aqui (politicas) ademas de la interfaz y de la base (CHECK + FK).
  */
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { account, asignacion, organizacion, usuario } from '@/db/esquema';
+import { account, asignacion, notificacion, organizacion, usuario } from '@/db/esquema';
 import type { Tx } from '@/db/tipos';
 import { exigeArea, MENSAJE_AREA_OBLIGATORIA } from '@/dominio/areas';
 import { correoSinCorreo, normalizarUsuario, USUARIO_AYUDA, validarUsuario } from '@/dominio/credenciales';
@@ -275,6 +275,11 @@ export async function restablecerClave(ctx: Contexto, entrada: unknown): Promise
     // Ya no se obliga a cambiarla; se apaga el indicador por si la cuenta lo traia activo de antes de esta politica.
     await tx.update(usuario).set({ debeCambiarClave: false, actualizadoEn: ahora }).where(eq(usuario.id, u.id));
     const sesionesCerradas = await revocarSesionesDeUsuario(tx, u.id);
+    // Si la cuenta estaba pendiente de entrega, el aviso de «cuenta creada» queda resuelto para quien lo recibio.
+    await tx
+      .update(notificacion)
+      .set({ leidaEn: ahora })
+      .where(and(eq(notificacion.tipo, 'cuenta_creada'), eq(notificacion.cuentaId, u.id), isNull(notificacion.leidaEn)));
     await auditar(tx, {
       usuarioId: ctx.actor.usuarioId,
       accion: 'restablecer_clave',

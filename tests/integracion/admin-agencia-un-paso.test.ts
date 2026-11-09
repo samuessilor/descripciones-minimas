@@ -177,8 +177,11 @@ describe('crearla la supervisora: sin clave, pendiente de entrega y aviso al adm
     expect(await codigoDe(restablecerClave(e.ctx(angie), { usuarioId: r.cuentaId }))).toBe('SIN_PERMISO');
     expect(await credencialesDe(r.cuentaId)).toHaveLength(0);
 
+    expect((await avisosCuenta(e.admin.usuarioId)).filter((a) => a.cuentaId === r.cuentaId && a.leidaEn === null).length).toBeGreaterThan(0);
     const entrega = await restablecerClave(e.ctx(e.admin), { usuarioId: r.cuentaId });
     expect(await credencialesDe(r.cuentaId)).toHaveLength(1);
+    // Entregada la clave, el aviso de «cuenta creada» queda leido para quien lo recibio.
+    expect((await avisosCuenta(e.admin.usuarioId)).filter((a) => a.cuentaId === r.cuentaId && a.leidaEn === null)).toHaveLength(0);
     await e.db.delete(limiteTasa);
     expect((await iniciarSesion(deps, { usuario: r.usuario, clave: entrega.claveTemporal, headers: new Headers() })).ok).toBe(true);
     expect((await listarUsuariosAdmin(e.db, e.admin, { organizacionId: r.organizacionId }))[0]?.sinClave).toBe(false);

@@ -411,7 +411,7 @@ export function BuscadorLupaCliente({ atajos, puedeCrear }: { atajos: boolean; p
               Cerrar
             </Boton>
           </div>
-          <div className="min-h-0 flex-1 overflow-auto">{[...limpio].length >= MIN ? contenido : <p className="px-1 text-sm text-azul-200">Escribe al menos 2 letras del código o del nombre.</p>}</div>
+          <div className="min-h-0 flex-1 overflow-auto">{[...limpio].length >= MIN ? contenido : <p className="px-1 text-sm text-azul-200">Escribe al menos 2 letras del código o de la descripción.</p>}</div>
         </div>
       ) : null}
       <span className="sr-solo" role="status" aria-live="polite">

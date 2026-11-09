@@ -20,8 +20,8 @@ export const auditoria = pgTable(
     index('auditoria_entidad_idx').on(t.entidad, t.entidadId),
     // El visor ordena por id descendente y pagina por cursor; cada filtro tiene su indice con el id al final.
     index('auditoria_creado_en_idx').on(t.creadoEn),
-    index('auditoria_accion_idx').on(t.accion, t.id.desc()),
-    index('auditoria_usuario_idx').on(t.usuarioId, t.id.desc()),
+    index('auditoria_accion_idx').on(t.accion, t.id),
+    index('auditoria_usuario_idx').on(t.usuarioId, t.id),
     // Envios, recordatorios y fotos dejan la ficha en el detalle: el filtro por referencia lo busca ahi.
     index('auditoria_ficha_idx')
       .on(sql`(${t.detalle}->>'referenciaId')`)

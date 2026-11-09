@@ -75,6 +75,7 @@ const revisar = (c: Cuenta, donde: string) => {
 };
 (datos.administradores ?? []).forEach((c, i) => revisar(c, `administradores[${i}]`));
 (datos.lectores ?? []).forEach((c, i) => revisar(c, `lectores[${i}]`));
+(datos.supervisores ?? []).forEach((c, i) => revisar(c, `supervisores[${i}]`));
 (datos.areas ?? []).forEach((c, i) => {
   revisar(c, `areas[${i}]`);
   if (!esArea(c.area)) errores.push(`areas[${i}]: area «${c.area}» no es Consumibles, Mantenimiento, Instrumentos ni Marketing`);
