@@ -62,13 +62,14 @@ existe. Si el servidor corre en otro puerto, `APP_URL` debe coincidir con él.
 ### Entrar en local: cuentas de desarrollo
 
 La base local es **PGlite** (Postgres embebido en `.data/pglite`) y el almacén de archivos es local. No hay registro
-abierto: solo entra quien un administrador creó (`/admin/usuarios`). En desarrollo ya están estas diez cuentas (usuario
+abierto: solo entra quien un administrador creó (`/admin/usuarios`). En desarrollo ya están estas once cuentas (usuario
 = la parte antes de la `@`; todas con el correo `@desarrollo.invalid` y el nombre marcado `[DESARROLLO]`), **todas con la
 contraseña de ejemplo `desarrollo-2026`**:
 
 | Usuario | Rol | Organización | Para qué sirve |
 |---|---|---|---|
 | `admin` | Administradora | EssilorLuxottica | crear cuentas, restablecer contraseñas, catálogos (listas, restricciones, partidas), auditoría |
+| `supervisor` | Supervisora general | EssilorLuxottica | todo lo operativo, más catálogos, auditoría y organizaciones; ve los usuarios pero no gestiona cuentas ni parámetros |
 | `solicitante` | Solicitante (Consumibles) | EssilorLuxottica | crear y llenar fichas, enviarlas |
 | `solicitante2` | Solicitante (Mantenimiento) | EssilorLuxottica | idem; segunda persona para ver historial y conflictos |
 | `lector` | Lector | EssilorLuxottica | solo consulta y descarga el Excel |
@@ -77,7 +78,7 @@ contraseña de ejemplo `desarrollo-2026`**:
 | `consumibles`, `mantenimiento`, `instrumentos`, `marketing` | Solicitante (cuenta general de cada área) | EssilorLuxottica | ve en «Para mí» lo de su área aunque nadie se lo envíe y recibe las solicitudes de la aduana |
 
 Con `npm run inicio` no se escribe nada: entras como administradora y cambias de cuenta desde el menú de arriba a la
-derecha («Ver como», con las diez cuentas). Para probar el acceso real, `CON_LOGIN=1 npm run inicio` pide usuario y
+derecha («Ver como», con las once cuentas). Para probar el acceso real, `CON_LOGIN=1 npm run inicio` pide usuario y
 contraseña como en producción. La contraseña de ejemplo no existe en producción: allí cada cuenta tiene la suya, generada.
 
 ### Datos de ejemplo

@@ -1,11 +1,11 @@
 /**
- * `GET /api/admin/auditoria/exportar`: la auditoria filtrada, en CSV (13.6). Solo `admin`. Neutraliza las celdas que
+ * `GET /api/admin/auditoria/exportar`: la auditoria filtrada, en CSV (13.6). Solo administrador y supervisora general. Neutraliza las celdas que
  * empiezan por `=`, `+`, `-`, `@` (13.4), tiene un tope de filas y deja constancia de la descarga en la propia
  * auditoria (quien, cuando, cuantas filas, con que filtros). Los filtros son los mismos de la pantalla.
  */
-import { puede } from '@/dominio/permisos';
 import { auditar } from '@/server/auditoria';
 import { ErrorAccion } from '@/server/acciones/resultado';
+import { exigir } from '@/server/politicas/exigir';
 import { aCsv } from '@/server/csv';
 import { respuestaDeError } from '@/server/http';
 import { limitarTasa } from '@/server/limite-tasa';
@@ -20,7 +20,7 @@ const REGLA_DESCARGA = { max: 10, ventanaMs: 3_600_000 } as const;
 export async function GET(request: Request): Promise<Response> {
   try {
     const ctx = await contextoDeAccion();
-    if (!puede(ctx.actor, 'administrar')) throw new ErrorAccion('SIN_PERMISO', 'No tienes permiso para descargar la auditoría.');
+    exigir(ctx.actor, 'supervisar');
 
     const lim = await limitarTasa(ctx.db, `exportar-auditoria:${ctx.actor.usuarioId}`, REGLA_DESCARGA);
     if (!lim.permitido) {

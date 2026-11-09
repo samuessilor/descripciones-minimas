@@ -2,6 +2,9 @@
   "administradores": [
     { "usuario": "administrador.samuel", "nombre": "Samuel Galeano", "clave": "<contraseña inicial de entrega>" }
   ],
+  "supervisores": [
+    { "usuario": "supervisora.nombre", "nombre": "Nombre de la supervisora general" }
+  ],
   "areas": [
     { "area": "Consumibles", "usuario": "consumibles.essilorluxottica", "nombre": "Área Consumibles", "encargado": "Nombre de quien la lleva (opcional)" },
     { "area": "Mantenimiento", "usuario": "mantenimiento.essilorluxottica", "nombre": "Área Mantenimiento" },

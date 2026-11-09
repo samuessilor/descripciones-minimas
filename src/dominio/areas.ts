@@ -32,7 +32,7 @@ export function nombreDeArea(area: string): string {
 
 /**
  * Toda cuenta interna con rol «solicitante» (la de un area o la de una persona del area) pertenece a UN area: de ahi salen
- * «Para mi», lo que se le envia y a quien le toca cada referencia. Administrador, lector y aduana pueden no tener area.
+ * «Para mi», lo que se le envia y a quien le toca cada referencia. Administrador, supervisora general, lector y aduana pueden no tener area.
  */
 export function exigeArea(rol: string, tipoOrganizacion: string): boolean {
   return rol === 'solicitante' && tipoOrganizacion === 'interna';

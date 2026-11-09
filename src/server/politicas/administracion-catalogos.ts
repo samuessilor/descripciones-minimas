@@ -7,7 +7,8 @@ import { catalogoItem, partidaArancelaria, referencia, restriccionPlantilla } fr
 import type { Ejecutor } from '@/db/tipos';
 import { listarPaises, nombrePais, PAIS_NO_SE_CONOCE } from '@/dominio/paises';
 import { normalizarTexto } from '@/dominio/normalizacion';
-import { escaparLike, exigirAdmin } from './administracion';
+import { escaparLike } from './administracion';
+import { exigir } from './exigir';
 import type { Actor } from './actor';
 
 /** Clave de la ficha donde se guarda cada lista (para contar usos). */
@@ -30,7 +31,7 @@ export async function listarItemsCatalogo(
   actor: Actor,
   catalogo: 'unidad_medida' | 'aspecto_fisico' | 'sugerencia_empaque',
 ): Promise<ItemCatalogoAdmin[]> {
-  exigirAdmin(actor);
+  exigir(actor, 'supervisar');
   const clave = CLAVE_FICHA[catalogo];
   const items = await ej
     .select()
@@ -57,7 +58,7 @@ export interface PaisAdmin {
  * no haya datos suficientes, empiezan Francia y China (NI!J). Nunca se inventa una lista.
  */
 export async function listarPaisesAdmin(ej: Ejecutor, actor: Actor): Promise<{ principales: PaisAdmin[]; todos: PaisAdmin[] }> {
-  exigirAdmin(actor);
+  exigir(actor, 'supervisar');
   const r = await ej.execute<{ codigo: string | null; n: number }>(
     sql`select ${referencia.datos} -> 'pais_origen' ->> 'v' as codigo, count(*)::int as n from ${referencia} group by 1`,
   );
@@ -82,7 +83,7 @@ export interface RestriccionAdmin {
 }
 
 export async function listarRestricciones(ej: Ejecutor, actor: Actor): Promise<RestriccionAdmin[]> {
-  exigirAdmin(actor);
+  exigir(actor, 'supervisar');
   return ej
     .select({
       id: restriccionPlantilla.id,
@@ -106,7 +107,7 @@ export interface PartidaAdmin {
 }
 
 export async function listarPartidas(ej: Ejecutor, actor: Actor, filtros: { q?: string | undefined } = {}): Promise<PartidaAdmin[]> {
-  exigirAdmin(actor);
+  exigir(actor, 'supervisar');
   const condiciones: SQL[] = [];
   const q = normalizarTexto(filtros.q ?? '');
   if (q) {
@@ -138,7 +139,7 @@ export interface OpcionesPartida {
 }
 
 export async function opcionesParaPartida(ej: Ejecutor, actor: Actor): Promise<OpcionesPartida> {
-  exigirAdmin(actor);
+  exigir(actor, 'supervisar');
   const restricciones = await ej
     .select({ id: restriccionPlantilla.id, codigo: restriccionPlantilla.codigo })
     .from(restriccionPlantilla)

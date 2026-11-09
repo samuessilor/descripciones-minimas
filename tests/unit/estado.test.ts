@@ -101,7 +101,7 @@ describe('cierre de la clasificacion (D-26): G1 y G6 duras, A1-A3 advertencias',
     }
   });
 
-  it('G6: solo aduana o admin sobre una ficha visible', () => {
+  it('G6: solo aduana, admin o supervisora sobre una ficha visible', () => {
     for (const rol of ['solicitante', 'lector'] as const) {
       const r = evaluarCierre({ ...ok, rol });
       expect(r.ok, rol).toBe(false);
@@ -109,6 +109,7 @@ describe('cierre de la clasificacion (D-26): G1 y G6 duras, A1-A3 advertencias',
     }
     const admin = evaluarCierre({ ...ok, rol: 'admin' });
     expect(admin.ok).toBe(true);
+    expect(evaluarCierre({ ...ok, rol: 'supervisor' }).ok).toBe(true);
     const noVisible = evaluarCierre({ ...ok, fichaVisible: false });
     expect(noVisible.ok).toBe(false);
   });

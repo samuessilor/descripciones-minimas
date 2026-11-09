@@ -5,7 +5,7 @@
  * estado: verde si y solo si CLASIFICADA; amarillo en cualquier otro (C-12, C-13). No hay tercer color.
  */
 import { esPartidaValida } from './partida';
-import type { Rol } from './permisos';
+import { esGestor, type Rol } from './permisos';
 
 export const ESTADOS_FICHA = ['BORRADOR', 'EN_GESTION', 'CLASIFICADA'] as const;
 export type EstadoFicha = (typeof ESTADOS_FICHA)[number];
@@ -114,10 +114,10 @@ export type ResultadoCierre =
 export function evaluarCierre(e: EntradaCierre): ResultadoCierre {
   const bloqueos: Aviso[] = [];
 
-  if (!(e.rol === 'aduana' || e.rol === 'admin') || !e.fichaVisible) {
+  if (!(e.rol === 'aduana' || esGestor(e.rol)) || !e.fichaVisible) {
     bloqueos.push({
       regla: 'G6',
-      mensaje: 'Solo la aduana o un administrador pueden cerrar la clasificación.',
+      mensaje: 'Solo la aduana, un administrador o la supervisora general pueden cerrar la clasificación.',
       detalle: [],
     });
   }

@@ -17,7 +17,7 @@ import { BandejaTabs } from '@/componentes/colaboracion/BandejaTabs';
 import { FilaEsperandoUI, FilaPendienteUI, FilaRecienteUI } from '@/componentes/colaboracion/FilasBandeja';
 import { nombreVisible } from '@/componentes/ui/avatar';
 import { plural, tiempoRelativo } from '@/dominio/colaboracion';
-import { puede } from '@/dominio/permisos';
+import { esGestor, puede } from '@/dominio/permisos';
 import { bandejaParaMiDe, esperandoDe, recientesDe, resumenInicioDe } from '@/server/politicas/colaboracion';
 import { parametrosDeFiltros } from '@/server/politicas/listado';
 import { exigirContexto } from '@/server/sesion';
@@ -58,7 +58,7 @@ export async function BandejaInicio() {
   const puedeCrear = puede(actor, 'crear_referencia');
   const masAntigua = pendientes[0];
   // Quien lleva el proceso y el admin ven las asignaciones abiertas de todo el equipo, no solo las que enviaron.
-  const veTodas = actor.rol === 'lector' || actor.rol === 'admin';
+  const veTodas = actor.rol === 'lector' || esGestor(actor.rol);
   // Una misma referencia enviada a dos personas son dos asignaciones, pero una sola referencia.
   const nReferenciasEsperando = new Set(esperando.map((f) => f.referenciaId)).size;
   const inicial = pendientes.length > 0 ? 'para-mi' : esperando.length > 0 ? 'esperando' : 'para-mi';

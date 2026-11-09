@@ -47,6 +47,11 @@ async function crearUsuario(db: Db, nombre: string, email: string, rol: Rol, org
   return a;
 }
 
+/** Supervisora general en la organizacion interna (a pedido: no entra en el escenario base para no alterar conteos). */
+export async function crearSupervisora(e: Escenario, nombre = 'Angie Supervisora', email = 'angie@prueba.invalid'): Promise<Actor> {
+  return crearUsuario(e.db, nombre, email, 'supervisor', e.orgInterna, 'interna');
+}
+
 export async function nuevoEscenario(): Promise<Escenario> {
   const c = await nuevaBd();
   const db = c.db;

@@ -31,7 +31,7 @@ import { diasEnGestion } from '@/dominio/dias-gestion';
 import { colorFicha, type ColorFicha, type EstadoFicha } from '@/dominio/estado';
 import { textoDeValor } from '@/dominio/mostrar-valor';
 import { normalizarTexto } from '@/dominio/normalizacion';
-import { autorVisible, campoConHistorialVisible, comentarioVisible, historialLimitado, motivoVisible, puedeEscribirCampo, type Rol, type TipoOrganizacion } from '@/dominio/permisos';
+import { autorVisible, campoConHistorialVisible, comentarioVisible, esGestor, historialLimitado, motivoVisible, puedeEscribirCampo, type Rol, type TipoOrganizacion } from '@/dominio/permisos';
 import { nombreDeArea } from '@/dominio/areas';
 import { agenciasConAcceso, idsPermitidosParaAduana } from '../acciones/asignaciones';
 import { ErrorAccion } from '../acciones/resultado';
@@ -151,7 +151,7 @@ function condicionAsignadasAMi(actor: Actor) {
 
 /** Condicion de «Esperando a otros» (una sola para la lista y el total). */
 function condicionEsperando(actor: Actor, ahora: Date) {
-  const veTodas = actor.rol === 'lector' || actor.rol === 'admin';
+  const veTodas = actor.rol === 'lector' || esGestor(actor.rol);
   return and(
     inArray(asignacion.estado, ['pendiente', 'en_curso']),
     isNull(referencia.archivadaEn),
@@ -330,7 +330,7 @@ export async function esperandoDe(ej: Ejecutor, actor: Actor, ahora: Date, limit
       const esMia = f.deId === actor.usuarioId;
       const color = colorFicha(f.estadoFicha as EstadoFicha);
       const ultimo = f.ultimoRecordatorioEn ? new Date(f.ultimoRecordatorioEn.getTime() - 5 * 3_600_000).toISOString().slice(0, 10) : null;
-      const puedeRecordar = actor.rol === 'admin' || actor.rol === 'lector' || esMia;
+      const puedeRecordar = esGestor(actor.rol) || actor.rol === 'lector' || esMia;
       return {
         asignacionId: f.asignacionId,
         referenciaId: f.referenciaId,
@@ -350,7 +350,7 @@ export async function esperandoDe(ej: Ejecutor, actor: Actor, ahora: Date, limit
         recordadaHoy: ultimo === hoyBogota && configAvisos().maxRecordatoriosDia <= 1,
         nRecordatorios: f.nRecordatorios,
         puedeRecordar,
-        puedeGestionar: actor.rol === 'admin' || (esMia && (actor.rol === 'solicitante' || actor.rol === 'aduana')),
+        puedeGestionar: esGestor(actor.rol) || (esMia && (actor.rol === 'solicitante' || actor.rol === 'aduana')),
       };
     });
 }
@@ -416,7 +416,7 @@ export interface ResumenInicio {
  * la completitud de las abiertas del area en la misma carga. Sin el, se calcula aqui.
  */
 export async function resumenInicioDe(ej: Ejecutor, actor: Actor, ahora: Date, pendientesParaMi?: number): Promise<ResumenInicio> {
-  const veTodas = actor.rol === 'lector' || actor.rol === 'admin';
+  const veTodas = actor.rol === 'lector' || esGestor(actor.rol);
   const [esperando] = await ej
     .select({ n: sql<number>`count(*)::int` })
     .from(asignacion)
@@ -577,9 +577,9 @@ export async function seguimientoDeFicha(ej: Ejecutor, actor: Actor, referenciaI
         nRecordatorios: f.nRecordatorios,
         ultimoRecordatorioEn: f.ultimoRecordatorioEn ? f.ultimoRecordatorioEn.toISOString() : null,
         esMia,
-        puedeRecordar: activa && (actor.rol === 'admin' || actor.rol === 'lector' || esMia),
-        puedeCancelar: activa && (actor.rol === 'admin' || (esMia && (actor.rol === 'solicitante' || actor.rol === 'aduana'))),
-        puedeReasignar: activa && (actor.rol === 'admin' || (esMia && (actor.rol === 'solicitante' || actor.rol === 'aduana'))),
+        puedeRecordar: activa && (esGestor(actor.rol) || actor.rol === 'lector' || esMia),
+        puedeCancelar: activa && (esGestor(actor.rol) || (esMia && (actor.rol === 'solicitante' || actor.rol === 'aduana'))),
+        puedeReasignar: activa && (esGestor(actor.rol) || (esMia && (actor.rol === 'solicitante' || actor.rol === 'aduana'))),
       };
     });
 }
@@ -703,8 +703,8 @@ export async function candidatosDestinoDe(ej: Ejecutor, actor: Actor, referencia
     .filter((p): p is Perfil => !!p)
     .map((p): CandidatoDestino => {
       let noDisponible: string | null = null;
-      if (p.organizacionTipo === 'agencia' && agencias.length > 0 && !agencias.some((a) => a.id === p.organizacionId) && actor.rol !== 'admin') {
-        noDisponible = 'La referencia ya está con otra agencia. Pide a un administrador que la comparta.';
+      if (p.organizacionTipo === 'agencia' && agencias.length > 0 && !agencias.some((a) => a.id === p.organizacionId) && !esGestor(actor.rol)) {
+        noDisponible = 'La referencia ya está con otra agencia. Pide a un administrador o a la supervisora general que la comparta.';
       } else if (cerrada && !pedidosPermitidos(p.rol).includes('revisar')) {
         noDisponible = 'La referencia está clasificada.';
       }

@@ -5,10 +5,13 @@ import {
   alcanceExcel,
   autorVisible,
   comentarioVisible,
+  esGestor,
   fichaVisiblePara,
   motivoVisible,
   puede,
+  puedeAsignarRol,
   puedeEscribirCampo,
+  puedeTocarCuenta,
   validarRolOrganizacion,
   visibilidadesComentarioPermitidas,
   type AccesoAgencia,
@@ -27,7 +30,7 @@ const actor = (rol: Rol, extra: Partial<ActorLike> = {}): ActorLike => ({
 describe('regla rol x tipo de organizacion (D-28, CA-19)', () => {
   it('una agencia solo admite el rol aduana', () => {
     expect(validarRolOrganizacion('aduana', 'agencia').ok).toBe(true);
-    for (const rol of ['admin', 'solicitante', 'lector'] as const) {
+    for (const rol of ['admin', 'supervisor', 'solicitante', 'lector'] as const) {
       const r = validarRolOrganizacion(rol, 'agencia');
       expect(r.ok, rol).toBe(false);
     }
@@ -40,19 +43,20 @@ describe('regla rol x tipo de organizacion (D-28, CA-19)', () => {
 
 describe('matriz de permisos 3.3 (rol x accion)', () => {
   const casos: Array<[Parameters<typeof puede>[1], Record<Rol, boolean>, Parameters<typeof puede>[2]?]> = [
-    ['ver_listado', { admin: true, solicitante: true, aduana: true, lector: true }],
-    ['crear_referencia', { admin: true, solicitante: true, aduana: false, lector: false }],
-    ['escribir_grupo_cliente', { admin: true, solicitante: true, aduana: false, lector: false }],
-    ['escribir_grupo_aduana', { admin: true, solicitante: false, aduana: true, lector: false }],
-    ['marcar_clasificada', { admin: true, solicitante: false, aduana: true, lector: false }],
-    ['enviar_a', { admin: true, solicitante: true, aduana: true, lector: false }],
-    ['adjuntar_foto', { admin: true, solicitante: true, aduana: false, lector: false }],
-    ['reabrir', { admin: true, solicitante: false, aduana: true, lector: false }],
-    ['solicitar_reapertura', { admin: true, solicitante: true, aduana: false, lector: false }],
-    ['desarchivar', { admin: true, solicitante: false, aduana: false, lector: false }],
-    ['administrar', { admin: true, solicitante: false, aduana: false, lector: false }],
-    ['comentar', { admin: true, solicitante: true, aduana: true, lector: false }],
-    ['descargar_excel', { admin: true, solicitante: true, aduana: true, lector: true }],
+    ['ver_listado', { admin: true, supervisor: true, solicitante: true, aduana: true, lector: true }],
+    ['crear_referencia', { admin: true, supervisor: true, solicitante: true, aduana: false, lector: false }],
+    ['escribir_grupo_cliente', { admin: true, supervisor: true, solicitante: true, aduana: false, lector: false }],
+    ['escribir_grupo_aduana', { admin: true, supervisor: true, solicitante: false, aduana: true, lector: false }],
+    ['marcar_clasificada', { admin: true, supervisor: true, solicitante: false, aduana: true, lector: false }],
+    ['enviar_a', { admin: true, supervisor: true, solicitante: true, aduana: true, lector: false }],
+    ['adjuntar_foto', { admin: true, supervisor: true, solicitante: true, aduana: false, lector: false }],
+    ['reabrir', { admin: true, supervisor: true, solicitante: false, aduana: true, lector: false }],
+    ['solicitar_reapertura', { admin: true, supervisor: true, solicitante: true, aduana: false, lector: false }],
+    ['desarchivar', { admin: true, supervisor: true, solicitante: false, aduana: false, lector: false }],
+    ['administrar', { admin: true, supervisor: false, solicitante: false, aduana: false, lector: false }],
+    ['supervisar', { admin: true, supervisor: true, solicitante: false, aduana: false, lector: false }],
+    ['comentar', { admin: true, supervisor: true, solicitante: true, aduana: true, lector: false }],
+    ['descargar_excel', { admin: true, supervisor: true, solicitante: true, aduana: true, lector: true }],
   ];
 
   for (const [accion, esperado, ctx] of casos) {
@@ -63,8 +67,9 @@ describe('matriz de permisos 3.3 (rol x accion)', () => {
     }
   }
 
-  it('recordar: remitente, admin y lector (RV-35)', () => {
+  it('recordar: remitente, admin, supervisora y lector (RV-35)', () => {
     expect(puede(actor('admin'), 'recordar', { esRemitente: false })).toBe(true);
+    expect(puede(actor('supervisor'), 'recordar', { esRemitente: false })).toBe(true);
     expect(puede(actor('lector'), 'recordar', { esRemitente: false })).toBe(true);
     expect(puede(actor('solicitante'), 'recordar', { esRemitente: true })).toBe(true);
     expect(puede(actor('solicitante'), 'recordar', { esRemitente: false })).toBe(false);
@@ -72,15 +77,17 @@ describe('matriz de permisos 3.3 (rol x accion)', () => {
     expect(puede(actor('aduana'), 'recordar', { esRemitente: false })).toBe(false);
   });
 
-  it('reasignar: admin o el remitente de esa asignacion; nunca el lector', () => {
+  it('reasignar: admin, supervisora o el remitente de esa asignacion; nunca el lector', () => {
     expect(puede(actor('admin'), 'reasignar', { esRemitente: false })).toBe(true);
+    expect(puede(actor('supervisor'), 'reasignar', { esRemitente: false })).toBe(true);
     expect(puede(actor('solicitante'), 'reasignar', { esRemitente: true })).toBe(true);
     expect(puede(actor('solicitante'), 'reasignar', { esRemitente: false })).toBe(false);
     expect(puede(actor('lector'), 'reasignar', { esRemitente: true })).toBe(false);
   });
 
-  it('archivar: admin; el solicitante solo si es el autor de un borrador sin enviar', () => {
+  it('archivar: admin y supervisora; el solicitante solo si es el autor de un borrador sin enviar', () => {
     expect(puede(actor('admin'), 'archivar', {})).toBe(true);
+    expect(puede(actor('supervisor'), 'archivar', {})).toBe(true);
     expect(puede(actor('solicitante'), 'archivar', { esCreador: true, esBorradorSinEnviar: true })).toBe(true);
     expect(puede(actor('solicitante'), 'archivar', { esCreador: true, esBorradorSinEnviar: false })).toBe(false);
     expect(puede(actor('solicitante'), 'archivar', { esCreador: false, esBorradorSinEnviar: true })).toBe(false);
@@ -89,6 +96,7 @@ describe('matriz de permisos 3.3 (rol x accion)', () => {
 
   it('corregir codigo: admin siempre; el creador mientras no este CLASIFICADA (RV-34)', () => {
     expect(puede(actor('admin'), 'corregir_codigo', { estadoFicha: 'CLASIFICADA' })).toBe(true);
+    expect(puede(actor('supervisor'), 'corregir_codigo', { estadoFicha: 'CLASIFICADA' })).toBe(true);
     expect(puede(actor('solicitante'), 'corregir_codigo', { esCreador: true, estadoFicha: 'EN_GESTION' })).toBe(true);
     expect(puede(actor('solicitante'), 'corregir_codigo', { esCreador: true, estadoFicha: 'CLASIFICADA' })).toBe(false);
     expect(puede(actor('solicitante'), 'corregir_codigo', { esCreador: false, estadoFicha: 'BORRADOR' })).toBe(false);
@@ -106,11 +114,38 @@ describe('matriz de permisos 3.3 (rol x accion)', () => {
     expect(visibilidadesComentarioPermitidas('lector')).toEqual([]);
   });
 
-  it('excel: admin y solicitante todo; aduana y lector solo lo que ven', () => {
+  it('excel: admin, supervisora y solicitante todo; aduana y lector solo lo que ven', () => {
     expect(alcanceExcel('admin')).toBe('todo');
+    expect(alcanceExcel('supervisor')).toBe('todo');
     expect(alcanceExcel('solicitante')).toBe('todo');
     expect(alcanceExcel('aduana')).toBe('visible');
     expect(alcanceExcel('lector')).toBe('visible');
+  });
+});
+
+describe('guardas por objetivo de la supervisora general', () => {
+  it('solo el administrador da el rol de administrador o de supervisora', () => {
+    for (const nuevo of ROLES) expect(puedeAsignarRol(actor('admin'), nuevo), nuevo).toBe(true);
+    expect(puedeAsignarRol(actor('supervisor'), 'admin')).toBe(false);
+    expect(puedeAsignarRol(actor('supervisor'), 'supervisor')).toBe(false);
+    expect(puedeAsignarRol(actor('supervisor'), 'solicitante')).toBe(true);
+    expect(puedeAsignarRol(actor('solicitante'), 'admin')).toBe(false);
+  });
+
+  it('solo el administrador toca cuentas de administrador', () => {
+    expect(puedeTocarCuenta(actor('admin'), 'admin')).toBe(true);
+    expect(puedeTocarCuenta(actor('supervisor'), 'admin')).toBe(false);
+    expect(puedeTocarCuenta(actor('supervisor'), 'solicitante')).toBe(true);
+  });
+
+  it('esGestor: administrador y supervisora, nadie mas', () => {
+    expect(ROLES.filter(esGestor)).toEqual(['admin', 'supervisor']);
+  });
+
+  it('la supervisora escribe en ambos grupos y fija la fecha de solicitud de una ficha ajena', () => {
+    const f = { estado: 'EN_GESTION' as const, archivada: false, creadaPor: 'u-solicitante' };
+    expect(puedeEscribirCampo(actor('supervisor'), getCampo('nombre_producto')!, f).ok).toBe(true);
+    expect(puedeEscribirCampo(actor('supervisor'), 'fecha_solicitud', f).ok).toBe(true);
   });
 });
 

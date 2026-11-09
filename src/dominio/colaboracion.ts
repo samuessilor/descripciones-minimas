@@ -33,6 +33,7 @@ export const VERBO_PEDIDO: Record<Pedido, string> = {
 export function pedidosPermitidos(rol: Rol): Pedido[] {
   switch (rol) {
     case 'admin':
+    case 'supervisor':
       return ['completar', 'clasificar', 'responder', 'revisar'];
     case 'solicitante':
       return ['completar', 'responder', 'revisar'];

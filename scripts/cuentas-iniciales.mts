@@ -1,7 +1,7 @@
 /**
  * `npm run cuentas:iniciales -- <archivo.json> [--salida <claves.txt>]`: crea de una vez las cuentas acordadas con el area
  * (reunion 2026-10-29), cada una con usuario y contrasena temporal:
- *   - administradores (organizacion interna EssilorLuxottica),
+ *   - administradores y supervisores (supervisora general) de la organizacion interna EssilorLuxottica,
  *   - UNA cuenta general por area (Consumibles, Mantenimiento, Instrumentos, Marketing), rol solicitante,
  *   - UNA cuenta general por empresa de aduana (su propia organizacion tipo agencia), rol aduana,
  *   - lectores (opcional).
@@ -39,6 +39,7 @@ interface Cuenta {
 }
 interface Archivo {
   administradores?: Cuenta[];
+  supervisores?: Cuenta[];
   areas?: Array<Cuenta & { area: string }>;
   agencias?: Array<Cuenta & { empresa: string }>;
   lectores?: Cuenta[];
@@ -102,7 +103,7 @@ async function org(nombre: string, tipo: 'interna' | 'agencia') {
   return nueva!;
 }
 
-async function cuenta(cu: Cuenta, rol: 'admin' | 'solicitante' | 'aduana' | 'lector', o: { id: string; tipo: string }, area: string | null) {
+async function cuenta(cu: Cuenta, rol: 'admin' | 'supervisor' | 'solicitante' | 'aduana' | 'lector', o: { id: string; tipo: string }, area: string | null) {
   const username = normalizarUsuario(cu.usuario);
   const [ya] = await db.select({ id: usuario.id }).from(usuario).where(eq(usuario.username, username)).limit(1);
   if (ya) {
@@ -125,6 +126,7 @@ async function cuenta(cu: Cuenta, rol: 'admin' | 'solicitante' | 'aduana' | 'lec
 try {
   const interna = await org(ORG_INTERNA, 'interna');
   for (const a of datos.administradores ?? []) await cuenta(a, 'admin', interna, null);
+  for (const a of datos.supervisores ?? []) await cuenta(a, 'supervisor', interna, null);
   for (const a of datos.areas ?? []) await cuenta(a, 'solicitante', interna, a.area);
   for (const l of datos.lectores ?? []) await cuenta(l, 'lector', interna, null);
   for (const g of datos.agencias ?? []) await cuenta(g, 'aduana', await org(g.empresa.trim(), 'agencia'), null);

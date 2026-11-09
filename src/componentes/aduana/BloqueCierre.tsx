@@ -89,7 +89,7 @@ export function BloqueCierre({
 
       {vista.archivada && vista.archivo ? (
         <Aviso tipo="aviso" titulo={`Archivada el ${fechaLarga(vista.archivo.en)} por ${nombreVisible(vista.archivo.por)}`}>
-          {vista.archivo.motivo ? `Motivo: ${vista.archivo.motivo}. ` : ''}Nada se borró: un administrador puede restaurarla.
+          {vista.archivo.motivo ? `Motivo: ${vista.archivo.motivo}. ` : ''}Nada se borró: un administrador o la supervisora general pueden restaurarla.
           {permisos.desarchivar ? (
             <span className="mt-2 block">
               <Boton variante="secundario" tamano="sm" onClick={() => setRestaurando(true)}>
@@ -191,7 +191,7 @@ export function BloqueCierre({
             <p className="text-base text-tinta-suave">
               {vista.bloqueo === 'borrador'
                 ? 'Esta referencia sigue en borrador. Cuando se envíe a la aduana podrás cerrarla.'
-                : 'Solo la aduana o un administrador pueden cerrar la clasificación.'}
+                : 'Solo la aduana, un administrador o la supervisora general pueden cerrar la clasificación.'}
             </p>
           )}
         </>

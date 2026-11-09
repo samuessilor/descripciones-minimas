@@ -87,7 +87,7 @@ async function buscarPorCodigoNorm(tx: Tx | Contexto['db'], norm: string) {
 function errorDuplicado(f: NonNullable<Awaited<ReturnType<typeof buscarPorCodigoNorm>>>): ErrorAccion {
   const archivada = f.archivadaEn !== null;
   const mensaje = archivada
-    ? 'Esa referencia existe pero está archivada. Pide a un administrador que la restaure.'
+    ? 'Esa referencia existe pero está archivada. Pide a un administrador o a la supervisora general que la restaure.'
     : `Ya existe la referencia ${f.codigo} (${ETIQUETA_ESTADO[f.estado] ?? f.estado}). Ábrela en vez de crear otra.`;
   return new ErrorAccion('DUPLICADO', mensaje, {
     id: f.id,

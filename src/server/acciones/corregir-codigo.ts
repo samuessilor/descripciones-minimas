@@ -49,8 +49,8 @@ export async function corregirCodigo(ctx: Contexto, entrada: unknown): Promise<R
         throw new ErrorAccion(
           estado === 'CLASIFICADA' ? 'FICHA_CERRADA' : 'SIN_PERMISO',
           estado === 'CLASIFICADA'
-            ? 'Esta referencia está clasificada. Pide a un administrador que corrija el código.'
-            : 'Solo quien creó la referencia o un administrador pueden corregir el código.',
+            ? 'Esta referencia está clasificada. Pide a un administrador o a la supervisora general que corrija el código.'
+            : 'Solo quien creó la referencia, un administrador o la supervisora general pueden corregir el código.',
         );
       }
       if (!motivo) throw new ErrorAccion('FALTA_MOTIVO', 'Cuéntanos por qué corriges el código. Queda en el historial.');
@@ -105,7 +105,7 @@ function errorDuplicadoCodigo(f: { id: string; codigo: string; estado: string; a
   return new ErrorAccion(
     'DUPLICADO',
     archivada
-      ? 'Ese código ya es de una referencia archivada. Pide a un administrador que la restaure.'
+      ? 'Ese código ya es de una referencia archivada. Pide a un administrador o a la supervisora general que la restaure.'
       : `Ese código ya es de la referencia ${f.codigo} (${ETIQUETA_ESTADO[f.estado] ?? f.estado}). Ábrela en vez de repetirlo.`,
     { id: f.id, codigo: f.codigo, estado: f.estado, archivada },
   );

@@ -21,7 +21,7 @@ import {
   type ReglaCierre,
 } from '@/dominio/estado';
 import { motivoVisible } from '@/dominio/normalizacion';
-import { puede } from '@/dominio/permisos';
+import { esGestor, puede } from '@/dominio/permisos';
 import { estaVacio } from '@/dominio/valores';
 import type { TipoProducto } from '@/dominio/campos';
 import { getConfig } from '../config';
@@ -29,7 +29,7 @@ import { auditar } from '../auditoria';
 import { ahoraDe, type Actor, type Contexto } from '../politicas/actor';
 import { cargarReferenciaBloqueada, valoresVigentes, type FilaReferencia } from '../politicas/referencias';
 import {
-  administradoresActivos,
+  gestoresActivos,
   auditarAduana,
   avisarAduana,
   interesadosEnFicha,
@@ -139,7 +139,7 @@ export async function finalizar(ctx: Contexto, entrada: unknown): Promise<Result
     const ficha = await cargarReferenciaBloqueada(tx, actor, e.referenciaId, ahora);
 
     if (!puede(actor, 'marcar_clasificada')) {
-      throw new ErrorAccion('SIN_PERMISO', 'Solo la aduana o un administrador pueden cerrar la clasificación.');
+      throw new ErrorAccion('SIN_PERMISO', 'Solo la aduana, un administrador o la supervisora general pueden cerrar la clasificación.');
     }
     if (ficha.estado === 'CLASIFICADA') {
       throw new ErrorAccion('FICHA_CERRADA', 'Esta referencia ya está clasificada. Para cambiarla, reábrela con un motivo.');
@@ -300,7 +300,7 @@ export async function reabrir(ctx: Contexto, entrada: unknown): Promise<{ ok: tr
   return ctx.db.transaction(async (tx) => {
     const ficha = await cargarReferenciaBloqueada(tx, actor, e.referenciaId, ahora);
     if (!puede(actor, 'reabrir')) {
-      throw new ErrorAccion('SIN_PERMISO', 'Solo la aduana o un administrador pueden reabrir una clasificación. Puedes solicitar su reapertura.');
+      throw new ErrorAccion('SIN_PERMISO', 'Solo la aduana, un administrador o la supervisora general pueden reabrir una clasificación. Puedes solicitar su reapertura.');
     }
     exigirFichaEditable(ficha);
     if (ficha.estado !== 'CLASIFICADA' || !ficha.clasificadaEn) {
@@ -406,8 +406,8 @@ async function destinoDeAgenciaAlReabrir(tx: Tx, actor: Actor, referenciaId: str
 // ---- Solicitar reapertura ---------------------------------------------------------------------------
 
 /**
- * Solicitar reapertura (8.1, 14): la pide el solicitante (o un admin); NO reabre por si sola. Crea una asignacion
- * `revisar` hacia quien clasifico (o hacia un admin si no hay) y avisa `reapertura_solicitada` a los admin.
+ * Solicitar reapertura (8.1, 14): la pide el solicitante (o un admin o la supervisora); NO reabre por si sola. Crea una asignacion
+ * `revisar` hacia quien clasifico (o hacia un admin o la supervisora si no hay) y avisa `reapertura_solicitada` a ambos.
  */
 export async function solicitarReapertura(ctx: Contexto, entrada: unknown): Promise<{ ok: true; asignadoA: string | null }> {
   const e = parsear(entradaMotivo, entrada);
@@ -417,7 +417,7 @@ export async function solicitarReapertura(ctx: Contexto, entrada: unknown): Prom
   return ctx.db.transaction(async (tx) => {
     const ficha = await cargarReferenciaBloqueada(tx, actor, e.referenciaId, ahora);
     if (!puede(actor, 'solicitar_reapertura')) {
-      throw new ErrorAccion('SIN_PERMISO', 'Solo quien solicitó la referencia o un administrador pueden pedir su reapertura.');
+      throw new ErrorAccion('SIN_PERMISO', 'Solo quien solicitó la referencia, un administrador o la supervisora general pueden pedir su reapertura.');
     }
     exigirFichaEditable(ficha);
     if (ficha.estado !== 'CLASIFICADA') {
@@ -425,10 +425,10 @@ export async function solicitarReapertura(ctx: Contexto, entrada: unknown): Prom
     }
     const motivo = exigirMotivo(e.motivo, 'Cuéntale al administrador por qué hay que reabrirla.');
 
-    const admins = await administradoresActivos(tx, actor.usuarioId);
+    const admins = await gestoresActivos(tx, actor.usuarioId);
     const clasifico = ficha.clasificadaPor ? (await personasActivas(tx, [ficha.clasificadaPor]))[0] : undefined;
     // `revisar` solo se le ofrece a quien puede escribir algun campo: aduana o admin.
-    const destino = clasifico && clasifico.id !== actor.usuarioId && (clasifico.rol === 'aduana' || clasifico.rol === 'admin') ? clasifico : admins[0];
+    const destino = clasifico && clasifico.id !== actor.usuarioId && (clasifico.rol === 'aduana' || esGestor(clasifico.rol)) ? clasifico : admins[0];
 
     if (destino) {
       const [existente] = await tx
@@ -497,7 +497,7 @@ export async function archivar(ctx: Contexto, entrada: unknown): Promise<{ ok: t
       esBorradorSinEnviar: ficha.estado === 'BORRADOR' && enviada.length === 0,
     });
     if (!permitido) {
-      throw new ErrorAccion('SIN_PERMISO', 'Solo un administrador puede archivar esta referencia.');
+      throw new ErrorAccion('SIN_PERMISO', 'Solo un administrador o la supervisora general pueden archivar esta referencia.');
     }
     if (ficha.archivadaEn) throw new ErrorAccion('VALIDACION', 'Esta referencia ya está archivada.');
     const motivo = exigirMotivo(e.motivo, 'Escribe por qué archivas la referencia. Nada se borra: se puede restaurar.');
@@ -535,7 +535,7 @@ export async function desarchivar(ctx: Contexto, entrada: unknown): Promise<{ ok
   return ctx.db.transaction(async (tx) => {
     // El admin ve todo, incluidas las archivadas.
     const ficha = await cargarReferenciaBloqueada(tx, actor, e.referenciaId, ahora);
-    if (!puede(actor, 'desarchivar')) throw new ErrorAccion('SIN_PERMISO', 'Solo un administrador puede restaurar una referencia archivada.');
+    if (!puede(actor, 'desarchivar')) throw new ErrorAccion('SIN_PERMISO', 'Solo un administrador o la supervisora general pueden restaurar una referencia archivada.');
     if (!ficha.archivadaEn) throw new ErrorAccion('VALIDACION', 'Esta referencia no está archivada.');
     const motivo = exigirMotivo(e.motivo, 'Escribe por qué restauras la referencia.');
 

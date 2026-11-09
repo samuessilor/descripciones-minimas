@@ -12,6 +12,7 @@ import { Insignia } from '@/componentes/ui/insignia';
 import { EncabezadoPagina } from '@/componentes/ui/pagina';
 import { TablaDatos } from '@/componentes/ui/tabla';
 import { fichasConVariasAgencias, listarOrganizacionesAdmin, type FilaOrganizacionAdmin } from '@/server/politicas/administracion';
+import { SinPermiso } from '@/componentes/ui/pantallas';
 import { contextoAdmin } from '../_contexto';
 
 export const metadata: Metadata = { title: 'Organizaciones · Descripciones mínimas' };
@@ -55,7 +56,7 @@ function TablaOrganizaciones({ filas, agencia }: { filas: FilaOrganizacionAdmin[
 
 export default async function AdminOrganizaciones() {
   const ctx = await contextoAdmin();
-  if (!ctx) return null;
+  if (!ctx) return <SinPermiso />;
   const [organizaciones, varias] = await Promise.all([listarOrganizacionesAdmin(ctx.db, ctx.actor), fichasConVariasAgencias(ctx.db, ctx.actor)]);
   const internas = organizaciones.filter((o) => o.tipo === 'interna');
   const agencias = organizaciones.filter((o) => o.tipo === 'agencia');

@@ -103,8 +103,8 @@ export function nombreParaDestinatario(actor: Actor, destinatario: PersonaAviso)
   return visible === 'otra_agencia' ? NOMBRE_OTRA_AGENCIA : nombreSinMarca(actor.nombre);
 }
 
-/** Administradores activos (destino de las solicitudes de reapertura), sin contar a `excepto`. */
-export async function administradoresActivos(ej: Ejecutor, excepto?: string): Promise<PersonaAviso[]> {
+/** Administrador y supervisora activos (destino de las solicitudes de reapertura), sin contar a `excepto`. */
+export async function gestoresActivos(ej: Ejecutor, excepto?: string): Promise<PersonaAviso[]> {
   const filas = await ej
     .select({
       id: usuario.id,
@@ -114,7 +114,7 @@ export async function administradoresActivos(ej: Ejecutor, excepto?: string): Pr
       organizacionTipo: usuario.organizacionTipo,
     })
     .from(usuario)
-    .where(and(eq(usuario.rol, 'admin'), eq(usuario.activo, true), excepto ? ne(usuario.id, excepto) : undefined));
+    .where(and(inArray(usuario.rol, ['admin', 'supervisor']), eq(usuario.activo, true), excepto ? ne(usuario.id, excepto) : undefined));
   return filas.map((f) => ({ ...f, organizacionTipo: f.organizacionTipo as TipoOrganizacion }));
 }
 

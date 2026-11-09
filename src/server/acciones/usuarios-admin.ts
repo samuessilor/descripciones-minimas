@@ -6,17 +6,11 @@ import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { session, usuario } from '@/db/esquema';
 import { exigeArea, MENSAJE_AREA_OBLIGATORIA } from '@/dominio/areas';
-import { puede } from '@/dominio/permisos';
 import { auditar } from '../auditoria';
 import { ahoraDe, type Contexto } from '../politicas/actor';
+import { exigir, exigirCuentaTocable } from '../politicas/exigir';
 import { ErrorAccion } from './resultado';
 import { areaUsuario, parsear, textoLimpio } from './validacion';
-
-function exigirAdmin(ctx: Contexto): void {
-  if (!puede(ctx.actor, 'administrar')) {
-    throw new ErrorAccion('SIN_PERMISO', 'Solo un administrador puede gestionar usuarios.');
-  }
-}
 
 // ---- Editar -------------------------------------------------------------------------------------
 
@@ -28,12 +22,13 @@ export const entradaEditarUsuario = z.object({
 });
 
 export async function editarUsuario(ctx: Contexto, entrada: unknown): Promise<{ ok: true }> {
-  exigirAdmin(ctx);
+  exigir(ctx.actor, 'administrar');
   const e = parsear(entradaEditarUsuario, entrada);
   const ahora = ahoraDe(ctx);
   await ctx.db.transaction(async (tx) => {
     const [u] = await tx.select().from(usuario).where(eq(usuario.id, e.usuarioId)).for('update').limit(1);
     if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
+    exigirCuentaTocable(ctx.actor, u.rol);
     // Una cuenta de agencia no tiene area interna (C3).
     const area = u.organizacionTipo === 'agencia' ? null : e.area;
     if (exigeArea(u.rol, u.organizacionTipo) && !area) {
@@ -62,12 +57,13 @@ export async function editarUsuario(ctx: Contexto, entrada: unknown): Promise<{ 
  * peticion de esa persona vuelve a /entrar (13.1). Queda en auditoria con quien lo hizo.
  */
 export async function cerrarSesionesDeUsuario(ctx: Contexto, entrada: unknown): Promise<{ cerradas: number }> {
-  exigirAdmin(ctx);
+  exigir(ctx.actor, 'administrar');
   const e = parsear(z.object({ usuarioId: z.uuid(), sesionId: z.uuid().optional() }), entrada);
   const ahora = ahoraDe(ctx);
   return ctx.db.transaction(async (tx) => {
-    const [u] = await tx.select({ id: usuario.id }).from(usuario).where(eq(usuario.id, e.usuarioId)).limit(1);
+    const [u] = await tx.select({ id: usuario.id, rol: usuario.rol }).from(usuario).where(eq(usuario.id, e.usuarioId)).limit(1);
     if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
+    exigirCuentaTocable(ctx.actor, u.rol);
     const borradas = await tx
       .delete(session)
       .where(e.sesionId ? and(eq(session.userId, u.id), eq(session.id, e.sesionId)) : eq(session.userId, u.id))

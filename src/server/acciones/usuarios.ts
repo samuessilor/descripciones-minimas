@@ -9,20 +9,15 @@ import { account, asignacion, organizacion, usuario } from '@/db/esquema';
 import type { Tx } from '@/db/tipos';
 import { exigeArea, MENSAJE_AREA_OBLIGATORIA } from '@/dominio/areas';
 import { correoSinCorreo, normalizarUsuario, USUARIO_AYUDA, validarUsuario } from '@/dominio/credenciales';
-import { ROLES, puede, validarRolOrganizacion, type Rol, type TipoOrganizacion } from '@/dominio/permisos';
+import { ROLES, validarRolOrganizacion, type Rol, type TipoOrganizacion } from '@/dominio/permisos';
 import { auditar } from '../auditoria';
 import { generarClave, hashearClave } from '../claves';
 import { avisarAsignacionExistente } from './asignaciones';
 import { revocarSesionesDeUsuario } from '../sesiones';
 import { ahoraDe, type Contexto } from '../politicas/actor';
+import { exigir, exigirCuentaTocable, exigirRolAsignable } from '../politicas/exigir';
 import { ErrorAccion, esViolacionUnica } from './resultado';
 import { areaUsuario, parsear, textoLimpio } from './validacion';
-
-function exigirAdmin(ctx: Contexto): void {
-  if (!puede(ctx.actor, 'administrar')) {
-    throw new ErrorAccion('SIN_PERMISO', 'Solo un administrador puede gestionar usuarios.');
-  }
-}
 
 /** Clave del candado de la guarda «no dejar la plataforma sin administrador activo». */
 const CANDADO_ULTIMO_ADMIN = 7_301_001;
@@ -145,8 +140,9 @@ export interface ResultadoCrearCuenta {
  * se guarda solo su hash y vuelve en la respuesta para mostrarla una vez.
  */
 export async function crearCuenta(ctx: Contexto, entrada: unknown): Promise<ResultadoCrearCuenta> {
-  exigirAdmin(ctx);
+  exigir(ctx.actor, 'administrar');
   const e = parsear(entradaCrearCuenta, entrada);
+  exigirRolAsignable(ctx.actor, e.rol);
   const ahora = ahoraDe(ctx);
   const org = await cargarOrganizacion(ctx, e.organizacionId);
   const tipo = org.tipo as TipoOrganizacion;
@@ -215,7 +211,7 @@ export async function crearCuenta(ctx: Contexto, entrada: unknown): Promise<Resu
  * entregarla a mano. Nadie puede leer la contrasena actual (solo existe su hash).
  */
 export async function restablecerClave(ctx: Contexto, entrada: unknown): Promise<{ usuario: string; nombre: string; claveTemporal: string; sesionesCerradas: number }> {
-  exigirAdmin(ctx);
+  exigir(ctx.actor, 'administrar');
   const { usuarioId } = parsear(z.object({ usuarioId: z.uuid() }), entrada);
   const ahora = ahoraDe(ctx);
   const claveTemporal = generarClave();
@@ -224,6 +220,7 @@ export async function restablecerClave(ctx: Contexto, entrada: unknown): Promise
   return ctx.db.transaction(async (tx) => {
     const [u] = await tx.select().from(usuario).where(eq(usuario.id, usuarioId)).for('update').limit(1);
     if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
+    exigirCuentaTocable(ctx.actor, u.rol);
     const [cred] = await tx
       .select({ id: account.id })
       .from(account)
@@ -266,7 +263,7 @@ export interface ResultadoDesactivar {
  * de sesiones ocurren en la MISMA transaccion (10.6, CA-29, RV-16). Lo que ya lleno se conserva.
  */
 export async function desactivarUsuario(ctx: Contexto, entrada: unknown): Promise<ResultadoDesactivar> {
-  exigirAdmin(ctx);
+  exigir(ctx.actor, 'administrar');
   const e = parsear(entradaDesactivarUsuario, entrada);
   const ahora = ahoraDe(ctx);
 
@@ -274,6 +271,7 @@ export async function desactivarUsuario(ctx: Contexto, entrada: unknown): Promis
     await serializarGuardaUltimoAdmin(tx);
     const [u] = await tx.select().from(usuario).where(eq(usuario.id, e.usuarioId)).for('update').limit(1);
     if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
+    exigirCuentaTocable(ctx.actor, u.rol);
 
     if (u.rol === 'admin' && u.activo) {
       const otros = await tx
@@ -304,10 +302,12 @@ export async function desactivarUsuario(ctx: Contexto, entrada: unknown): Promis
 }
 
 export async function reactivarUsuario(ctx: Contexto, entrada: unknown): Promise<{ ok: true }> {
-  exigirAdmin(ctx);
+  exigir(ctx.actor, 'administrar');
   const { usuarioId } = parsear(z.object({ usuarioId: z.uuid() }), entrada);
   const ahora = ahoraDe(ctx);
   await ctx.db.transaction(async (tx) => {
+    const [objetivo] = await tx.select({ rol: usuario.rol }).from(usuario).where(eq(usuario.id, usuarioId)).limit(1);
+    if (objetivo) exigirCuentaTocable(ctx.actor, objetivo.rol);
     const r = await tx
       .update(usuario)
       .set({ activo: true, actualizadoEn: ahora })
@@ -327,13 +327,15 @@ export async function reactivarUsuario(ctx: Contexto, entrada: unknown): Promise
 }
 
 export async function cambiarRol(ctx: Contexto, entrada: unknown): Promise<{ ok: true }> {
-  exigirAdmin(ctx);
+  exigir(ctx.actor, 'administrar');
   const e = parsear(z.object({ usuarioId: z.uuid(), rol: z.enum(ROLES) }), entrada);
+  exigirRolAsignable(ctx.actor, e.rol);
   const ahora = ahoraDe(ctx);
   await ctx.db.transaction(async (tx) => {
     await serializarGuardaUltimoAdmin(tx);
     const [u] = await tx.select().from(usuario).where(eq(usuario.id, e.usuarioId)).for('update').limit(1);
     if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
+    exigirCuentaTocable(ctx.actor, u.rol);
     const regla = validarRolOrganizacion(e.rol, u.organizacionTipo as TipoOrganizacion);
     if (!regla.ok) throw new ErrorAccion('VALIDACION', regla.mensaje);
     if (u.rol === e.rol) return; // sin cambio: no se escribe ni se audita
@@ -377,13 +379,14 @@ export const entradaCambiarOrganizacion = z.object({
  *  - el acceso temporal vigente de sus asignaciones ya terminadas (S-22, 30 dias) se cierra: no se transfiere.
  */
 export async function cambiarOrganizacion(ctx: Contexto, entrada: unknown): Promise<{ ok: true }> {
-  exigirAdmin(ctx);
+  exigir(ctx.actor, 'administrar');
   const e = parsear(entradaCambiarOrganizacion, entrada);
   const ahora = ahoraDe(ctx);
   const org = await cargarOrganizacion(ctx, e.organizacionId);
   await ctx.db.transaction(async (tx) => {
     const [u] = await tx.select().from(usuario).where(eq(usuario.id, e.usuarioId)).for('update').limit(1);
     if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
+    exigirCuentaTocable(ctx.actor, u.rol);
     if (u.organizacionId === org.id) return; // sin cambio
     const regla = validarRolOrganizacion(u.rol as Rol, org.tipo as TipoOrganizacion);
     if (!regla.ok) throw new ErrorAccion('VALIDACION', regla.mensaje);

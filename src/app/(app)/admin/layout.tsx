@@ -6,14 +6,15 @@ import { puede } from '@/dominio/permisos';
 import { exigirActor } from '@/server/sesion';
 
 /**
- * Toda la administracion exige rol `admin` (13.2): la comprobacion vive en el servidor. Quien no es administrador
- * ve el aviso de permiso (sin pistas de lo que hay detras) y sus paginas hijas devuelven `null` sin leer nada.
+ * La administracion exige rol `admin` o `supervisor` (13.2): la comprobacion vive en el servidor. Quien no tiene ninguno
+ * de los dos ve el aviso de permiso (sin pistas de lo que hay detras). Lo que es solo del administrador lo vuelve a
+ * exigir cada pagina, que pinta el mismo aviso.
  * Un 403 real pide `forbidden()` de Next, que hoy exige `experimental.authInterrupts` en la configuracion
  * (ver docs/PETICIONES-CONFIG-admin.md).
  */
 export default async function LayoutAdmin({ children }: { children: ReactNode }) {
   const actor = await exigirActor();
-  if (!puede(actor, 'administrar')) {
+  if (!puede(actor, 'supervisar')) {
     return (
       <ContenedorLectura>
         <SinPermiso />
@@ -22,7 +23,7 @@ export default async function LayoutAdmin({ children }: { children: ReactNode })
   }
   return (
     <ContenedorAncho>
-      <SubNavAdmin />
+      <SubNavAdmin administrador={puede(actor, 'administrar')} />
       {children}
     </ContenedorAncho>
   );

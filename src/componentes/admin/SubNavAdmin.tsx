@@ -5,26 +5,26 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
-const SECCIONES: ReadonlyArray<{ href: string; etiqueta: string; icono: LucideIcon; exacta?: boolean }> = [
+const SECCIONES: ReadonlyArray<{ href: string; etiqueta: string; icono: LucideIcon; exacta?: boolean; soloAdministrador?: boolean }> = [
   { href: '/admin', etiqueta: 'Resumen', icono: LayoutDashboard, exacta: true },
   { href: '/admin/usuarios', etiqueta: 'Usuarios', icono: Users },
   { href: '/admin/organizaciones', etiqueta: 'Organizaciones', icono: Building2 },
   { href: '/admin/catalogos', etiqueta: 'Catálogos', icono: ListChecks },
   { href: '/admin/auditoria', etiqueta: 'Auditoría', icono: ScrollText },
-  { href: '/admin/parametros', etiqueta: 'Parámetros', icono: SlidersHorizontal },
+  { href: '/admin/parametros', etiqueta: 'Parámetros', icono: SlidersHorizontal, soloAdministrador: true },
 ];
 
 /**
  * Navegacion local de la administracion (pestañas de seccion) para pantallas de menos de 1024 px, donde el menu lateral
- * no existe: se llega a las seis secciones con una barra que se desplaza sin partir la pagina. Desde 1024 px el menu
+ * no existe: se llega a las secciones que le tocan a cada rol con una barra que se desplaza sin partir la pagina. Desde 1024 px el menu
  * lateral ya despliega estas secciones, asi que aqui se oculta para no duplicar la navegacion. La activa va en negrita, con subrayado y `aria-current` (no solo color).
  */
-export function SubNavAdmin() {
+export function SubNavAdmin({ administrador }: { administrador: boolean }) {
   const ruta = usePathname();
   return (
     <nav aria-label="Secciones de administración" className="-mx-4 mb-6 border-b border-borde-suave sm:mx-0 lg:hidden">
       <ul className="flex gap-0.5 overflow-x-auto px-4 [scrollbar-width:none] sm:px-0">
-        {SECCIONES.map((s) => {
+        {SECCIONES.filter((s) => administrador || !s.soloAdministrador).map((s) => {
           const activa = s.exacta ? ruta === s.href : ruta === s.href || ruta.startsWith(`${s.href}/`);
           const Icono = s.icono;
           return (

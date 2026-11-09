@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { adjunto, referencia, usuario } from '@/db/esquema';
 import type { Ejecutor } from '@/db/tipos';
 import { motivoVisible } from '@/dominio/normalizacion';
-import { puede, type TipoOrganizacion } from '@/dominio/permisos';
+import { esGestor, puede, type TipoOrganizacion } from '@/dominio/permisos';
 import { auditar } from '../auditoria';
 import { limitarTasa, REGLAS_TASA } from '../limite-tasa';
 import { claveMiniatura, getAlmacen } from '../almacen';
@@ -239,8 +239,8 @@ export async function retirarAdjunto(ctx: Contexto, entrada: { adjuntoId: string
     const ficha = await cargarReferenciaBloqueada(tx, actor, a.referenciaId, ahora);
     exigirPuedeAdjuntar(actor, ficha);
     if (a.retiradoEn) return;
-    if (a.subidoPor !== actor.usuarioId && actor.rol !== 'admin') {
-      throw new ErrorAccion('SIN_PERMISO', 'La foto la subió otra persona y no se retira desde aquí. Escríbele o pídele a un administrador que lo haga.');
+    if (a.subidoPor !== actor.usuarioId && !esGestor(actor.rol)) {
+      throw new ErrorAccion('SIN_PERMISO', 'La foto la subió otra persona y no se retira desde aquí. Escríbele o pídele a un administrador o a la supervisora general que lo haga.');
     }
     await tx
       .update(adjunto)
@@ -288,7 +288,7 @@ export async function leerAdjunto(
   } catch {
     throw noExiste();
   }
-  if (a.retiradoEn && ctx.actor.rol !== 'admin') throw noExiste();
+  if (a.retiradoEn && !esGestor(ctx.actor.rol)) throw noExiste();
   const almacen = opciones.almacen ?? getAlmacen();
   const clave = opciones.miniatura ? claveMiniatura(a.storageKey) : a.storageKey;
   const objeto = await almacen.leer(clave);

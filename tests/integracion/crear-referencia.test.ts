@@ -97,7 +97,7 @@ describe('duplicados (D-27, RV-33, CA-02)', () => {
     await e.db.update(referencia).set({ archivadaEn: new Date(), archivadaPor: e.admin.usuarioId, motivoArchivo: 'prueba', estadoPrevioArchivo: 'BORRADOR' }).where(eq(referencia.id, r.id));
     const x = await err(crearReferencia(e.ctx(e.edward), { codigo: 'arch 1', nombreProducto: 'x', tipoProducto: 'INSUMO' }));
     expect(x.codigo).toBe('DUPLICADO');
-    expect(x.message).toBe('Esa referencia existe pero está archivada. Pide a un administrador que la restaure.');
+    expect(x.message).toBe('Esa referencia existe pero está archivada. Pide a un administrador o a la supervisora general que la restaure.');
     expect(x.detalle).toMatchObject({ id: r.id, archivada: true });
   });
 

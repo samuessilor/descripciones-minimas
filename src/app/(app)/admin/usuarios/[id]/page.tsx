@@ -17,7 +17,7 @@ import { Aviso } from '@/componentes/ui/aviso';
 import { Avatar, nombreVisible } from '@/componentes/ui/avatar';
 import { EncabezadoPagina } from '@/componentes/ui/pagina';
 import { AREAS, esArea, exigeArea } from '@/dominio/areas';
-import { ROLES } from '@/dominio/permisos';
+import { ROLES, puede } from '@/dominio/permisos';
 import {
   candidatosReasignacion,
   contarAdminsActivos,
@@ -26,16 +26,61 @@ import {
   obtenerUsuarioAdmin,
   pendientesDeUsuario,
 } from '@/server/politicas/administracion';
+import { SinPermiso } from '@/componentes/ui/pantallas';
 import { contextoAdmin } from '../../_contexto';
 
 export const metadata: Metadata = { title: 'Persona · Descripciones mínimas' };
 
 export default async function AdminUsuario({ params }: { params: Promise<{ id: string }> }) {
   const ctx = await contextoAdmin();
-  if (!ctx) return null;
+  if (!ctx) return <SinPermiso />;
   const { id } = await params;
   const u = await obtenerUsuarioAdmin(ctx.db, ctx.actor, id);
   if (!u) notFound();
+
+  const encabezado = (
+    <EncabezadoPagina
+      titulo={
+        <span className="flex items-center gap-3">
+          <Avatar nombre={u.nombre} tamano="lg" />
+          <span className="min-w-0 break-words">{nombreVisible(u.nombre)}</span>
+        </span>
+      }
+      descripcion={<span className="break-all font-mono">{u.username ?? 'sin usuario'}</span>}
+      migas={[{ etiqueta: 'Usuarios', href: '/admin/usuarios' }, { etiqueta: nombreVisible(u.nombre) }]}
+      meta={
+        <span className="flex flex-wrap items-center gap-2">
+          <InsigniaRol rol={u.rol} />
+          <InsigniaTipoOrg tipo={u.organizacionTipo} />
+          <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} />
+        </span>
+      }
+    />
+  );
+
+  if (!puede(ctx.actor, 'administrar')) {
+    return (
+      <>
+        {encabezado}
+        <div className="space-y-6">
+          <Seccion id="datos" titulo="Datos">
+            <Datos>
+              <Dato etiqueta="Organización">{nombreVisible(u.organizacion)}</Dato>
+              <Dato etiqueta="Usuario"><span className="font-mono">{u.username ?? 'sin usuario'}</span></Dato>
+              <Dato etiqueta="Rol">{ROL_ETIQUETA[u.rol as keyof typeof ROL_ETIQUETA] ?? u.rol}</Dato>
+              {u.area ? <Dato etiqueta="Área">{u.area}</Dato> : null}
+              {u.encargado ? <Dato etiqueta="Encargado del área">{u.encargado}</Dato> : null}
+              <Dato etiqueta="Creada">{fechaHora(u.creadoEn)}</Dato>
+              <Dato etiqueta="Último ingreso">{u.ultimoIngreso ? `${hace(u.ultimoIngreso)} · ${fechaHora(u.ultimoIngreso)}` : 'Todavía no ha entrado'}</Dato>
+            </Datos>
+          </Seccion>
+          <Aviso tipo="info" titulo="Solo lectura">
+            Los datos, el rol, la contraseña y el acceso de las cuentas los gestiona el administrador.
+          </Aviso>
+        </div>
+      </>
+    );
+  }
 
   const [organizaciones, pendientes, candidatos, sesiones, admins] = await Promise.all([
     listarOrganizacionesAdmin(ctx.db, ctx.actor),
@@ -64,23 +109,7 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
 
   return (
     <>
-      <EncabezadoPagina
-        titulo={
-          <span className="flex items-center gap-3">
-            <Avatar nombre={u.nombre} tamano="lg" />
-            <span className="min-w-0 break-words">{nombreVisible(u.nombre)}</span>
-          </span>
-        }
-        descripcion={<span className="break-all font-mono">{u.username ?? 'sin usuario'}</span>}
-        migas={[{ etiqueta: 'Usuarios', href: '/admin/usuarios' }, { etiqueta: nombreVisible(u.nombre) }]}
-        meta={
-          <span className="flex flex-wrap items-center gap-2">
-            <InsigniaRol rol={u.rol} />
-            <InsigniaTipoOrg tipo={u.organizacionTipo} />
-            <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} />
-          </span>
-        }
-      />
+      {encabezado}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
         <div className="space-y-6">

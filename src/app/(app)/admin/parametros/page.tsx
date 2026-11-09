@@ -4,13 +4,14 @@ import { Aviso } from '@/componentes/ui/aviso';
 import { EncabezadoPagina } from '@/componentes/ui/pagina';
 import { getConfig } from '@/server/config';
 import { leerParametros } from '@/server/parametros';
+import { SinPermiso } from '@/componentes/ui/pantallas';
 import { contextoAdmin } from '../_contexto';
 
 export const metadata: Metadata = { title: 'Parámetros · Descripciones mínimas' };
 
 export default async function AdminParametros() {
-  const ctx = await contextoAdmin();
-  if (!ctx) return null;
+  const ctx = await contextoAdmin('administrar');
+  if (!ctx) return <SinPermiso />;
   const grupos = leerParametros(getConfig());
 
   return (

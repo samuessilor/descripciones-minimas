@@ -26,6 +26,7 @@ export function sinLogin(): boolean {
 export function cuentasDemo(): CuentaDemo[] {
   return [
     { email: 'admin@desarrollo.invalid', etiqueta: 'Administrador (Samuel)', detalle: 'Ve y gestiona todo' },
+    { email: 'supervisor@desarrollo.invalid', etiqueta: 'Supervisora general (Angie)', detalle: 'Lo operativo, catálogos, auditoría y organizaciones' },
     ...AREAS.map((area) => ({
       email: `${normalizarTexto(area)}@desarrollo.invalid`,
       etiqueta: nombreDeArea(area),

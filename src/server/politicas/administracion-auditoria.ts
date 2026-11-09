@@ -7,7 +7,8 @@ import { alias } from 'drizzle-orm/pg-core';
 import { auditoria, referencia, usuario } from '@/db/esquema';
 import type { Ejecutor } from '@/db/tipos';
 import { normalizarCodigo } from '@/dominio/normalizacion';
-import { esUuid, exigirAdmin } from './administracion';
+import { esUuid } from './administracion';
+import { exigir } from './exigir';
 import type { Actor } from './actor';
 
 export const POR_PAGINA_AUDITORIA = 50;
@@ -125,7 +126,7 @@ export async function listarAuditoriaAdmin(
   actor: Actor,
   filtros: FiltrosAuditoria = {},
 ): Promise<{ filas: FilaAuditoria[]; total: number; pagina: number; porPagina: number; fichaNoExiste: boolean }> {
-  exigirAdmin(actor);
+  exigir(actor, 'supervisar');
   const pagina = Math.max(1, Math.floor(filtros.pagina ?? 1));
   const { donde, fichaNoExiste } = await condiciones(ej, filtros);
   if (fichaNoExiste) return { filas: [], total: 0, pagina, porPagina: POR_PAGINA_AUDITORIA, fichaNoExiste };
@@ -146,7 +147,7 @@ export async function listarAuditoriaAdmin(
 
 /** Para el CSV: hasta `MAXIMO_FILAS_CSV` filas, de la mas nueva a la mas vieja. */
 export async function auditoriaParaCsv(ej: Ejecutor, actor: Actor, filtros: FiltrosAuditoria = {}): Promise<{ filas: FilaAuditoria[]; truncado: boolean }> {
-  exigirAdmin(actor);
+  exigir(actor, 'supervisar');
   const { donde, fichaNoExiste } = await condiciones(ej, filtros);
   if (fichaNoExiste) return { filas: [], truncado: false };
   const { objetivo, columnas } = seleccion();
@@ -168,7 +169,7 @@ export interface OpcionesFiltroAuditoria {
 }
 
 export async function opcionesFiltroAuditoria(ej: Ejecutor, actor: Actor): Promise<OpcionesFiltroAuditoria> {
-  exigirAdmin(actor);
+  exigir(actor, 'supervisar');
   const acciones = await ej.selectDistinct({ accion: auditoria.accion }).from(auditoria).orderBy(asc(auditoria.accion));
   const usuarios = await ej
     .select({ id: usuario.id, nombre: usuario.nombre })
@@ -181,7 +182,7 @@ export async function opcionesFiltroAuditoria(ej: Ejecutor, actor: Actor): Promi
 
 /** Un evento por id (para la ficha de detalle). */
 export async function obtenerEventoAuditoria(ej: Ejecutor, actor: Actor, id: number): Promise<FilaAuditoria | null> {
-  exigirAdmin(actor);
+  exigir(actor, 'supervisar');
   if (!Number.isSafeInteger(id) || id < 1) return null;
   const { objetivo, columnas } = seleccion();
   const [f] = await ej

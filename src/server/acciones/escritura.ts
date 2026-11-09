@@ -20,7 +20,7 @@ import { construirTextoBusqueda } from '@/dominio/busqueda';
 import { solicitudSinRespuesta } from '@/dominio/completitud';
 import { nombreSinMarca } from '@/dominio/colaboracion';
 import { motivoVisible, normalizarCodigo } from '@/dominio/normalizacion';
-import { autorVisible, type TipoOrganizacion } from '@/dominio/permisos';
+import { autorVisible, esGestor, type TipoOrganizacion } from '@/dominio/permisos';
 import { esNoAplica, estaVacio, valoresIguales } from '@/dominio/valores';
 import type { Datos, EntradaDatos } from '@/db/esquema/nucleo';
 import { crearNotificacion } from '../notificaciones/crear';
@@ -103,9 +103,9 @@ export async function aplicarEscritura(
   const hayValorAjeno = !!vigente && vigente.a !== actor.usuarioId && !estaVacio(valorVigente);
 
   if (p.tipoEvento !== 'sistema' && hayValorAjeno) {
-    // Nadie vacia un valor ajeno; solo un admin, y con motivo (9.3). Excepcion: desmarcar un «No aplica» ajeno
+    // Nadie vacia un valor ajeno; solo un admin o la supervisora, y con motivo (9.3). Excepcion: desmarcar un «No aplica» ajeno
     // (con motivo y aviso al autor), porque con la casilla marcada el campo no admite otro valor (R1).
-    if (estaVacio(nuevo) && actor.rol !== 'admin' && !esNoAplica(valorVigente)) {
+    if (estaVacio(nuevo) && !esGestor(actor.rol) && !esNoAplica(valorVigente)) {
       throw new ErrorAccion(
         'SIN_PERMISO',
         'No se puede dejar vacío un valor que puso otra persona. Si está mal, cámbialo y cuéntale por qué.',

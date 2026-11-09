@@ -7,8 +7,16 @@
 import { CAMPOS, getCampo, type CampoDef } from './campos';
 import type { EstadoFicha } from './estado';
 
-export const ROLES = ['admin', 'solicitante', 'aduana', 'lector'] as const;
+export const ROLES = ['admin', 'supervisor', 'solicitante', 'aduana', 'lector'] as const;
 export type Rol = (typeof ROLES)[number];
+
+/**
+ * Administrador y supervisora general: comparten todo lo operativo de la plataforma. Lo reservado al administrador
+ * (seguridad, cuentas y parametros) pasa por `puede(actor, 'administrar')`, no por este helper.
+ */
+export function esGestor(rol: string): boolean {
+  return rol === 'admin' || rol === 'supervisor';
+}
 
 export type TipoOrganizacion = 'interna' | 'agencia';
 
@@ -47,6 +55,9 @@ export type Accion =
   | 'desarchivar'
   | 'corregir_codigo'
   | 'descargar_excel'
+  /** Zona /admin compartida: resumen, catalogos, auditoria, organizaciones y usuarios en lectura. */
+  | 'supervisar'
+  /** Solo el administrador: parametros, claves, roles, cuentas y sesiones. */
   | 'administrar';
 
 export interface ContextoAccion {
@@ -58,16 +69,17 @@ export interface ContextoAccion {
 
 const SOLO: Record<Exclude<Accion, 'recordar' | 'reasignar' | 'archivar' | 'corregir_codigo' | 'adjuntar_foto'>, readonly Rol[]> = {
   ver_listado: ROLES,
-  crear_referencia: ['admin', 'solicitante'],
-  escribir_grupo_cliente: ['admin', 'solicitante'],
-  escribir_grupo_aduana: ['admin', 'aduana'],
-  marcar_clasificada: ['admin', 'aduana'],
-  enviar_a: ['admin', 'solicitante', 'aduana'],
-  comentar: ['admin', 'solicitante', 'aduana'],
-  reabrir: ['admin', 'aduana'],
-  solicitar_reapertura: ['admin', 'solicitante'],
-  desarchivar: ['admin'],
+  crear_referencia: ['admin', 'supervisor', 'solicitante'],
+  escribir_grupo_cliente: ['admin', 'supervisor', 'solicitante'],
+  escribir_grupo_aduana: ['admin', 'supervisor', 'aduana'],
+  marcar_clasificada: ['admin', 'supervisor', 'aduana'],
+  enviar_a: ['admin', 'supervisor', 'solicitante', 'aduana'],
+  comentar: ['admin', 'supervisor', 'solicitante', 'aduana'],
+  reabrir: ['admin', 'supervisor', 'aduana'],
+  solicitar_reapertura: ['admin', 'supervisor', 'solicitante'],
+  desarchivar: ['admin', 'supervisor'],
   descargar_excel: ROLES,
+  supervisar: ['admin', 'supervisor'],
   administrar: ['admin'],
 };
 
@@ -76,18 +88,28 @@ export function puede(actor: Pick<ActorLike, 'rol'>, accion: Accion, ctx: Contex
   const { rol } = actor;
   switch (accion) {
     case 'recordar':
-      return rol === 'admin' || rol === 'lector' || ((rol === 'solicitante' || rol === 'aduana') && !!ctx.esRemitente);
+      return esGestor(rol) || rol === 'lector' || ((rol === 'solicitante' || rol === 'aduana') && !!ctx.esRemitente);
     case 'reasignar':
-      return rol === 'admin' || ((rol === 'solicitante' || rol === 'aduana') && !!ctx.esRemitente);
+      return esGestor(rol) || ((rol === 'solicitante' || rol === 'aduana') && !!ctx.esRemitente);
     case 'archivar':
-      return rol === 'admin' || (rol === 'solicitante' && !!ctx.esCreador && !!ctx.esBorradorSinEnviar);
+      return esGestor(rol) || (rol === 'solicitante' && !!ctx.esCreador && !!ctx.esBorradorSinEnviar);
     case 'corregir_codigo':
-      return rol === 'admin' || (rol === 'solicitante' && !!ctx.esCreador && ctx.estadoFicha !== 'CLASIFICADA');
+      return esGestor(rol) || (rol === 'solicitante' && !!ctx.esCreador && ctx.estadoFicha !== 'CLASIFICADA');
     case 'adjuntar_foto':
-      return (rol === 'admin' || rol === 'solicitante') && ctx.estadoFicha !== 'CLASIFICADA';
+      return (esGestor(rol) || rol === 'solicitante') && ctx.estadoFicha !== 'CLASIFICADA';
     default:
       return SOLO[accion].includes(rol);
   }
+}
+
+/** Guarda por objetivo: quien no es administrador no crea ni promueve administradores o supervisoras. */
+export function puedeAsignarRol(actor: Pick<ActorLike, 'rol'>, rolNuevo: string): boolean {
+  return actor.rol === 'admin' || (rolNuevo !== 'admin' && rolNuevo !== 'supervisor');
+}
+
+/** Guarda por objetivo: quien no es administrador no toca cuentas de administrador. */
+export function puedeTocarCuenta(actor: Pick<ActorLike, 'rol'>, rolCuenta: string): boolean {
+  return actor.rol === 'admin' || rolCuenta !== 'admin';
 }
 
 export function visibilidadesComentarioPermitidas(rol: Rol): Array<'interno' | 'todos'> {
@@ -97,7 +119,7 @@ export function visibilidadesComentarioPermitidas(rol: Rol): Array<'interno' | '
 }
 
 export function alcanceExcel(rol: Rol): 'todo' | 'visible' {
-  return rol === 'admin' || rol === 'solicitante' ? 'todo' : 'visible';
+  return esGestor(rol) || rol === 'solicitante' ? 'todo' : 'visible';
 }
 
 // ---- Escritura por campo ---------------------------------------------------------------------
@@ -135,7 +157,7 @@ export function puedeEscribirCampo(
       // Unico campo del sistema editable por personas: la fecha de solicitud (6.3, RV-32).
       permitido =
         campo.clave === 'fecha_solicitud' &&
-        (actor.rol === 'admin' ||
+        (esGestor(actor.rol) ||
           (actor.rol === 'solicitante' && ficha.creadaPor === actor.usuarioId && ficha.estado === 'BORRADOR'));
       break;
   }

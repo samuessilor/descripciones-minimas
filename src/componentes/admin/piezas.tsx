@@ -51,7 +51,7 @@ export function Dato({ etiqueta, children }: { etiqueta: string; children: React
 }
 
 export function InsigniaRol({ rol }: { rol: string }) {
-  return <Insignia variante={rol === 'admin' ? 'oscura' : 'azul'}>{ROL_ETIQUETA[rol as keyof typeof ROL_ETIQUETA] ?? rol}</Insignia>;
+  return <Insignia variante={rol === 'admin' || rol === 'supervisor' ? 'oscura' : 'azul'}>{ROL_ETIQUETA[rol as keyof typeof ROL_ETIQUETA] ?? rol}</Insignia>;
 }
 
 export function InsigniaTipoOrg({ tipo }: { tipo: string }) {

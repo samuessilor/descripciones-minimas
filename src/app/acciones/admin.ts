@@ -2,7 +2,7 @@
 
 /**
  * Server Actions de administracion (10.4). Capa delgada: cada una autentica de nuevo (`contextoDeAccion`),
- * llama al nucleo (que vuelve a exigir rol `admin`), y devuelve un estado que la interfaz muestra en linea.
+ * llama al nucleo (que vuelve a exigir el permiso que corresponde), y devuelve un estado que la interfaz muestra en linea.
  * Los textos que ve el usuario salen de aqui y de los nucleos; nunca un codigo ni una traza.
  */
 import { revalidatePath } from 'next/cache';
@@ -70,10 +70,9 @@ async function correr<T>(
       for (const p of problemas) errores[p.ruta.split('.')[0] ?? 'general'] ??= p.mensaje;
       return { estado: 'error', mensaje: 'Revisa los datos marcados.', errores, detalles: [...new Set(problemas.map((p) => p.mensaje))], marca: Date.now() };
     }
-    const sesionVencida = (r.detalle as { sesionVencida?: boolean } | undefined)?.sesionVencida;
     return {
       estado: 'error',
-      mensaje: r.codigo === 'SIN_PERMISO' && !sesionVencida ? 'No tienes permiso para hacer esto. Pídele acceso a otro administrador.' : r.mensaje,
+      mensaje: r.mensaje,
       ...(pendientes ? { pendientes } : {}),
       marca: Date.now(),
     };

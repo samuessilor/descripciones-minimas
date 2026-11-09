@@ -34,7 +34,7 @@ import {
   type Pedido,
 } from '@/dominio/colaboracion';
 import { transicionar, type EstadoFicha } from '@/dominio/estado';
-import { puede } from '@/dominio/permisos';
+import { esGestor, puede } from '@/dominio/permisos';
 import { auditar } from '../auditoria';
 import {
   auditarColaboracion,
@@ -204,19 +204,19 @@ async function validarDestinatarios(
     if (permitidosAduana && !permitidosAduana.has(p.id) && p.organizacionId !== actor.organizacionId) {
       throw new ErrorAccion('SIN_PERMISO', 'Solo puedes enviar esta referencia a quien te la envió o a alguien de tu agencia.');
     }
-    // Una ficha tiene a lo sumo una agencia con acceso a la vez (D-29): una segunda solo la agrega un admin.
+    // Una ficha tiene a lo sumo una agencia con acceso a la vez (D-29): una segunda solo la agrega un admin o la supervisora.
     if (
       p.organizacionTipo === 'agencia' &&
       agencias.length > 0 &&
       !agencias.some((a) => a.id === p.organizacionId) &&
-      actor.rol !== 'admin'
+      !esGestor(actor.rol)
     ) {
       const con = actor.organizacionTipo === 'agencia' ? null : agencias[0]?.nombre;
       throw new ErrorAccion(
         'SIN_PERMISO',
         con
-          ? `Esta referencia ya está con ${nombreSinMarca(con)}. Pide a un administrador que la comparta con otra agencia.`
-          : 'Esta referencia ya está con otra agencia. Pide a un administrador que la comparta.',
+          ? `Esta referencia ya está con ${nombreSinMarca(con)}. Pide a un administrador o a la supervisora general que la comparta con otra agencia.`
+          : 'Esta referencia ya está con otra agencia. Pide a un administrador o a la supervisora general que la comparta.',
       );
     }
     validados.push({ perfil: p, pedido, secciones: p.rol === 'aduana' ? null : textoDeSecciones(e.secciones ?? []) });
@@ -671,8 +671,8 @@ export async function cancelarAsignacion(ctx: Contexto, entrada: unknown): Promi
   return ctx.db.transaction(async (tx) => {
     const { a, ficha } = await cargarAsignacionBloqueada(tx, actor, asignacionId, ahora);
     const remitente = a.deUsuarioId === actor.usuarioId && (actor.rol === 'solicitante' || actor.rol === 'aduana');
-    if (!(actor.rol === 'admin' || remitente)) {
-      throw new ErrorAccion('SIN_PERMISO', 'Solo quien envió la referencia o un administrador puede cancelar el envío.');
+    if (!(esGestor(actor.rol) || remitente)) {
+      throw new ErrorAccion('SIN_PERMISO', 'Solo quien envió la referencia, un administrador o la supervisora general puede cancelar el envío.');
     }
     if (a.estado === 'cancelada') return { ok: true as const, yaEstaba: true };
     if (!esAsignacionActiva(a.estado)) {
@@ -726,7 +726,7 @@ export async function recordar(ctx: Contexto, entrada: unknown): Promise<Resulta
     if (!puede(actor, 'recordar', { esRemitente: a.deUsuarioId === actor.usuarioId })) {
       throw new ErrorAccion(
         'SIN_PERMISO',
-        'Solo quien envió la referencia, un administrador o la persona que lleva el proceso puede enviar un recordatorio.',
+        'Solo quien envió la referencia, un administrador, la supervisora general o la persona que lleva el proceso puede enviar un recordatorio.',
       );
     }
     if (!esAsignacionActiva(a.estado)) {
@@ -797,7 +797,7 @@ export async function reasignar(ctx: Contexto, entrada: unknown): Promise<Result
   return ctx.db.transaction(async (tx) => {
     const { a, ficha } = await cargarAsignacionBloqueada(tx, actor, e.asignacionId, ahora);
     if (!puede(actor, 'reasignar', { esRemitente: a.deUsuarioId === actor.usuarioId })) {
-      throw new ErrorAccion('SIN_PERMISO', 'Solo quien envió la referencia o un administrador puede reasignarla.');
+      throw new ErrorAccion('SIN_PERMISO', 'Solo quien envió la referencia, un administrador o la supervisora general puede reasignarla.');
     }
     if (!esAsignacionActiva(a.estado)) {
       throw new ErrorAccion('VALIDACION', 'Esa asignación ya terminó, así que no se puede reasignar. Envía la referencia a quien quieras desde «Enviar a…».');

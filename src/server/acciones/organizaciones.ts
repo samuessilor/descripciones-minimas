@@ -6,17 +6,11 @@ import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { asignacion, organizacion, referencia, usuario } from '@/db/esquema';
 import type { Ejecutor } from '@/db/tipos';
-import { puede } from '@/dominio/permisos';
 import { auditar } from '../auditoria';
 import { ahoraDe, type Contexto } from '../politicas/actor';
+import { exigir } from '../politicas/exigir';
 import { ErrorAccion, esViolacionUnica } from './resultado';
 import { parsear, textoLimpio } from './validacion';
-
-function exigirAdmin(ctx: Contexto): void {
-  if (!puede(ctx.actor, 'administrar')) {
-    throw new ErrorAccion('SIN_PERMISO', 'Solo un administrador puede gestionar organizaciones.');
-  }
-}
 
 /**
  * El UNIQUE de la base distingue mayusculas: «Area Pruebas» y «area pruebas» pasarian las dos. Se compara sin
@@ -40,7 +34,7 @@ export const entradaCrearOrganizacion = z.object({
 });
 
 export async function crearOrganizacion(ctx: Contexto, entrada: unknown): Promise<{ id: string }> {
-  exigirAdmin(ctx);
+  exigir(ctx.actor, 'supervisar');
   const e = parsear(entradaCrearOrganizacion, entrada);
   const ahora = ahoraDe(ctx);
   try {
@@ -70,7 +64,7 @@ export async function crearOrganizacion(ctx: Contexto, entrada: unknown): Promis
 
 /** Renombrar. El tipo no cambia: los roles de sus usuarios dependen de el (D-28). */
 export async function editarOrganizacion(ctx: Contexto, entrada: unknown): Promise<{ ok: true }> {
-  exigirAdmin(ctx);
+  exigir(ctx.actor, 'supervisar');
   const e = parsear(z.object({ organizacionId: z.uuid(), nombre: nombreOrg() }), entrada);
   const ahora = ahoraDe(ctx);
   try {
@@ -103,7 +97,7 @@ export async function editarOrganizacion(ctx: Contexto, entrada: unknown): Promi
  * personas (con su reasignacion) y despues la organizacion.
  */
 export async function cambiarEstadoOrganizacion(ctx: Contexto, entrada: unknown): Promise<{ ok: true }> {
-  exigirAdmin(ctx);
+  exigir(ctx.actor, 'administrar');
   const e = parsear(z.object({ organizacionId: z.uuid(), activa: z.boolean() }), entrada);
   const ahora = ahoraDe(ctx);
   await ctx.db.transaction(async (tx) => {
@@ -150,7 +144,7 @@ export interface ResultadoRetiroAcceso {
  * ya escribio sigue en el historial de la ficha (nada se borra).
  */
 export async function retirarAccesoAgencia(ctx: Contexto, entrada: unknown): Promise<ResultadoRetiroAcceso> {
-  exigirAdmin(ctx);
+  exigir(ctx.actor, 'supervisar');
   const e = parsear(z.object({ referenciaId: z.uuid(), organizacionId: z.uuid() }), entrada);
   const ahora = ahoraDe(ctx);
   return ctx.db.transaction(async (tx) => {

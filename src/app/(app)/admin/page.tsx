@@ -7,7 +7,9 @@ import { plural } from '@/componentes/admin/formato';
 import { nombreVisible } from '@/componentes/ui/avatar';
 import { EstadoVacio } from '@/componentes/ui/estado-vacio';
 import { EncabezadoPagina } from '@/componentes/ui/pagina';
+import { puede } from '@/dominio/permisos';
 import { resumenAdmin } from '@/server/politicas/administracion';
+import { SinPermiso } from '@/componentes/ui/pantallas';
 import { contextoAdmin } from './_contexto';
 
 export const metadata: Metadata = { title: 'Administración · Descripciones mínimas' };
@@ -21,7 +23,7 @@ function listaNatural(nombres: string[], max = 3): string {
 
 export default async function Administracion() {
   const ctx = await contextoAdmin();
-  if (!ctx) return null;
+  if (!ctx) return <SinPermiso />;
   const r = await resumenAdmin(ctx.db, ctx.actor);
 
   const atenciones: Array<{ clave: string; nodo: ReactNode }> = [];
@@ -31,7 +33,7 @@ export default async function Administracion() {
       nodo: (
         <FilaAtencion
           titulo={`${plural(r.usuarios.sinIngreso, 'cuenta aún no ha entrado', 'cuentas aún no han entrado')}`}
-          detalle={`Creadas y sin primer ingreso: ${listaNatural(r.sinIngresoLista.map((u) => nombreVisible(u.nombre)))}. Entrégales su usuario y contraseña.`}
+          detalle={`Creadas y sin primer ingreso: ${listaNatural(r.sinIngresoLista.map((u) => nombreVisible(u.nombre)))}. ${puede(ctx.actor, 'administrar') ? 'Entrégales su usuario y contraseña.' : 'El administrador les entrega su usuario y contraseña.'}`}
           href="/admin/usuarios?estado=sin_ingreso"
           salida="Ver cuentas"
         />
@@ -77,7 +79,7 @@ export default async function Administracion() {
     { href: '/admin/organizaciones', etiqueta: 'Organizaciones', detalle: `${plural(r.organizaciones.internas, 'área interna', 'áreas internas')} · ${plural(r.organizaciones.agencias, 'agencia', 'agencias')}`, icono: Building2 },
     { href: '/admin/catalogos', etiqueta: 'Catálogos', detalle: 'Listas, restricciones y partidas', icono: ListChecks },
     { href: '/admin/auditoria', etiqueta: 'Auditoría', detalle: 'Quién hizo qué y cuándo', icono: ScrollText },
-    { href: '/admin/parametros', etiqueta: 'Parámetros', detalle: 'Límites y vigencias en uso', icono: SlidersHorizontal },
+    ...(puede(ctx.actor, 'administrar') ? [{ href: '/admin/parametros', etiqueta: 'Parámetros', detalle: 'Límites y vigencias en uso', icono: SlidersHorizontal }] : []),
   ];
 
   return (

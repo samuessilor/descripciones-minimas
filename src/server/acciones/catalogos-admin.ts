@@ -10,17 +10,11 @@ import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { catalogoItem, partidaArancelaria, restriccionPlantilla } from '@/db/esquema';
 import { normalizarPartida } from '@/dominio/partida';
-import { puede } from '@/dominio/permisos';
 import { auditar } from '../auditoria';
 import { ahoraDe, type Contexto } from '../politicas/actor';
+import { exigir } from '../politicas/exigir';
 import { ErrorAccion, esViolacionUnica } from './resultado';
 import { parsear, textoLimpio } from './validacion';
-
-function exigirAdmin(ctx: Contexto): void {
-  if (!puede(ctx.actor, 'administrar')) {
-    throw new ErrorAccion('SIN_PERMISO', 'Solo un administrador puede gestionar los catálogos.');
-  }
-}
 
 export const CATALOGOS_ITEM = ['unidad_medida', 'aspecto_fisico', 'sugerencia_empaque'] as const;
 export type CatalogoItemNombre = (typeof CATALOGOS_ITEM)[number];
@@ -39,7 +33,7 @@ export const entradaGuardarItem = z.object({
  * Devuelve `{ id, creado }`.
  */
 export async function guardarItemCatalogo(ctx: Contexto, entrada: unknown): Promise<{ id: string; creado: boolean }> {
-  exigirAdmin(ctx);
+  exigir(ctx.actor, 'supervisar');
   const e = parsear(entradaGuardarItem, entrada);
   const ahora = ahoraDe(ctx);
   return ctx.db.transaction(async (tx) => {
@@ -81,7 +75,7 @@ export async function guardarItemCatalogo(ctx: Contexto, entrada: unknown): Prom
 }
 
 export async function activarItemCatalogo(ctx: Contexto, entrada: unknown): Promise<{ ok: true }> {
-  exigirAdmin(ctx);
+  exigir(ctx.actor, 'supervisar');
   const e = parsear(z.object({ id: z.uuid(), activo: z.boolean() }), entrada);
   const ahora = ahoraDe(ctx);
   await ctx.db.transaction(async (tx) => {
@@ -113,7 +107,7 @@ export async function activarItemCatalogo(ctx: Contexto, entrada: unknown): Prom
 
 /** Sube o baja un valor en su lista. Renumera la lista entera (de 10 en 10) para no depender de ordenes repetidos. */
 export async function moverItemCatalogo(ctx: Contexto, entrada: unknown): Promise<{ ok: true }> {
-  exigirAdmin(ctx);
+  exigir(ctx.actor, 'supervisar');
   const e = parsear(z.object({ id: z.uuid(), direccion: z.enum(['arriba', 'abajo']) }), entrada);
   const ahora = ahoraDe(ctx);
   await ctx.db.transaction(async (tx) => {
@@ -159,7 +153,7 @@ export const entradaGuardarRestriccion = z.object({
  * vale para las fichas nuevas y no reescribe las ya clasificadas. El texto anterior queda en la auditoria.
  */
 export async function guardarRestriccion(ctx: Contexto, entrada: unknown): Promise<{ id: string; creada: boolean }> {
-  exigirAdmin(ctx);
+  exigir(ctx.actor, 'supervisar');
   const e = parsear(entradaGuardarRestriccion, entrada);
   const ahora = ahoraDe(ctx);
   try {
@@ -224,7 +218,7 @@ export const entradaGuardarPartida = z.object({
 });
 
 export async function guardarPartida(ctx: Contexto, entrada: unknown): Promise<{ codigo: string }> {
-  exigirAdmin(ctx);
+  exigir(ctx.actor, 'supervisar');
   const e = parsear(entradaGuardarPartida, entrada);
   const codigo = normalizarPartida(e.codigo);
   if (!codigo) throw new ErrorAccion('VALIDACION', 'La partida lleva 10 dígitos. Ejemplo: 8466.92.00.00');

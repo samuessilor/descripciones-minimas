@@ -16,6 +16,7 @@ import {
   type FilaAuditoria,
   type FiltrosAuditoria,
 } from '@/server/politicas/administracion-auditoria';
+import { SinPermiso } from '@/componentes/ui/pantallas';
 import { contextoAdmin, param } from '../_contexto';
 
 export const metadata: Metadata = { title: 'Auditoría · Descripciones mínimas' };
@@ -91,7 +92,7 @@ function Detalle({ f }: { f: FilaAuditoria }) {
 
 export default async function AdminAuditoria({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const ctx = await contextoAdmin();
-  if (!ctx) return null;
+  if (!ctx) return <SinPermiso />;
   const sp = await searchParams;
   const filtros: FiltrosAuditoria = {
     desde: param(sp.desde),

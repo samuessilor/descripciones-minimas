@@ -2,13 +2,14 @@ import type { Metadata } from 'next';
 import { FormularioCrearCuenta } from '@/componentes/admin/FormularioCrearCuenta';
 import { ContenedorLectura, EncabezadoPagina } from '@/componentes/ui/pagina';
 import { listarOrganizacionesAdmin } from '@/server/politicas/administracion';
+import { SinPermiso } from '@/componentes/ui/pantallas';
 import { contextoAdmin, param } from '../../_contexto';
 
 export const metadata: Metadata = { title: 'Crear cuenta · Descripciones mínimas' };
 
 export default async function CrearCuenta({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const ctx = await contextoAdmin();
-  if (!ctx) return null;
+  const ctx = await contextoAdmin('administrar');
+  if (!ctx) return <SinPermiso />;
   const sp = await searchParams;
   const organizaciones = (await listarOrganizacionesAdmin(ctx.db, ctx.actor)).filter((o) => o.activa);
   return (

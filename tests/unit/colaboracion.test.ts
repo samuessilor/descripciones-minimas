@@ -28,6 +28,7 @@ describe('pedidos por rol (8.3 regla 1)', () => {
     expect(pedidosPermitidos('aduana')).toEqual(['clasificar', 'revisar']);
     expect(pedidosPermitidos('solicitante')).toEqual(['completar', 'responder', 'revisar']);
     expect(pedidosPermitidos('admin')).toHaveLength(4);
+    expect(pedidosPermitidos('supervisor')).toEqual(pedidosPermitidos('admin'));
     expect(pedidosPermitidos('lector')).toEqual([]);
   });
 
@@ -35,6 +36,7 @@ describe('pedidos por rol (8.3 regla 1)', () => {
     expect(pedidoPorDefecto('aduana')).toBe('clasificar');
     expect(pedidoPorDefecto('solicitante')).toBe('completar');
     expect(pedidoPorDefecto('admin')).toBe('completar');
+    expect(pedidoPorDefecto('supervisor')).toBe('completar');
   });
 
   it('compatibilidad y quien puede recibir', () => {

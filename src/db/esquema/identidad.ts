@@ -75,7 +75,7 @@ export const usuario = pgTable(
       columns: [t.organizacionId, t.organizacionTipo],
       foreignColumns: [organizacion.id, organizacion.tipo],
     }),
-    check('usuario_rol_valido', sql`${t.rol} in ('admin','solicitante','aduana','lector')`),
+    check('usuario_rol_valido', sql`${t.rol} in ('admin','supervisor','solicitante','aduana','lector')`),
     check('usuario_email_minusculas', sql`${t.email} = lower(${t.email})`),
     check('usuario_area_valida', sql`${t.area} is null or ${t.area} in ('Consumibles','Mantenimiento','Instrumentos','Marketing')`),
     // D-28: una agencia solo admite el rol `aduana`.

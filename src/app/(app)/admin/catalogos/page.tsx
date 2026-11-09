@@ -23,6 +23,7 @@ import {
   type RestriccionAdmin,
 } from '@/server/politicas/administracion-catalogos';
 import type { OpcionesPartida } from '@/server/politicas/administracion-catalogos';
+import { SinPermiso } from '@/componentes/ui/pantallas';
 import { contextoAdmin, param } from '../_contexto';
 
 export const metadata: Metadata = { title: 'Catálogos · Descripciones mínimas' };
@@ -222,7 +223,7 @@ function FormularioPartida({ p, opciones }: { p?: PartidaAdmin; opciones: Opcion
 
 export default async function AdminCatalogos({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const ctx = await contextoAdmin();
-  if (!ctx) return null;
+  if (!ctx) return <SinPermiso />;
   const sp = await searchParams;
   const activa: Clave = SECCIONES.find((s) => s.id === param(sp.seccion))?.id ?? 'unidades';
   const q = param(sp.q);

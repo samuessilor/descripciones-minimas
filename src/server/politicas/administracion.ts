@@ -7,13 +7,9 @@ import { alias } from 'drizzle-orm/pg-core';
 import { asignacion, organizacion, referencia, session, usuario } from '@/db/esquema';
 import type { Ejecutor } from '@/db/tipos';
 import { normalizarTexto } from '@/dominio/normalizacion';
-import { puede, type Rol } from '@/dominio/permisos';
-import { ErrorAccion } from '../acciones/resultado';
+import type { Rol } from '@/dominio/permisos';
 import type { Actor } from './actor';
-
-export function exigirAdmin(actor: Pick<Actor, 'rol'>): void {
-  if (!puede(actor, 'administrar')) throw new ErrorAccion('SIN_PERMISO', 'No tienes permiso para ver esta sección.');
-}
+import { exigir } from './exigir';
 
 /** Escapa `%`, `_` y `\` para usarlos dentro de un LIKE ... ESCAPE '\'. */
 export function escaparLike(s: string): string {
@@ -72,7 +68,7 @@ const COLUMNAS_USUARIO = {
 };
 
 export async function listarUsuariosAdmin(ej: Ejecutor, actor: Actor, filtros: FiltrosUsuarios = {}): Promise<FilaUsuarioAdmin[]> {
-  exigirAdmin(actor);
+  exigir(actor, 'supervisar');
   const condiciones: SQL[] = [];
   const q = normalizarTexto(filtros.q ?? '');
   if (q) {
@@ -105,7 +101,7 @@ export async function listarUsuariosAdmin(ej: Ejecutor, actor: Actor, filtros: F
 }
 
 export async function obtenerUsuarioAdmin(ej: Ejecutor, actor: Actor, usuarioId: string): Promise<FilaUsuarioAdmin | null> {
-  exigirAdmin(actor);
+  exigir(actor, 'supervisar');
   if (!esUuid(usuarioId)) return null;
   const [f] = await ej
     .select(COLUMNAS_USUARIO)
@@ -130,7 +126,7 @@ export interface PendienteUsuario {
 
 /** Asignaciones abiertas (pendiente / en curso) de una persona: lo que hay que reasignar al desactivarla o moverla. */
 export async function pendientesDeUsuario(ej: Ejecutor, actor: Actor, usuarioId: string): Promise<PendienteUsuario[]> {
-  exigirAdmin(actor);
+  exigir(actor, 'administrar');
   if (!esUuid(usuarioId)) return [];
   const de = alias(usuario, 'de');
   const filas = await ej
@@ -165,7 +161,7 @@ export interface CandidatoReasignacion {
 
 /** Personas a las que se puede reasignar: activas, no lectoras, distintas de quien sale. */
 export async function candidatosReasignacion(ej: Ejecutor, actor: Actor, excluirUsuarioId: string): Promise<CandidatoReasignacion[]> {
-  exigirAdmin(actor);
+  exigir(actor, 'administrar');
   if (!esUuid(excluirUsuarioId)) return [];
   return ej
     .select({
@@ -215,14 +211,14 @@ export async function sesionesDe(ej: Ejecutor, usuarioId: string): Promise<Sesio
 }
 
 export async function listarSesionesDeUsuario(ej: Ejecutor, actor: Actor, usuarioId: string): Promise<SesionVista[]> {
-  exigirAdmin(actor);
+  exigir(actor, 'administrar');
   if (!esUuid(usuarioId)) return [];
   return sesionesDe(ej, usuarioId);
 }
 
 /** Cuantos administradores activos hay (para explicar por que no se puede quitar al ultimo). */
 export async function contarAdminsActivos(ej: Ejecutor, actor: Actor): Promise<number> {
-  exigirAdmin(actor);
+  exigir(actor, 'administrar');
   const [r] = await ej
     .select({ n: sql<number>`count(*)::int` })
     .from(usuario)
@@ -245,7 +241,7 @@ export interface FilaOrganizacionAdmin {
 }
 
 export async function listarOrganizacionesAdmin(ej: Ejecutor, actor: Actor): Promise<FilaOrganizacionAdmin[]> {
-  exigirAdmin(actor);
+  exigir(actor, 'supervisar');
   const filas = await ej
     .select({
       id: organizacion.id,
@@ -265,7 +261,7 @@ export async function listarOrganizacionesAdmin(ej: Ejecutor, actor: Actor): Pro
 }
 
 export async function obtenerOrganizacionAdmin(ej: Ejecutor, actor: Actor, organizacionId: string): Promise<FilaOrganizacionAdmin | null> {
-  exigirAdmin(actor);
+  exigir(actor, 'supervisar');
   if (!esUuid(organizacionId)) return null;
   return (await listarOrganizacionesAdmin(ej, actor)).find((o) => o.id === organizacionId) ?? null;
 }
@@ -284,7 +280,7 @@ export interface AccesoAgencia {
 
 /** Fichas a las que una agencia tiene acceso hoy (para «Retirar acceso»). */
 export async function accesosDeAgencia(ej: Ejecutor, actor: Actor, organizacionId: string): Promise<AccesoAgencia[]> {
-  exigirAdmin(actor);
+  exigir(actor, 'supervisar');
   if (!esUuid(organizacionId)) return [];
   const filas = await ej
     .select({
@@ -329,7 +325,7 @@ export interface FichaVariasAgencias {
 
 /** Regla «una agencia a la vez» (D-29): fichas que hoy estan abiertas a mas de una agencia. */
 export async function fichasConVariasAgencias(ej: Ejecutor, actor: Actor): Promise<FichaVariasAgencias[]> {
-  exigirAdmin(actor);
+  exigir(actor, 'supervisar');
   return ej
     .select({
       referenciaId: referencia.id,
@@ -363,7 +359,7 @@ export interface ResumenAdmin {
 }
 
 export async function resumenAdmin(ej: Ejecutor, actor: Actor): Promise<ResumenAdmin> {
-  exigirAdmin(actor);
+  exigir(actor, 'supervisar');
   const [u] = await ej
     .select({
       activos: sql<number>`(count(*) filter (where ${usuario.activo}))::int`,
