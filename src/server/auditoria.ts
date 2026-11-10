@@ -28,6 +28,8 @@ export type AccionAuditada =
   | 'retirar_adjunto'
   | 'leer_adjunto'
   | 'crear_referencia'
+  // Carga del historico anterior a la plataforma (`npm run importar:historico`); la hace la cuenta «Histórico importado».
+  | 'importar_historico'
   // Administracion (H5)
   | 'editar_usuario'
   | 'crear_organizacion'

@@ -26,7 +26,9 @@
     "setup": "tsx scripts/setup.mts",
     "seed": "tsx --env-file-if-exists=.env.local scripts/seed.mts",
     "admin:inicial": "tsx --env-file-if-exists=.env.local scripts/admin-inicial.mts",
-    "cuentas:iniciales": "tsx --env-file-if-exists=.env.local scripts/cuentas-iniciales.mts"
+    "cuentas:iniciales": "tsx --env-file-if-exists=.env.local scripts/cuentas-iniciales.mts",
+    "plantilla:historico": "tsx --env-file-if-exists=.env.local scripts/plantilla-historico.mts",
+    "importar:historico": "tsx --env-file-if-exists=.env.local scripts/importar-historico.mts"
   },
   "dependencies": {
     "@electric-sql/pglite": "0.5.11",

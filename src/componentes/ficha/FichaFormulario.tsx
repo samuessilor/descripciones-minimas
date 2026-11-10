@@ -177,8 +177,9 @@ export function FichaFormulario({
       avisarCambioDeFicha(inicial.id);
       return true;
     };
-    // Solo mientras alguien usa la pestana (presencia.ts): una ficha abierta y desatendida no mantiene la base despierta
-    const detenerSondeo = sondearConBackoff(SONDEO_MS, tick);
+    // Solo mientras alguien usa la pestana (presencia.ts): una ficha abierta y desatendida no mantiene la base despierta.
+    // Una ficha cerrada se consulta mucho menos (SONDEO.fichaCerrada): solo puede cambiar si la reabren.
+    const detenerSondeo = sondearConBackoff(cerrada ? SONDEO.fichaCerrada : SONDEO_MS, tick);
     // Un primer vistazo a los pocos segundos: sin el, quien abre la ficha no veria quien esta escribiendo hasta el primer tic.
     const primero = setTimeout(() => void tick(), 3000);
     const alVolver = () => {
@@ -196,7 +197,7 @@ export function FichaFormulario({
       if (temporizadorRefresco.current) clearTimeout(temporizadorRefresco.current);
       if (temporizadorCierre.current) clearTimeout(temporizadorCierre.current);
     };
-  }, [inicial.id]);
+  }, [inicial.id, cerrada]);
 
   // Una accion propia en otro bloque (cerrar o reabrir la clasificacion, enviar, restaurar) se ve al instante:
   // no espera al sondeo, que es para los cambios de otras personas.

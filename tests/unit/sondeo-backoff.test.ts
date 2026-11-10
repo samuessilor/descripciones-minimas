@@ -5,9 +5,10 @@ import { BACKOFF, LATIDO_EDICION_MS, LATIDO_PRIMERO_MS, OCULTA_MIN_MS, pasosDeEs
 describe('SONDEO: tabla de intervalos (un solo sitio)', () => {
   it('valores finales (sin NEXT_PUBLIC_SONDEO_FACTOR)', () => {
     expect(SONDEO).toEqual({
-      estadoFicha: 45_000,
-      seguimiento: 45_000,
-      comentarios: 45_000,
+      estadoFicha: 60_000,
+      fichaCerrada: 180_000,
+      seguimiento: 90_000,
+      comentarios: 90_000,
       contexto: 120_000,
       campana: 120_000,
       bandeja: 300_000,

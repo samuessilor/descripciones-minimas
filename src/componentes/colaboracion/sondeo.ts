@@ -23,10 +23,15 @@ const ms = (base: number): number => Math.round(base * factor);
 
 export const SONDEO = {
   /** Version de la ficha y quien esta escribiendo. Un cambio ajeno tarda hasta este tiempo en verse. */
-  estadoFicha: ms(45_000),
-  /** Envios y pendientes de la ficha (panel de actividad, solo mientras esta abierto). */
-  seguimiento: ms(45_000),
-  comentarios: ms(45_000),
+  estadoFicha: ms(60_000),
+  /**
+   * Ficha CLASIFICADA o archivada: nadie la esta llenando, asi que no hay «escribiendo» que mostrar y lo unico que puede
+   * pasar es que la reabran. Con el historico importado habra miles de fichas cerradas que se consultan sin editar.
+   */
+  fichaCerrada: ms(180_000),
+  /** Envios y pendientes de la ficha (panel de actividad, solo mientras esta abierto): la campana ya avisa de lo urgente. */
+  seguimiento: ms(90_000),
+  comentarios: ms(90_000),
   /** Si tengo algo que marcar como listo en esta ficha. */
   contexto: ms(120_000),
   /** Campana de la barra superior: la unica consulta periodica fuera de una ficha. */

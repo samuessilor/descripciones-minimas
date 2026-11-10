@@ -32,6 +32,13 @@ import { fechaHoraBogota, type NombresUsuarios, type ValorCelda } from './filas'
  */
 export const TOPE_HISTORIAL = 50_000;
 
+/**
+ * Los hechos del historico importado (ver `dominio/historico-importado.ts`) NO van en esta hoja: repiten la hoja `Base` (son el
+ * primer valor de cada campo, con una autoria y una fecha de carga que no son «un cambio») y 2.000 referencias antiguas
+ * llenarian el tope y encarecerian cada descarga. Siguen en la base y en el historial de cada campo en la ficha.
+ */
+const NO_IMPORTADO = sql`not (${campoHistorial.origen} = 'sistema' and ${campoHistorial.tipoEvento} = 'fijar')`;
+
 export interface FilaHistorial {
   valores: Record<string, ValorCelda>;
 }
@@ -102,7 +109,7 @@ export async function cargarHistorial(
         eq(previo.versionCampo, sql`${campoHistorial.versionCampo} - 1`),
       ),
     )
-    .where(and(donde, condicionHistorialVisible(actor)))
+    .where(and(donde, condicionHistorialVisible(actor), NO_IMPORTADO))
     .orderBy(desc(campoHistorial.creadoEn), desc(campoHistorial.id))
     .limit(tope + 1);
 
@@ -117,7 +124,7 @@ export async function cargarHistorial(
       .select({ n: sql<number>`count(*)::int` })
       .from(campoHistorial)
       .innerJoin(referencia, eq(referencia.id, campoHistorial.referenciaId))
-      .where(and(donde, condicionHistorialVisible(actor)));
+      .where(and(donde, condicionHistorialVisible(actor), NO_IMPORTADO));
     total = c?.n;
   }
 

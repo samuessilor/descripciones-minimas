@@ -104,6 +104,7 @@ export const ETIQUETA_ACCION: Record<string, string> = {
   marcar_listo: 'Marcó su parte como lista',
   cancelar_asignacion: 'Canceló un pendiente',
   retencion: 'Limpieza automática',
+  importar_historico: 'Cargó el histórico anterior a la plataforma',
 };
 
 export function etiquetaAccion(accion: string): string {
