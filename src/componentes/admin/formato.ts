@@ -79,6 +79,7 @@ export const ETIQUETA_ACCION: Record<string, string> = {
   crear_organizacion: 'Creó una organización',
   editar_organizacion: 'Renombró una organización',
   cambiar_estado_organizacion: 'Activó o desactivó una organización',
+  eliminar_organizacion: 'Borró una organización',
   retirar_acceso_agencia: 'Retiró el acceso de una agencia',
   guardar_catalogo: 'Cambió un valor de lista',
   guardar_restriccion: 'Guardó una restricción',

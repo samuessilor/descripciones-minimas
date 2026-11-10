@@ -33,6 +33,7 @@ export type AccionAuditada =
   | 'crear_organizacion'
   | 'editar_organizacion'
   | 'cambiar_estado_organizacion'
+  | 'eliminar_organizacion'
   | 'guardar_catalogo'
   | 'guardar_restriccion'
   | 'guardar_partida'

@@ -7,7 +7,7 @@
  */
 import { revalidatePath } from 'next/cache';
 import { activarItemCatalogo, guardarItemCatalogo, guardarPartida, guardarRestriccion, moverItemCatalogo } from '@/server/acciones/catalogos-admin';
-import { cambiarEstadoOrganizacion, crearAgencia, crearOrganizacion, editarOrganizacion, retirarAccesoAgencia } from '@/server/acciones/organizaciones';
+import { cambiarEstadoOrganizacion, crearAgencia, crearOrganizacion, editarOrganizacion, eliminarOrganizacion, retirarAccesoAgencia } from '@/server/acciones/organizaciones';
 import { comoResultado } from '@/server/acciones/resultado';
 import { cambiarOrganizacion, cambiarRol, crearCuenta, desactivarUsuario, reactivarUsuario, restablecerClave } from '@/server/acciones/usuarios';
 import { cerrarSesionesDeUsuario, editarUsuario } from '@/server/acciones/usuarios-admin';
@@ -255,6 +255,14 @@ export async function cambiarEstadoOrganizacionAccion(_previo: EstadoAdmin, dato
   return correr(
     (ctx) => cambiarEstadoOrganizacion(ctx, { organizacionId: texto(datos, 'organizacionId'), activa }),
     () => ({ mensaje: activa ? 'Reactivamos la organización.' : 'Desactivamos la organización.' }),
+    ['/admin/organizaciones', '/admin/usuarios', '/admin'],
+  );
+}
+
+export async function eliminarOrganizacionAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
+  return correr(
+    (ctx) => eliminarOrganizacion(ctx, { organizacionId: texto(datos, 'organizacionId') }),
+    (r) => ({ mensaje: `Borramos la organización ${r.nombre}.`, irA: '/admin/organizaciones' }),
     ['/admin/organizaciones', '/admin/usuarios', '/admin'],
   );
 }

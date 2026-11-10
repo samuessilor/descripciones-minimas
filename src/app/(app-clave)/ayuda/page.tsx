@@ -146,7 +146,8 @@ export default async function Ayuda() {
             </li>
             <li>
               Si cambian de proveedor de aduana: en Administración › Usuarios abre la cuenta de la agencia vieja y desactívala; antes de hacerlo te pide a
-              quién pasar sus pendientes. Después desactiva la organización. Nada se borra: el historial conserva lo que escribió.
+              quién pasar sus pendientes. Después desactiva la organización: el historial conserva lo que escribió. Solo una organización sin ninguna cuenta
+              (por ejemplo, una creada por error) se puede borrar del todo, con «Borrar organización» en su ficha.
             </li>
           </ul>
         </Paso>

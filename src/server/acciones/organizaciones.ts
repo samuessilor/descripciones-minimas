@@ -1,10 +1,10 @@
 /**
  * Organizaciones (M1, 10.4): areas internas y agencias de aduana. Crear, renombrar, activar o desactivar,
- * y «Retirar acceso» de una agencia a una ficha (8.3 regla 10). Nada se borra.
+ * y «Retirar acceso» de una agencia a una ficha (8.3 regla 10). Solo se borra una organizacion sin cuentas ni historial.
  */
 import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { asignacion, organizacion, referencia, usuario } from '@/db/esquema';
+import { asignacion, campoHistorial, organizacion, referencia, usuario } from '@/db/esquema';
 import type { Ejecutor, Tx } from '@/db/tipos';
 import { normalizarUsuario, usuarioSugeridoAgencia, validarUsuario } from '@/dominio/credenciales';
 import { puede } from '@/dominio/permisos';
@@ -185,6 +185,47 @@ export async function cambiarEstadoOrganizacion(ctx: Contexto, entrada: unknown)
     });
   });
   return { ok: true };
+}
+
+/**
+ * Borrar una organizacion creada por error o que ya no se usa. SOLO si no tiene ninguna cuenta (activa o no) ni cambios
+ * registrados a su nombre: las cuentas y el historial de las fichas la referencian, y borrarla los dejaria sin saber de quien
+ * eran. Si tiene gente, se desactiva (lo que ya existe). Supervisora y administrador pueden. Auditado con el nombre,
+ * porque la fila deja de existir.
+ */
+export async function eliminarOrganizacion(ctx: Contexto, entrada: unknown): Promise<{ ok: true; nombre: string }> {
+  exigir(ctx.actor, 'supervisar');
+  const e = parsear(z.object({ organizacionId: z.uuid() }), entrada);
+  const ahora = ahoraDe(ctx);
+  return ctx.db.transaction(async (tx) => {
+    // El bloqueo de la fila serializa con crear una cuenta en esta organizacion (su clave foranea toma el mismo candado).
+    const [o] = await tx.select().from(organizacion).where(eq(organizacion.id, e.organizacionId)).for('update').limit(1);
+    if (!o) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos esa organización.');
+    const [cuentas] = await tx.select({ n: sql<number>`count(*)::int` }).from(usuario).where(eq(usuario.organizacionId, o.id));
+    const nCuentas = cuentas?.n ?? 0;
+    if (nCuentas > 0) {
+      throw new ErrorAccion(
+        'VALIDACION',
+        `${o.nombre} tiene ${nCuentas} ${nCuentas === 1 ? 'cuenta' : 'cuentas'} (activas o desactivadas) y no se puede borrar: se perdería quién hizo cada cambio. Desactívala en su lugar.`,
+        { cuentas: nCuentas },
+      );
+    }
+    const [cambios] = await tx.select({ n: sql<number>`count(*)::int` }).from(campoHistorial).where(eq(campoHistorial.organizacionId, o.id));
+    if ((cambios?.n ?? 0) > 0) {
+      throw new ErrorAccion('VALIDACION', `${o.nombre} tiene cambios registrados en las referencias y no se puede borrar. Desactívala en su lugar.`);
+    }
+    await tx.delete(organizacion).where(eq(organizacion.id, o.id));
+    await auditar(tx, {
+      usuarioId: ctx.actor.usuarioId,
+      accion: 'eliminar_organizacion',
+      entidad: 'organizacion',
+      entidadId: o.id,
+      detalle: { nombre: o.nombre, tipo: o.tipo, activa: o.activa },
+      ip: ctx.ip,
+      creadoEn: ahora,
+    });
+    return { ok: true as const, nombre: o.nombre };
+  });
 }
 
 export interface ResultadoRetiroAcceso {

@@ -1,8 +1,8 @@
-import { Ban, RotateCcw, UserPlus } from 'lucide-react';
+import { Ban, RotateCcw, Trash2, UserPlus } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { cambiarEstadoOrganizacionAccion, editarOrganizacionAccion, retirarAccesoAgenciaAccion } from '@/app/acciones/admin';
+import { cambiarEstadoOrganizacionAccion, editarOrganizacionAccion, eliminarOrganizacionAccion, retirarAccesoAgenciaAccion } from '@/app/acciones/admin';
 import { BotonAccion, FormularioAccion } from '@/componentes/admin/acciones';
 import { CampoAdmin } from '@/componentes/admin/campos';
 import { fechaHora, hace, plural } from '@/componentes/admin/formato';
@@ -169,6 +169,35 @@ export default async function AdminOrganizacion({ params }: { params: Promise<{ 
               >
                 {org.activa ? <Ban aria-hidden className="size-4" /> : <RotateCcw aria-hidden className="size-4" />}
                 {org.activa ? 'Desactivar organización' : 'Reactivar organización'}
+              </BotonAccion>
+            </div>
+
+            <div className="space-y-3 border-t border-borde-suave pt-5">
+              {personas.length > 0 ? (
+                <Aviso tipo="info" titulo="No se puede borrar">
+                  Tiene {plural(personas.length, 'cuenta', 'cuentas')} (activas o desactivadas): borrarla haría perder quién hizo cada cambio. Si ya no se usa, desactívala.
+                </Aviso>
+              ) : (
+                <p className="max-w-[65ch] text-base text-tinta-suave">
+                  No tiene cuentas ni historial, así que puedes borrarla del todo (por ejemplo, una creada por error). Esto no se puede deshacer.
+                </p>
+              )}
+              <BotonAccion
+                accion={eliminarOrganizacionAccion}
+                campos={{ organizacionId: org.id }}
+                variante="peligro"
+                tamano="md"
+                deshabilitado={personas.length > 0}
+                confirmar={{
+                  titulo: `Borrar ${org.nombre}`,
+                  descripcion: 'Se borra la organización para siempre y deja de aparecer en las listas. Queda anotado en la auditoría. No se puede deshacer.',
+                  confirmar: 'Borrar organización',
+                  cancelar: 'Todavía no',
+                  peligro: true,
+                }}
+              >
+                <Trash2 aria-hidden className="size-4" />
+                Borrar organización
               </BotonAccion>
             </div>
           </div>

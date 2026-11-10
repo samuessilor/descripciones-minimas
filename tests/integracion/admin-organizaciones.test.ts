@@ -3,11 +3,11 @@ import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asignacion, auditoria, organizacion, usuario } from '@/db/esquema';
 import { ErrorAccion } from '@/server/acciones/resultado';
-import { cambiarEstadoOrganizacion, crearOrganizacion, editarOrganizacion, retirarAccesoAgencia } from '@/server/acciones/organizaciones';
+import { cambiarEstadoOrganizacion, crearOrganizacion, editarOrganizacion, eliminarOrganizacion, retirarAccesoAgencia } from '@/server/acciones/organizaciones';
 import { retirarAccesoAgencia as retirarDesdeAduana } from '@/server/acciones/aduana';
 import { accesosDeAgencia, fichasConVariasAgencias, listarOrganizacionesAdmin, obtenerOrganizacionAdmin } from '@/server/politicas/administracion';
 import { fichaVisibleParaTest } from './ayudas-visibilidad';
-import { nuevaFicha, nuevoEscenario, type Escenario } from './ayudas';
+import { crearSupervisora, nuevaFicha, nuevoEscenario, type Escenario } from './ayudas';
 
 let e: Escenario;
 beforeAll(async () => {
@@ -49,6 +49,7 @@ describe('permisos', () => {
       expect(await codigoDe(crearOrganizacion(ctx, { nombre: 'Intrusa', tipo: 'interna' })), actor.rol).toBe('SIN_PERMISO');
       expect(await codigoDe(editarOrganizacion(ctx, { organizacionId: e.orgA, nombre: 'Otro nombre' })), actor.rol).toBe('SIN_PERMISO');
       expect(await codigoDe(cambiarEstadoOrganizacion(ctx, { organizacionId: e.orgA, activa: false })), actor.rol).toBe('SIN_PERMISO');
+      expect(await codigoDe(eliminarOrganizacion(ctx, { organizacionId: e.orgA })), actor.rol).toBe('SIN_PERMISO');
       expect(await codigoDe(retirarAccesoAgencia(ctx, { referenciaId: ficha, organizacionId: e.orgA })), actor.rol).toBe('SIN_PERMISO');
       expect(await codigoDe(listarOrganizacionesAdmin(e.db, actor)), actor.rol).toBe('SIN_PERMISO');
       expect(await codigoDe(accesosDeAgencia(e.db, actor, e.orgA)), actor.rol).toBe('SIN_PERMISO');
@@ -104,6 +105,47 @@ describe('crear, renombrar y estado', () => {
     await cambiarEstadoOrganizacion(e.ctx(e.admin), { organizacionId: vacia.id, activa: true });
     expect((await e.db.select().from(organizacion).where(eq(organizacion.id, vacia.id)))[0]!.activa).toBe(true);
     expect(await auditorias('cambiar_estado_organizacion', vacia.id)).toHaveLength(2);
+  });
+
+  it('borra una organizacion sin cuentas ni historial (administrador y supervisora), la audita con su nombre y no deja rastro en las listas', async () => {
+    const angie = await crearSupervisora(e);
+    const creadaPorAdmin = await crearOrganizacion(e.ctx(e.admin), { nombre: 'Prueba xx admin', tipo: 'interna' });
+    expect(await eliminarOrganizacion(e.ctx(e.admin), { organizacionId: creadaPorAdmin.id })).toEqual({ ok: true, nombre: 'Prueba xx admin' });
+    const creadaPorSup = await crearOrganizacion(e.ctx(angie), { nombre: 'Agencia xx sup', tipo: 'agencia' });
+    await cambiarEstadoOrganizacion(e.ctx(angie), { organizacionId: creadaPorSup.id, activa: false });
+    await eliminarOrganizacion(e.ctx(angie), { organizacionId: creadaPorSup.id });
+    for (const id of [creadaPorAdmin.id, creadaPorSup.id]) {
+      expect(await e.db.select().from(organizacion).where(eq(organizacion.id, id))).toHaveLength(0);
+      expect(await auditorias('eliminar_organizacion', id)).toHaveLength(1);
+    }
+    expect((await auditorias('eliminar_organizacion', creadaPorSup.id))[0]!.detalle).toMatchObject({ nombre: 'Agencia xx sup', tipo: 'agencia', activa: false });
+    const nombres = (await listarOrganizacionesAdmin(e.db, e.admin)).map((o) => o.nombre);
+    expect(nombres).not.toContain('Prueba xx admin');
+    // El nombre queda libre para volver a crearla.
+    await crearOrganizacion(e.ctx(e.admin), { nombre: 'Prueba xx admin', tipo: 'interna' });
+  });
+
+  it('no borra una organizacion con cuentas (activas o no) ni con cambios registrados, y no existe -> no encontrada', async () => {
+    expect(await codigoDe(eliminarOrganizacion(e.ctx(e.admin), { organizacionId: e.orgInterna }))).toBe('VALIDACION');
+    expect(await codigoDe(eliminarOrganizacion(e.ctx(e.admin), { organizacionId: e.orgA }))).toBe('VALIDACION');
+    const conInactiva = await crearOrganizacion(e.ctx(e.admin), { nombre: 'Con cuenta inactiva', tipo: 'interna' });
+    const [u] = await e.db
+      .insert(usuario)
+      .values({ nombre: 'Fantasma', email: 'fantasma-org@prueba.invalid', rol: 'solicitante', organizacionId: conInactiva.id, organizacionTipo: 'interna', activo: false })
+      .returning({ id: usuario.id });
+    let fallo: ErrorAccion | undefined;
+    try {
+      await eliminarOrganizacion(e.ctx(e.admin), { organizacionId: conInactiva.id });
+    } catch (err) {
+      fallo = err as ErrorAccion;
+    }
+    expect(fallo?.codigo).toBe('VALIDACION');
+    expect(fallo?.message).toMatch(/1 cuenta/);
+    expect(await e.db.select().from(organizacion).where(eq(organizacion.id, conInactiva.id))).toHaveLength(1);
+    expect(await auditorias('eliminar_organizacion', conInactiva.id)).toHaveLength(0);
+    expect(u!.id).toBeTruthy();
+    expect(await codigoDe(eliminarOrganizacion(e.ctx(e.admin), { organizacionId: '00000000-0000-4000-8000-000000000000' }))).toBe('NO_ENCONTRADO');
+    expect(await codigoDe(eliminarOrganizacion(e.ctx(e.admin), { organizacionId: 'no-es-uuid' }))).toBe('VALIDACION');
   });
 
   it('las lecturas traen conteos de personas y de referencias con acceso', async () => {
