@@ -33,7 +33,7 @@ export default async function AdminOrganizacion({ params }: { params: Promise<{ 
     org.tipo === 'agencia' ? accesosDeAgencia(ctx.db, ctx.actor, org.id) : Promise.resolve([]),
   ]);
   const esAgencia = org.tipo === 'agencia';
-  const administra = puede(ctx.actor, 'administrar');
+  const entregaClaves = puede(ctx.actor, 'administrar');
   const ahora = new Date();
 
   return (
@@ -52,7 +52,7 @@ export default async function AdminOrganizacion({ params }: { params: Promise<{ 
           </span>
         }
         acciones={
-          org.activa && administra && (!esAgencia || personas.length === 0) ? (
+          org.activa && (!esAgencia || personas.length === 0) ? (
             <EnlaceBoton href={`/admin/usuarios/nueva?organizacion=${org.id}`}>
               <UserPlus aria-hidden className="size-4" />
               Crear cuenta para esta {esAgencia ? 'agencia' : 'área'}
@@ -127,7 +127,7 @@ export default async function AdminOrganizacion({ params }: { params: Promise<{ 
                 { id: 'estado', encabezado: 'Estado', celda: (u) => <EstadosUsuario activo={u.activo} ultimoIngreso={u.ultimoIngreso} sinClave={u.sinClave} /> },
                 { id: 'ingreso', encabezado: 'Último ingreso', ocultarBajo: 'lg', celda: (u) => <span className="text-sm text-tinta-suave">{hace(u.ultimoIngreso, ahora)}</span> },
               ]}
-              vacio={<EstadoVacio compacto titulo="Aún no hay personas" descripcion={administra ? 'Crea la primera cuenta y entrégale su usuario y contraseña.' : 'Todavía no tiene cuentas.'} />}
+              vacio={<EstadoVacio compacto titulo="Aún no hay personas" descripcion={entregaClaves ? 'Crea la primera cuenta y entrégale su usuario y contraseña.' : 'Crea la primera cuenta; el administrador le entrega su contraseña.'} />}
             />
           </div>
         </Seccion>
@@ -139,40 +139,38 @@ export default async function AdminOrganizacion({ params }: { params: Promise<{ 
               <CampoAdmin nombre="nombre" etiqueta="Nombre" defaultValue={org.nombre} maxLength={120} required />
             </FormularioAccion>
 
-            {administra ? (
-              <div className="space-y-3 border-t border-borde-suave pt-5">
-                {org.activa ? (
-                  org.usuariosActivos > 0 ? (
-                    <Aviso tipo="info" titulo="No se puede desactivar todavía">
-                      Tiene {plural(org.usuariosActivos, 'persona activa', 'personas activas')}. Desactívalas o muévelas a otra organización y vuelve aquí; así nadie se queda sin poder entrar sin que lo hayas decidido.
-                    </Aviso>
-                  ) : (
-                    <p className="max-w-[65ch] text-base text-tinta-suave">Desactivarla la oculta de las listas para crear cuentas. No se borra nada: el historial conserva a quién perteneció cada cambio.</p>
-                  )
+            <div className="space-y-3 border-t border-borde-suave pt-5">
+              {org.activa ? (
+                org.usuariosActivos > 0 ? (
+                  <Aviso tipo="info" titulo="No se puede desactivar todavía">
+                    Tiene {plural(org.usuariosActivos, 'persona activa', 'personas activas')}. Desactívalas o muévelas a otra organización y vuelve aquí; así nadie se queda sin poder entrar sin que lo hayas decidido.
+                  </Aviso>
                 ) : (
-                  <p className="max-w-[65ch] text-base text-tinta-suave">Está desactivada: no aparece al crear cuentas y su gente no puede entrar. Reactívala para volver a usarla.</p>
-                )}
-                <BotonAccion
-                  accion={cambiarEstadoOrganizacionAccion}
-                  campos={{ organizacionId: org.id, activa: org.activa ? 'no' : 'si' }}
-                  variante={org.activa ? 'peligro' : 'primario'}
-                  tamano="md"
-                  deshabilitado={org.activa && org.usuariosActivos > 0}
-                  confirmar={{
-                    titulo: org.activa ? `Desactivar ${org.nombre}` : `Reactivar ${org.nombre}`,
-                    descripcion: org.activa
-                      ? 'Dejará de ofrecerse al crear cuentas. Puedes reactivarla cuando quieras.'
-                      : 'Volverá a ofrecerse al crear cuentas y su gente podrá entrar.',
-                    confirmar: org.activa ? 'Desactivar' : 'Reactivar',
-                    cancelar: 'Todavía no',
-                    peligro: org.activa,
-                  }}
-                >
-                  {org.activa ? <Ban aria-hidden className="size-4" /> : <RotateCcw aria-hidden className="size-4" />}
-                  {org.activa ? 'Desactivar organización' : 'Reactivar organización'}
-                </BotonAccion>
-              </div>
-            ) : null}
+                  <p className="max-w-[65ch] text-base text-tinta-suave">Desactivarla la oculta de las listas para crear cuentas. No se borra nada: el historial conserva a quién perteneció cada cambio.</p>
+                )
+              ) : (
+                <p className="max-w-[65ch] text-base text-tinta-suave">Está desactivada: no aparece al crear cuentas y su gente no puede entrar. Reactívala para volver a usarla.</p>
+              )}
+              <BotonAccion
+                accion={cambiarEstadoOrganizacionAccion}
+                campos={{ organizacionId: org.id, activa: org.activa ? 'no' : 'si' }}
+                variante={org.activa ? 'peligro' : 'primario'}
+                tamano="md"
+                deshabilitado={org.activa && org.usuariosActivos > 0}
+                confirmar={{
+                  titulo: org.activa ? `Desactivar ${org.nombre}` : `Reactivar ${org.nombre}`,
+                  descripcion: org.activa
+                    ? 'Dejará de ofrecerse al crear cuentas. Puedes reactivarla cuando quieras.'
+                    : 'Volverá a ofrecerse al crear cuentas y su gente podrá entrar.',
+                  confirmar: org.activa ? 'Desactivar' : 'Reactivar',
+                  cancelar: 'Todavía no',
+                  peligro: org.activa,
+                }}
+              >
+                {org.activa ? <Ban aria-hidden className="size-4" /> : <RotateCcw aria-hidden className="size-4" />}
+                {org.activa ? 'Desactivar organización' : 'Reactivar organización'}
+              </BotonAccion>
+            </div>
           </div>
         </Seccion>
       </div>

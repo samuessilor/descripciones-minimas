@@ -56,7 +56,7 @@ export const ROL_ETIQUETA = ETIQUETA_ROL;
 
 export const ROL_DESCRIPCION: Record<string, string> = {
   admin: 'Todo, incluida la administración',
-  supervisor: 'Todo lo operativo, catálogos, auditoría y organizaciones; no gestiona cuentas ni parámetros',
+  supervisor: 'Igual que el administrador, salvo parámetros y contraseñas; no crea ni toca administradores ni supervisoras',
   solicitante: 'Crea y llena referencias',
   aduana: 'Clasifica y pide información',
   lector: 'Consulta y recuerda; no escribe',

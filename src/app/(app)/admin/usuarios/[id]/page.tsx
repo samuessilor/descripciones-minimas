@@ -17,7 +17,7 @@ import { Aviso } from '@/componentes/ui/aviso';
 import { Avatar, nombreVisible } from '@/componentes/ui/avatar';
 import { EncabezadoPagina } from '@/componentes/ui/pagina';
 import { AREAS, esArea, exigeArea } from '@/dominio/areas';
-import { ROLES, puede } from '@/dominio/permisos';
+import { ROLES, puede, puedeAsignarRol, puedeTocarCuenta } from '@/dominio/permisos';
 import {
   candidatosReasignacion,
   contarAdminsActivos,
@@ -58,7 +58,8 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
     />
   );
 
-  if (!puede(ctx.actor, 'administrar')) {
+  // La supervisora gestiona todo menos las cuentas de administrador y de supervisora (ni la suya): ahi solo lee.
+  if (!puedeTocarCuenta(ctx.actor, u.rol)) {
     return (
       <>
         {encabezado}
@@ -75,7 +76,7 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
             </Datos>
           </Seccion>
           <Aviso tipo="info" titulo="Solo lectura">
-            Los datos, el rol, la contraseña y el acceso de las cuentas los gestiona el administrador.
+            Las cuentas de administrador y de supervisora general las gestiona un administrador.
           </Aviso>
         </div>
       </>
@@ -90,6 +91,8 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
     contarAdminsActivos(ctx.db, ctx.actor),
   ]);
 
+  const entregaClaves = puede(ctx.actor, 'administrar');
+  const rolesAsignables = ROLES.filter((r) => puedeAsignarRol(ctx.actor, r));
   const esYo = u.id === ctx.actor.usuarioId;
   const esAgencia = u.organizacionTipo === 'agencia';
   const unicoAdmin = u.rol === 'admin' && u.activo && admins <= 1;
@@ -167,7 +170,7 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
                   leyenda="Rol"
                   nombre="rol"
                   valorInicial={u.rol}
-                  opciones={ROLES.map((r) => ({ valor: r, etiqueta: ROL_ETIQUETA[r], descripcion: ROL_DESCRIPCION[r] }))}
+                  opciones={rolesAsignables.map((r) => ({ valor: r, etiqueta: ROL_ETIQUETA[r], descripcion: ROL_DESCRIPCION[r] }))}
                 />
                 {unicoAdmin ? <p className="mt-3 text-sm text-tinta-suave">Es el único administrador activo: para quitarle el rol, primero dáselo a otra persona.</p> : null}
               </FormularioAccion>
@@ -247,7 +250,7 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
                 <Dato etiqueta="Pendientes">{pendientes.length === 0 ? 'Ninguno' : plural(pendientes.length, 'referencia', 'referencias')}</Dato>
                 <Dato etiqueta="Sesiones">{plural(sesiones.length, 'abierta', 'abiertas')}</Dato>
               </Datos>
-              {u.activo ? (
+              {u.activo && entregaClaves ? (
                 <div className="flex flex-col items-stretch gap-2">
                   <RestablecerClave usuarioId={u.id} nombre={nombreVisible(u.nombre)} variante={sinIngresar || u.sinClave ? 'primario' : 'secundario'} />
                   <p className="text-sm text-tinta-suave">
@@ -259,13 +262,16 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
                   </p>
                 </div>
               ) : null}
+              {u.activo && !entregaClaves && u.sinClave ? (
+                <p className="text-sm text-tinta-suave">Pendiente de entrega: la cuenta todavía no tiene contraseña y no puede entrar. El administrador la genera y la entrega.</p>
+              ) : null}
             </div>
           </Seccion>
 
           {!u.activo ? (
             <Seccion id="reactivar" titulo="Reactivar">
               <div className="space-y-3">
-                <p className="text-base text-tinta-suave">Vuelve a poder entrar con su usuario y contraseña. Si no la recuerda, restablécela. Lo que llenó antes sigue ahí.</p>
+                <p className="text-base text-tinta-suave">Vuelve a poder entrar con su usuario y contraseña. Si no la recuerda, {entregaClaves ? 'restablécela' : 'el administrador la restablece'}. Lo que llenó antes sigue ahí.</p>
                 <BotonAccion
                   accion={reactivarUsuarioAccion}
                   campos={{ usuarioId: u.id }}

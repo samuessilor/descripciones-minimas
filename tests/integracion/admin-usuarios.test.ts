@@ -44,7 +44,7 @@ async function abrirSesion(userId: string, agente = 'Mozilla/5.0 (Windows NT 10.
 const auditoriasDe = (accion: string, entidadId: string) =>
   e.db.select().from(auditoria).where(and(eq(auditoria.accion, accion as never), eq(auditoria.entidadId, entidadId)));
 
-describe('permisos: ningun rol salvo admin puede administrar personas', () => {
+describe('permisos: solicitante, aduana y lector no administran personas', () => {
   it('niega a solicitante, aduana y lector en TODAS las operaciones y lecturas nuevas', async () => {
     const quien = [e.edward, e.brian, e.lector];
     for (const actor of quien) {
@@ -72,7 +72,7 @@ describe('crear y restablecer cuentas', () => {
   it('crea la cuenta con contrasena temporal, audita quien la creo y queda como «sin ingresar»', async () => {
     const nuevo = await crearCuenta(e.ctx(e.admin), { nombre: 'Marta Nueva', usuario: 'marta', email: 'marta@prueba.invalid', organizacionId: e.orgInterna, rol: 'solicitante', area: 'Consumibles' });
     expect(nuevo).toMatchObject({ usuario: 'marta', nombre: 'Marta Nueva', rol: 'solicitante' });
-    expect(nuevo.claveTemporal.length).toBeGreaterThanOrEqual(12);
+    expect(nuevo.claveTemporal!.length).toBeGreaterThanOrEqual(12);
     const [u] = await e.db.select().from(usuario).where(eq(usuario.id, nuevo.id));
     expect(u).toMatchObject({ username: 'marta', email: 'marta@prueba.invalid', ultimoIngreso: null, creadoPor: e.admin.usuarioId });
     const a = await auditoriasDe('crear_cuenta', nuevo.id);

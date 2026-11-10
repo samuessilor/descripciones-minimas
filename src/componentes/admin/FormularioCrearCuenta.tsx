@@ -11,7 +11,7 @@ import { GrupoRadios } from '@/componentes/ui/casilla';
 import { Campo, Seleccion } from '@/componentes/ui/input';
 import { AREAS, exigeArea, nombreDeArea } from '@/dominio/areas';
 import { normalizarUsuario } from '@/dominio/credenciales';
-import { ROLES, type Rol } from '@/dominio/permisos';
+import { puede, puedeAsignarRol, ROLES, type Rol } from '@/dominio/permisos';
 import { FormularioAccion } from './acciones';
 import { CredencialesEntrega } from './CredencialesEntrega';
 import { ROL_DESCRIPCION, ROL_ETIQUETA } from './formato';
@@ -22,12 +22,23 @@ interface Org {
   tipo: 'interna' | 'agencia';
 }
 
+interface Creada {
+  id: string;
+  nombre: string;
+  usuario: string;
+  /** `null`: la creo la supervisora y la cuenta queda pendiente de que el administrador genere la clave. */
+  secreto: SecretoEntrega | null;
+}
+
 /**
- * Crear una cuenta suelta (solo el administrador): organizacion, nombre y usuario; rol, area y encargado solo si aplican. La contrasena la genera el servidor y se muestra
- * UNA vez. Una cuenta de area (Consumibles, Mantenimiento...) es la forma normal: a esa cuenta se le envian las
+ * Crear una cuenta suelta (administrador o supervisora): organizacion, nombre y usuario; rol, area y encargado solo si aplican.
+ * Si la crea el administrador, la contrasena la genera el servidor y se muestra UNA vez. Si la crea la supervisora no hay
+ * clave: la cuenta queda pendiente de entrega y el administrador la genera desde la ficha de la cuenta (la supervisora
+ * no crea administradores ni supervisoras: el servidor lo exige y aqui ni se ofrecen). Una cuenta de area (Consumibles, Mantenimiento...) es la forma normal: a esa cuenta se le envian las
  * referencias de su area. Si la organizacion es una agencia, el unico rol es `aduana` (D-28).
  */
-export function FormularioCrearCuenta({ organizaciones, organizacionInicial }: { organizaciones: Org[]; organizacionInicial?: string }) {
+export function FormularioCrearCuenta({ organizaciones, organizacionInicial, actorRol }: { organizaciones: Org[]; organizacionInicial?: string; actorRol: Rol }) {
+  const administrador = puede({ rol: actorRol }, 'administrar');
   const internas = organizaciones.filter((o) => o.tipo === 'interna');
   const agencias = organizaciones.filter((o) => o.tipo === 'agencia');
   const [orgId, setOrgId] = useState(
@@ -37,14 +48,19 @@ export function FormularioCrearCuenta({ organizaciones, organizacionInicial }: {
   const esAgencia = org?.tipo === 'agencia';
   const [rolElegido, setRolElegido] = useState<Rol>('solicitante');
   const rol: Rol = esAgencia ? 'aduana' : rolElegido;
+  // Solo el administrador crea administradores y supervisoras (el servidor lo exige igual).
+  const rolesCreables = ROLES.filter((r) => puedeAsignarRol({ rol: actorRol }, r));
   const areaObligatoria = exigeArea(rol, org?.tipo ?? 'interna');
-  const [creada, setCreada] = useState<SecretoEntrega | null>(null);
+  const [creada, setCreada] = useState<Creada | null>(null);
   const [usuario, setUsuario] = useState('');
 
   // La cuenta recien creada reemplaza al formulario: asi no se puede enviar dos veces ni perder la contrasena.
   const accion = useCallback(async (previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> => {
     const r = await crearCuentaAccion(previo, datos);
-    if (r.estado === 'ok' && r.secreto) setCreada(r.secreto);
+    if (r.estado === 'ok') {
+      const cuenta = r.secreto ?? r.pendiente;
+      if (cuenta) setCreada({ id: cuenta.id, nombre: cuenta.nombre, usuario: cuenta.usuario, secreto: r.secreto ?? null });
+    }
     return r;
   }, []);
 
@@ -57,7 +73,14 @@ export function FormularioCrearCuenta({ organizaciones, organizacionInicial }: {
           </span>
           <h2 className="font-display text-xl font-extrabold text-tinta">Cuenta creada: {creada.nombre}</h2>
         </div>
-        <CredencialesEntrega secreto={creada} />
+        {creada.secreto ? (
+          <CredencialesEntrega secreto={creada.secreto} />
+        ) : (
+          <Aviso tipo="info" titulo="Cuenta pendiente de entrega">
+            Creamos la cuenta <span className="font-mono font-bold">{creada.usuario}</span>, pero todavía no tiene contraseña y no puede entrar. Avisamos al
+            administrador para que genere la clave y se la entregue.
+          </Aviso>
+        )}
         <div className="flex flex-wrap gap-3">
           <Link href={`/admin/usuarios/${creada.id}`} className={botonVariantes({ variante: 'primario' })}>
             Ver la cuenta
@@ -156,7 +179,7 @@ export function FormularioCrearCuenta({ organizaciones, organizacionInicial }: {
               valor={rol}
               onCambio={(v) => setRolElegido(v as Rol)}
               error={estado.errores?.rol}
-              opciones={ROLES.map((r) => ({ valor: r, etiqueta: ROL_ETIQUETA[r], descripcion: ROL_DESCRIPCION[r] }))}
+              opciones={rolesCreables.map((r) => ({ valor: r, etiqueta: ROL_ETIQUETA[r], descripcion: ROL_DESCRIPCION[r] }))}
             />
           )}
 
@@ -180,7 +203,14 @@ export function FormularioCrearCuenta({ organizaciones, organizacionInicial }: {
             </div>
           ) : null}
 
-          <p className="text-sm text-tinta-suave">Al crear la cuenta generamos una contraseña temporal y te la mostramos una vez para que se la entregues.</p>
+          {administrador ? (
+            <p className="text-sm text-tinta-suave">Al crear la cuenta generamos una contraseña temporal y te la mostramos una vez para que se la entregues.</p>
+          ) : (
+            <Aviso tipo="info" titulo="La contraseña la genera el administrador">
+              Esta cuenta se crea sin contraseña y queda «Pendiente de entrega»: no puede entrar todavía. Avisamos a los administradores para que generen la clave
+              y se la entreguen.
+            </Aviso>
+          )}
         </>
       )}
     </FormularioAccion>

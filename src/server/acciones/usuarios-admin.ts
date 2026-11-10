@@ -22,7 +22,7 @@ export const entradaEditarUsuario = z.object({
 });
 
 export async function editarUsuario(ctx: Contexto, entrada: unknown): Promise<{ ok: true }> {
-  exigir(ctx.actor, 'administrar');
+  exigir(ctx.actor, 'supervisar');
   const e = parsear(entradaEditarUsuario, entrada);
   const ahora = ahoraDe(ctx);
   await ctx.db.transaction(async (tx) => {
@@ -57,11 +57,11 @@ export async function editarUsuario(ctx: Contexto, entrada: unknown): Promise<{ 
  * peticion de esa persona vuelve a /entrar (13.1). Queda en auditoria con quien lo hizo.
  */
 export async function cerrarSesionesDeUsuario(ctx: Contexto, entrada: unknown): Promise<{ cerradas: number }> {
-  exigir(ctx.actor, 'administrar');
+  exigir(ctx.actor, 'supervisar');
   const e = parsear(z.object({ usuarioId: z.uuid(), sesionId: z.uuid().optional() }), entrada);
   const ahora = ahoraDe(ctx);
   return ctx.db.transaction(async (tx) => {
-    const [u] = await tx.select({ id: usuario.id, rol: usuario.rol }).from(usuario).where(eq(usuario.id, e.usuarioId)).limit(1);
+    const [u] = await tx.select({ id: usuario.id, rol: usuario.rol }).from(usuario).where(eq(usuario.id, e.usuarioId)).for('update').limit(1);
     if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
     exigirCuentaTocable(ctx.actor, u.rol);
     const borradas = await tx

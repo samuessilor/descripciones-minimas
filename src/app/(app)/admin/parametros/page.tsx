@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: 'Parámetros · Descripciones mínima
 export default async function AdminParametros() {
   const ctx = await contextoAdmin('administrar');
   if (!ctx) return <SinPermiso />;
-  const grupos = leerParametros(getConfig());
+  const grupos = leerParametros(ctx.actor, getConfig());
 
   return (
     <>

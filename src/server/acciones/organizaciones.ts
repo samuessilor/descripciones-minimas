@@ -152,7 +152,7 @@ export async function editarOrganizacion(ctx: Contexto, entrada: unknown): Promi
  * personas (con su reasignacion) y despues la organizacion.
  */
 export async function cambiarEstadoOrganizacion(ctx: Contexto, entrada: unknown): Promise<{ ok: true }> {
-  exigir(ctx.actor, 'administrar');
+  exigir(ctx.actor, 'supervisar');
   const e = parsear(z.object({ organizacionId: z.uuid(), activa: z.boolean() }), entrada);
   const ahora = ahoraDe(ctx);
   await ctx.db.transaction(async (tx) => {

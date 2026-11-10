@@ -5,6 +5,8 @@
  */
 import type { Config } from './config';
 import { REGLAS_TASA } from './limite-tasa';
+import type { Actor } from './politicas/actor';
+import { exigir } from './politicas/exigir';
 
 export interface Parametro {
   /** Nombre de la variable de entorno que lo cambia; `null` si es una regla del producto (cambia con codigo). */
@@ -33,7 +35,8 @@ function duracion(ms: number): string {
 const veces = (r: { max: number; ventanaMs: number }) => `${r.max} cada ${duracion(r.ventanaMs)}`;
 const horas = (h: number) => (h % 24 === 0 && h >= 48 ? `${h / 24} días (${h} h)` : `${h} h`);
 
-export function leerParametros(c: Config): GrupoParametros[] {
+export function leerParametros(actor: Pick<Actor, 'rol'>, c: Config): GrupoParametros[] {
+  exigir(actor, 'administrar'); // Parametros es solo del administrador: la supervisora no llega a esta logica.
   return [
     {
       id: 'acceso',

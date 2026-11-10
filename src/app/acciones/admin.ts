@@ -14,7 +14,7 @@ import { cerrarSesionesDeUsuario, editarUsuario } from '@/server/acciones/usuari
 import type { Contexto } from '@/server/politicas/actor';
 import { contextoDeAccion } from '@/server/sesion';
 
-/** Usuario y contrasena temporal que se muestran UNA vez a quien crea o restablece una cuenta. */
+/** Usuario y contrasena temporal que se muestran UNA vez al administrador que crea o restablece una cuenta. */
 export interface SecretoEntrega {
   id: string;
   nombre: string;
@@ -27,7 +27,7 @@ export interface EstadoAdmin {
   estado: 'inicial' | 'ok' | 'error';
   mensaje?: string;
   secreto?: SecretoEntrega;
-  /** Cuenta creada sin clave (la creo la supervisora): queda pendiente de que el administrador la entregue. */
+  /** Cuenta o agencia creada sin clave (la creo la supervisora): queda pendiente de que el administrador la entregue. */
   pendiente?: { id: string; nombre: string; usuario: string };
   /** Errores por campo (clave = nombre del campo del formulario). */
   errores?: Record<string, string>;
@@ -115,10 +115,20 @@ export async function crearCuentaAccion(_previo: EstadoAdmin, datos: FormData): 
   if (!r.ok) return falloDeAlta(r);
   revalidatePath('/admin/usuarios');
   revalidatePath('/admin');
+  const cuenta = { id: r.data.id, nombre: r.data.nombre, usuario: r.data.usuario };
+  // La clave solo viaja al navegador del administrador; con la supervisora la cuenta queda pendiente de entrega.
+  if (r.data.claveTemporal) {
+    return {
+      estado: 'ok',
+      mensaje: `Creamos la cuenta de ${r.data.nombre}. Copia el usuario y la contraseña ahora: no se vuelven a mostrar.`,
+      secreto: { ...cuenta, clave: r.data.claveTemporal, accion: 'creada' },
+      marca: Date.now(),
+    };
+  }
   return {
     estado: 'ok',
-    mensaje: `Creamos la cuenta de ${r.data.nombre}. Copia el usuario y la contraseña ahora: no se vuelven a mostrar.`,
-    secreto: { id: r.data.id, nombre: r.data.nombre, usuario: r.data.usuario, clave: r.data.claveTemporal, accion: 'creada' },
+    mensaje: `Creamos la cuenta de ${r.data.nombre}. Está pendiente de entrega: el administrador genera y entrega la clave.`,
+    pendiente: cuenta,
     marca: Date.now(),
   };
 }
@@ -208,7 +218,7 @@ export async function desactivarUsuarioAccion(_previo: EstadoAdmin, datos: FormD
 export async function reactivarUsuarioAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
   return correr(
     (ctx) => reactivarUsuario(ctx, { usuarioId: texto(datos, 'usuarioId') }),
-    () => ({ mensaje: 'Reactivamos al usuario. Si no recuerda su contraseña, restablécela desde su ficha.' }),
+    () => ({ mensaje: 'Reactivamos al usuario. Si no recuerda su contraseña, hay que restablecerla desde su ficha.' }),
     ['/admin/usuarios', '/admin'],
   );
 }

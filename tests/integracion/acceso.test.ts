@@ -288,7 +288,7 @@ describe('cuentas: sin registro abierto; las crea un administrador', () => {
     const aud = await e.db.select().from(auditoria).where(and(eq(auditoria.accion, 'crear_cuenta'), eq(auditoria.entidadId, nueva.id)));
     expect(JSON.stringify(aud[0]?.detalle)).not.toContain(nueva.claveTemporal);
 
-    const { headers } = await entrar('area.prueba', nueva.claveTemporal);
+    const { headers } = await entrar('area.prueba', nueva.claveTemporal!);
     const actorNuevo = await actorDesdeCabeceras(deps, headers);
     // Cambiar la contrasena de entrega ya no es obligatorio: entra sin indicador de cambio pendiente y opera de una vez.
     expect(actorNuevo).toMatchObject({ rol: 'solicitante', area: 'Consumibles', debeCambiarClave: false });
@@ -304,7 +304,7 @@ describe('cuentas: sin registro abierto; las crea un administrador', () => {
   it('el mecanismo de guardia sigue vivo: con el indicador activado a mano, cambiar la clave lo apaga', async () => {
     const nueva = await crearCuenta(e.ctx(e.admin), { nombre: 'Guardia', usuario: 'guardia.prueba', organizacionId: e.orgInterna, rol: 'solicitante', area: 'Consumibles' });
     await e.db.update(usuario).set({ debeCambiarClave: true }).where(eq(usuario.id, nueva.id));
-    const { headers } = await entrar('guardia.prueba', nueva.claveTemporal);
+    const { headers } = await entrar('guardia.prueba', nueva.claveTemporal!);
     const actorNuevo = await actorDesdeCabeceras(deps, headers);
     expect(actorNuevo?.debeCambiarClave).toBe(true);
 

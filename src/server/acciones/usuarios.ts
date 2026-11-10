@@ -1,7 +1,9 @@
 /**
  * Usuarios (M1, 10.4, 13.1): crear cuenta (usuario + contrasena temporal), restablecer contrasena, desactivar con
- * revocacion inmediata de sesiones, cambiar rol u organizacion. SIN registro abierto: entra quien un admin creo. La
- * regla rol x tipo de organizacion (D-28) se valida aqui (politicas) ademas de la interfaz y de la base (CHECK + FK).
+ * revocacion inmediata de sesiones, cambiar rol u organizacion. SIN registro abierto: entra quien el administrador o la
+ * supervisora general creo. Todo es de `supervisar` salvo las claves (restablecer y la que se genera al crear), que son
+ * solo del administrador (`administrar`). La regla rol x tipo de organizacion (D-28) se valida aqui (politicas) ademas
+ * de la interfaz y de la base (CHECK + FK).
  */
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -9,7 +11,7 @@ import { account, asignacion, notificacion, organizacion, usuario } from '@/db/e
 import type { Tx } from '@/db/tipos';
 import { exigeArea, MENSAJE_AREA_OBLIGATORIA } from '@/dominio/areas';
 import { correoSinCorreo, normalizarUsuario, USUARIO_AYUDA, validarUsuario } from '@/dominio/credenciales';
-import { ROLES, validarRolOrganizacion, type Rol, type TipoOrganizacion } from '@/dominio/permisos';
+import { ROLES, puede, validarRolOrganizacion, type Rol, type TipoOrganizacion } from '@/dominio/permisos';
 import { nombreSinMarca } from '@/dominio/colaboracion';
 import { auditar } from '../auditoria';
 import { crearNotificacion } from '../notificaciones/crear';
@@ -134,8 +136,8 @@ export interface ResultadoCrearCuenta {
   organizacionTipo: TipoOrganizacion;
   /**
    * Se muestra UNA vez a quien crea la cuenta; en la base solo queda su hash. Solo el administrador la recibe: si crea
-   * otra persona, el servidor no genera ninguna (`null`) y la cuenta queda sin credencial hasta que el administrador la
-   * restablezca.
+   * la supervisora, el servidor no genera ninguna (`null`) y la cuenta queda sin credencial («Pendiente de entrega»)
+   * hasta que el administrador la restablezca.
    */
   claveTemporal: string | null;
 }
@@ -217,12 +219,13 @@ export function traducirChoqueCuenta(err: unknown, conCorreoPropio: boolean): un
 }
 
 /**
- * Crea una cuenta con usuario y contrasena temporal. SIN registro abierto: la crea un administrador y le entrega
- * el usuario y la contrasena a quien corresponda (o al area, si es una cuenta general). La contrasena se genera aqui,
- * se guarda solo su hash y vuelve en la respuesta para mostrarla una vez.
+ * Crea una cuenta. SIN registro abierto: la crea el administrador o la supervisora general. Si la crea el administrador,
+ * la contrasena temporal se genera aqui, se guarda solo su hash y vuelve en la respuesta para mostrarla una vez. Si la
+ * crea la supervisora no se genera ninguna: la cuenta queda sin credencial (no puede entrar), todos los administradores
+ * activos reciben el aviso `cuenta_creada` y uno de ellos la genera con `restablecerClave`.
  */
-export async function crearCuenta(ctx: Contexto, entrada: unknown): Promise<ResultadoCrearCuenta & { claveTemporal: string }> {
-  exigir(ctx.actor, 'administrar');
+export async function crearCuenta(ctx: Contexto, entrada: unknown): Promise<ResultadoCrearCuenta> {
+  exigir(ctx.actor, 'supervisar');
   const e = parsear(entradaCrearCuenta, entrada);
   exigirRolAsignable(ctx.actor, e.rol);
   const ahora = ahoraDe(ctx);
@@ -235,8 +238,8 @@ export async function crearCuenta(ctx: Contexto, entrada: unknown): Promise<Resu
     throw new ErrorAccion('VALIDACION', 'Revisa los datos marcados.', { problemas: [{ ruta: 'area', mensaje: MENSAJE_AREA_OBLIGATORIA }] });
   }
 
-  const claveTemporal = generarClave();
-  const hash = await hashearClave(claveTemporal);
+  const claveTemporal = puede(ctx.actor, 'administrar') ? generarClave() : null;
+  const hash = claveTemporal ? await hashearClave(claveTemporal) : null;
   try {
     return await ctx.db.transaction(async (tx) => {
       const id = await insertarCuenta(ctx, tx, { ...e, organizacion: { id: org.id, nombre: org.nombre, tipo } }, hash, ahora);
@@ -249,7 +252,8 @@ export async function crearCuenta(ctx: Contexto, entrada: unknown): Promise<Resu
 
 /**
  * Restablece la contrasena de OTRA cuenta: genera una temporal, cierra todas sus sesiones y la devuelve para
- * entregarla a mano. Nadie puede leer la contrasena actual (solo existe su hash).
+ * entregarla a mano. Nadie puede leer la contrasena actual (solo existe su hash). Solo el administrador: es la unica
+ * forma de dar una clave, incluida la de las cuentas que creo la supervisora.
  */
 export async function restablecerClave(ctx: Contexto, entrada: unknown): Promise<{ usuario: string; nombre: string; claveTemporal: string; sesionesCerradas: number }> {
   exigir(ctx.actor, 'administrar');
@@ -309,7 +313,7 @@ export interface ResultadoDesactivar {
  * de sesiones ocurren en la MISMA transaccion (10.6, CA-29, RV-16). Lo que ya lleno se conserva.
  */
 export async function desactivarUsuario(ctx: Contexto, entrada: unknown): Promise<ResultadoDesactivar> {
-  exigir(ctx.actor, 'administrar');
+  exigir(ctx.actor, 'supervisar');
   const e = parsear(entradaDesactivarUsuario, entrada);
   const ahora = ahoraDe(ctx);
 
@@ -348,11 +352,11 @@ export async function desactivarUsuario(ctx: Contexto, entrada: unknown): Promis
 }
 
 export async function reactivarUsuario(ctx: Contexto, entrada: unknown): Promise<{ ok: true }> {
-  exigir(ctx.actor, 'administrar');
+  exigir(ctx.actor, 'supervisar');
   const { usuarioId } = parsear(z.object({ usuarioId: z.uuid() }), entrada);
   const ahora = ahoraDe(ctx);
   await ctx.db.transaction(async (tx) => {
-    const [objetivo] = await tx.select({ rol: usuario.rol }).from(usuario).where(eq(usuario.id, usuarioId)).limit(1);
+    const [objetivo] = await tx.select({ rol: usuario.rol }).from(usuario).where(eq(usuario.id, usuarioId)).for('update').limit(1);
     if (objetivo) exigirCuentaTocable(ctx.actor, objetivo.rol);
     const r = await tx
       .update(usuario)
@@ -373,7 +377,7 @@ export async function reactivarUsuario(ctx: Contexto, entrada: unknown): Promise
 }
 
 export async function cambiarRol(ctx: Contexto, entrada: unknown): Promise<{ ok: true }> {
-  exigir(ctx.actor, 'administrar');
+  exigir(ctx.actor, 'supervisar');
   const e = parsear(z.object({ usuarioId: z.uuid(), rol: z.enum(ROLES) }), entrada);
   exigirRolAsignable(ctx.actor, e.rol);
   const ahora = ahoraDe(ctx);
@@ -425,7 +429,7 @@ export const entradaCambiarOrganizacion = z.object({
  *  - el acceso temporal vigente de sus asignaciones ya terminadas (S-22, 30 dias) se cierra: no se transfiere.
  */
 export async function cambiarOrganizacion(ctx: Contexto, entrada: unknown): Promise<{ ok: true }> {
-  exigir(ctx.actor, 'administrar');
+  exigir(ctx.actor, 'supervisar');
   const e = parsear(entradaCambiarOrganizacion, entrada);
   const ahora = ahoraDe(ctx);
   const org = await cargarOrganizacion(ctx, e.organizacionId);

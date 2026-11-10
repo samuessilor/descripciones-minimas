@@ -1,6 +1,7 @@
 /**
- * Lecturas de administracion (solo `admin`, 10.4). Las pantallas no consultan la base directamente:
- * pasan por aqui, con el `Actor`, y un no-admin recibe `SIN_PERMISO` antes de tocar ninguna tabla.
+ * Lecturas de administracion (administrador y supervisora general, 10.4). Las pantallas no consultan la base
+ * directamente: pasan por aqui, con el `Actor`, y quien no es ninguno de los dos recibe `SIN_PERMISO` antes de tocar
+ * ninguna tabla.
  */
 import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
@@ -9,7 +10,7 @@ import type { Ejecutor } from '@/db/tipos';
 import { normalizarTexto } from '@/dominio/normalizacion';
 import type { Rol } from '@/dominio/permisos';
 import type { Actor } from './actor';
-import { exigir } from './exigir';
+import { exigir, exigirCuentaTocable } from './exigir';
 
 /** Escapa `%`, `_` y `\` para usarlos dentro de un LIKE ... ESCAPE '\'. */
 export function escaparLike(s: string): string {
@@ -129,7 +130,7 @@ export interface PendienteUsuario {
 
 /** Asignaciones abiertas (pendiente / en curso) de una persona: lo que hay que reasignar al desactivarla o moverla. */
 export async function pendientesDeUsuario(ej: Ejecutor, actor: Actor, usuarioId: string): Promise<PendienteUsuario[]> {
-  exigir(actor, 'administrar');
+  exigir(actor, 'supervisar');
   if (!esUuid(usuarioId)) return [];
   const de = alias(usuario, 'de');
   const filas = await ej
@@ -164,7 +165,7 @@ export interface CandidatoReasignacion {
 
 /** Personas a las que se puede reasignar: activas, no lectoras, distintas de quien sale. */
 export async function candidatosReasignacion(ej: Ejecutor, actor: Actor, excluirUsuarioId: string): Promise<CandidatoReasignacion[]> {
-  exigir(actor, 'administrar');
+  exigir(actor, 'supervisar');
   if (!esUuid(excluirUsuarioId)) return [];
   return ej
     .select({
@@ -214,14 +215,17 @@ export async function sesionesDe(ej: Ejecutor, usuarioId: string): Promise<Sesio
 }
 
 export async function listarSesionesDeUsuario(ej: Ejecutor, actor: Actor, usuarioId: string): Promise<SesionVista[]> {
-  exigir(actor, 'administrar');
+  exigir(actor, 'supervisar');
   if (!esUuid(usuarioId)) return [];
+  // Las sesiones (IP y navegador) de un administrador o de una supervisora no las lee la supervisora.
+  const [objetivo] = await ej.select({ rol: usuario.rol }).from(usuario).where(eq(usuario.id, usuarioId)).limit(1);
+  if (objetivo) exigirCuentaTocable(actor, objetivo.rol);
   return sesionesDe(ej, usuarioId);
 }
 
 /** Cuantos administradores activos hay (para explicar por que no se puede quitar al ultimo). */
 export async function contarAdminsActivos(ej: Ejecutor, actor: Actor): Promise<number> {
-  exigir(actor, 'administrar');
+  exigir(actor, 'supervisar');
   const [r] = await ej
     .select({ n: sql<number>`count(*)::int` })
     .from(usuario)

@@ -10,7 +10,7 @@ Este repositorio contiene **solo la aplicación**. La especificación, los insum
 
 Producto funcionando de punta a punta **en local**, en su versión básica (se mejora a medida que se aprueba):
 
-1. se entra con **usuario y contraseña** (sin correo): las cuentas las crea un administrador, una por área (con un «encargado» opcional) y una por agencia de aduana (la agencia se crea en un solo paso desde Organizaciones; si la crea la supervisora, la cuenta queda pendiente de entrega hasta que el administrador genera la clave); la contraseña de entrega es la de uso (cambiarla en «Mi cuenta» es opcional; mínimo 7 caracteres);
+1. se entra con **usuario y contraseña** (sin correo): las cuentas las crea el administrador o la supervisora, una por área (con un «encargado» opcional) y una por agencia de aduana (la agencia se crea en un solo paso desde Organizaciones; si la crea la supervisora, igual que cualquier cuenta suya, queda pendiente de entrega hasta que el administrador genera la clave); la contraseña de entrega es la de uso (cambiarla en «Mi cuenta» es opcional; mínimo 7 caracteres);
 2. se crea una referencia y se llena la ficha (autoguardado por campo, historial por campo, nadie borra lo de otra persona);
 3. «Enviar a…» una persona o un área: le queda como pendiente con aviso en la campana y en «Para mí» (no hay correo);
 4. la aduana pone la partida (se copia su restricción), pide lo que le falte saber en «Descripciones mínimas adicionales» (le llega al área responsable como pendiente «Responder» y esta contesta en la misma zona), completa restricciones y observaciones y finaliza: la ficha pasa a verde;
@@ -69,7 +69,7 @@ contraseña de ejemplo `desarrollo-2026`**:
 | Usuario | Rol | Organización | Para qué sirve |
 |---|---|---|---|
 | `admin` | Administradora | EssilorLuxottica | crear cuentas, restablecer contraseñas, catálogos (listas, restricciones, partidas), auditoría |
-| `supervisor` | Supervisora general | EssilorLuxottica | todo lo operativo, más catálogos, auditoría y organizaciones; ve los usuarios pero no gestiona cuentas ni parámetros |
+| `supervisor` | Supervisora general | EssilorLuxottica | igual que el administrador, salvo parámetros y contraseñas: gestiona cuentas (las que crea quedan pendientes de entrega), organizaciones, catálogos y auditoría, pero no crea ni toca administradores ni supervisoras |
 | `solicitante` | Solicitante (Consumibles) | EssilorLuxottica | crear y llenar fichas, enviarlas |
 | `solicitante2` | Solicitante (Mantenimiento) | EssilorLuxottica | idem; segunda persona para ver historial y conflictos |
 | `lector` | Lector | EssilorLuxottica | solo consulta y descarga el Excel |

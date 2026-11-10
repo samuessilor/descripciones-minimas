@@ -27,7 +27,7 @@ const ESTADOS: Array<{ valor: EstadoUsuarioFiltro; etiqueta: string }> = [
 export default async function AdminUsuarios({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const ctx = await contextoAdmin();
   if (!ctx) return <SinPermiso />;
-  const administra = puede(ctx.actor, 'administrar');
+  const entregaClaves = puede(ctx.actor, 'administrar');
   const sp = await searchParams;
   const q = param(sp.q);
   const rolParam = param(sp.rol);
@@ -64,12 +64,10 @@ export default async function AdminUsuarios({ searchParams }: { searchParams: Pr
         titulo="Usuarios"
         descripcion="Las cuentas que pueden entrar (una por área, una por agencia y las de cada persona), con su rol y organización. Nadie se elimina: se desactiva y lo que llenó se conserva."
         acciones={
-          administra ? (
-            <EnlaceBoton href="/admin/usuarios/nueva">
-              <UserPlus aria-hidden className="size-4" />
-              Crear cuenta
-            </EnlaceBoton>
-          ) : undefined
+          <EnlaceBoton href="/admin/usuarios/nueva">
+            <UserPlus aria-hidden className="size-4" />
+            Crear cuenta
+          </EnlaceBoton>
         }
       />
 
@@ -168,15 +166,15 @@ export default async function AdminUsuarios({ searchParams }: { searchParams: Pr
           <EstadoVacio
             icono={Search}
             titulo={filtros.length > 0 ? 'No encontramos personas con esos filtros' : 'Todavía no hay usuarios'}
-            descripcion={filtros.length > 0 ? 'Prueba con menos filtros o revisa cómo está escrito el nombre.' : administra ? 'Crea la primera cuenta y entrégale su usuario y contraseña.' : 'Todavía no hay cuentas creadas.'}
+            descripcion={filtros.length > 0 ? 'Prueba con menos filtros o revisa cómo está escrito el nombre.' : entregaClaves ? 'Crea la primera cuenta y entrégale su usuario y contraseña.' : 'Crea la primera cuenta; el administrador le entrega su contraseña.'}
             accion={
               filtros.length > 0 ? (
                 <EnlaceBoton href="/admin/usuarios" variante="secundario">
                   Quitar los filtros
                 </EnlaceBoton>
-              ) : administra ? (
+              ) : (
                 <EnlaceBoton href="/admin/usuarios/nueva">Crear cuenta</EnlaceBoton>
-              ) : undefined
+              )
             }
           />
         }

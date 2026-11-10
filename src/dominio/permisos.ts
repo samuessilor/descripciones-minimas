@@ -11,8 +11,8 @@ export const ROLES = ['admin', 'supervisor', 'solicitante', 'aduana', 'lector'] 
 export type Rol = (typeof ROLES)[number];
 
 /**
- * Administrador y supervisora general: comparten todo lo operativo de la plataforma. Lo reservado al administrador
- * (seguridad, cuentas y parametros) pasa por `puede(actor, 'administrar')`, no por este helper.
+ * Administrador y supervisora general: comparten todo lo operativo de la plataforma y la administracion. Lo reservado
+ * al administrador (parametros y claves) pasa por `puede(actor, 'administrar')`, no por este helper.
  */
 export function esGestor(rol: string): boolean {
   return rol === 'admin' || rol === 'supervisor';
@@ -55,9 +55,9 @@ export type Accion =
   | 'desarchivar'
   | 'corregir_codigo'
   | 'descargar_excel'
-  /** Zona /admin compartida: resumen, catalogos, auditoria, organizaciones y usuarios en lectura. */
+  /** Zona /admin compartida: resumen, usuarios, organizaciones, catalogos y auditoria (todo menos parametros y claves). */
   | 'supervisar'
-  /** Solo el administrador: parametros, claves, roles, cuentas y sesiones. */
+  /** Solo el administrador: parametros y administracion de claves (ver, generar, restablecer y entregar). */
   | 'administrar';
 
 export interface ContextoAccion {
@@ -107,9 +107,9 @@ export function puedeAsignarRol(actor: Pick<ActorLike, 'rol'>, rolNuevo: string)
   return actor.rol === 'admin' || (rolNuevo !== 'admin' && rolNuevo !== 'supervisor');
 }
 
-/** Guarda por objetivo: quien no es administrador no toca cuentas de administrador. */
+/** Guarda por objetivo: quien no es administrador no toca cuentas de administrador ni de supervisora (ni la suya). */
 export function puedeTocarCuenta(actor: Pick<ActorLike, 'rol'>, rolCuenta: string): boolean {
-  return actor.rol === 'admin' || rolCuenta !== 'admin';
+  return actor.rol === 'admin' || (rolCuenta !== 'admin' && rolCuenta !== 'supervisor');
 }
 
 export function visibilidadesComentarioPermitidas(rol: Rol): Array<'interno' | 'todos'> {

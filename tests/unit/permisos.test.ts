@@ -132,10 +132,16 @@ describe('guardas por objetivo de la supervisora general', () => {
     expect(puedeAsignarRol(actor('solicitante'), 'admin')).toBe(false);
   });
 
-  it('solo el administrador toca cuentas de administrador', () => {
-    expect(puedeTocarCuenta(actor('admin'), 'admin')).toBe(true);
+  it('solo el administrador toca cuentas de administrador o de supervisora; la supervisora toca el resto', () => {
+    for (const rol of ROLES) expect(puedeTocarCuenta(actor('admin'), rol), rol).toBe(true);
     expect(puedeTocarCuenta(actor('supervisor'), 'admin')).toBe(false);
-    expect(puedeTocarCuenta(actor('supervisor'), 'solicitante')).toBe(true);
+    expect(puedeTocarCuenta(actor('supervisor'), 'supervisor')).toBe(false);
+    for (const rol of ['solicitante', 'aduana', 'lector'] as const) expect(puedeTocarCuenta(actor('supervisor'), rol), rol).toBe(true);
+  });
+
+  it('`administrar` (parametros y claves) es solo del administrador; `supervisar` es de los dos', () => {
+    expect(ROLES.filter((rol) => puede(actor(rol), 'administrar'))).toEqual(['admin']);
+    expect(ROLES.filter((rol) => puede(actor(rol), 'supervisar'))).toEqual(['admin', 'supervisor']);
   });
 
   it('esGestor: administrador y supervisora, nadie mas', () => {

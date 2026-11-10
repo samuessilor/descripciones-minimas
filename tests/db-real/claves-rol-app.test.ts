@@ -41,13 +41,13 @@ describe('contrasenas con el rol app (no duenio)', () => {
     const ctx = { db: r.app.db, actor: admin };
     const nueva = await crearCuenta(ctx, { nombre: 'Área Real', usuario: 'area-real', organizacionId: orgId, rol: 'solicitante', area: 'Consumibles' });
 
-    const a = await iniciarSesion(deps, { usuario: 'area-real', clave: nueva.claveTemporal, headers: new Headers() });
+    const a = await iniciarSesion(deps, { usuario: 'area-real', clave: nueva.claveTemporal!, headers: new Headers() });
     expect(a.ok).toBe(true);
     expect((await iniciarSesion(deps, { usuario: 'area-real', clave: 'una-clave-equivocada', headers: new Headers() })).ok).toBe(false);
 
     const reset = await restablecerClave(ctx, { usuarioId: nueva.id });
     expect(reset.sesionesCerradas).toBeGreaterThanOrEqual(1); // el rol app puede borrar sesiones
-    expect((await iniciarSesion(deps, { usuario: 'area-real', clave: nueva.claveTemporal, headers: new Headers() })).ok).toBe(false);
+    expect((await iniciarSesion(deps, { usuario: 'area-real', clave: nueva.claveTemporal!, headers: new Headers() })).ok).toBe(false);
     const b = await iniciarSesion(deps, { usuario: 'area-real', clave: reset.claveTemporal, headers: new Headers() });
     expect(b.ok).toBe(true);
 

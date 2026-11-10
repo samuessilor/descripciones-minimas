@@ -133,13 +133,16 @@ export default async function Ayuda() {
               campana a diario.
             </li>
             <li>
-              Quien administra crea las cuentas en Administración › Usuarios › «Crear cuenta»: nombre, usuario, organización, rol y área. La plataforma
-              genera una <b>contraseña temporal</b> y la muestra <b>una sola vez</b>: se copia y se entrega a quien corresponda. Si se pierde, se
-              restablece desde la ficha de la cuenta («Restablecer contraseña»), lo que cierra sus sesiones.
+              Las cuentas se crean en Administración › Usuarios › «Crear cuenta»: nombre, usuario, organización, rol y área. Si las crea el
+              administrador, la plataforma genera una <b>contraseña temporal</b> y la muestra <b>una sola vez</b>: se copia y se entrega a quien
+              corresponda. Si las crea la supervisora general, la cuenta queda «Pendiente de entrega» (sin contraseña, no puede entrar) y a los
+              administradores les llega un aviso: el administrador genera la clave con «Restablecer contraseña» en la ficha de la cuenta, lo que
+              también sirve si se pierde y cierra sus sesiones.
             </li>
             <li>
               Cada empresa de aduana es una organización de tipo agencia con una cuenta general, sin datos personales. Para una empresa nueva:
-              Administración › Organizaciones › «Nueva organización» (tipo Agencia de aduana) › ábrela › «Crear cuenta para esta agencia».
+              Administración › Organizaciones › «Nueva agencia de aduana», en un solo paso (crea la empresa y su cuenta general; si la crea la
+              supervisora, la cuenta queda pendiente de entrega).
             </li>
             <li>
               Si cambian de proveedor de aduana: en Administración › Usuarios abre la cuenta de la agencia vieja y desactívala; antes de hacerlo te pide a

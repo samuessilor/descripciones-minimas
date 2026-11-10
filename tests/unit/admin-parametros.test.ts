@@ -3,7 +3,16 @@ import { describe, expect, it } from 'vitest';
 import { cargarConfig } from '@/server/config';
 import { leerParametros } from '@/server/parametros';
 
+const admin = { rol: 'admin' } as const;
+
 describe('parametros visibles', () => {
+  it('solo el administrador los lee: la supervisora y los demas roles reciben SIN_PERMISO', () => {
+    const c = cargarConfig({ NODE_ENV: 'test' });
+    for (const rol of ['supervisor', 'solicitante', 'aduana', 'lector'] as const) {
+      expect(() => leerParametros({ rol }, c), rol).toThrow(/solo del administrador/);
+    }
+  });
+
   const secretos = {
     BETTER_AUTH_SECRET: 'x'.repeat(40) + 'SECRETO-AUTH',
     DATABASE_URL: 'postgres://app:CONTRASENA-BD@host/db',
@@ -12,7 +21,7 @@ describe('parametros visibles', () => {
 
   it('no muestra ninguna llave, clave ni cadena de conexion', () => {
     const c = cargarConfig({ NODE_ENV: 'development', ...secretos, ALMACEN: 'blob' });
-    const texto = JSON.stringify(leerParametros(c));
+    const texto = JSON.stringify(leerParametros(admin, c));
     for (const valor of Object.values(secretos)) expect(texto).not.toContain(valor);
     for (const trozo of ['SECRETO-AUTH', 'CONTRASENA-BD', 'vercel_blob_token']) expect(texto).not.toContain(trozo);
     expect(texto).toContain('Postgres externo');
@@ -20,7 +29,7 @@ describe('parametros visibles', () => {
 
   it('refleja los valores en uso y dice como se cambian', () => {
     const c = cargarConfig({ NODE_ENV: 'test', CIERRE_MODO: 'bloquear', SESION_ABSOLUTA_HORAS_EXTERNO: '96' });
-    const grupos = leerParametros(c);
+    const grupos = leerParametros(admin, c);
     const todos = grupos.flatMap((g) => g.parametros);
     expect(todos.find((p) => p.variable === 'CIERRE_MODO')?.valor).toBe('Bloquear');
     expect(todos.find((p) => p.variable === 'SESION_ABSOLUTA_HORAS_EXTERNO')?.valor).toBe('4 días (96 h)');

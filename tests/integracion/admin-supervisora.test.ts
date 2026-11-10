@@ -1,13 +1,14 @@
 /**
  * Supervisora general: que puede y que NO puede, por las acciones de servidor y por las paginas de /admin.
- * Puede: lo operativo de las fichas, resumen, catalogos, auditoria (ver y CSV), organizaciones (ver, crear, renombrar) y
- * usuarios en solo lectura. NO puede: parametros, crear cuentas, restablecer claves, cambiar rol u organizacion de una
- * persona, editar usuarios, desactivar o reactivar, cerrar sesiones; y nunca da el rol de administrador o supervisora
- * ni toca una cuenta de administrador. El candado de «ultimo administrador» solo cuenta el rol `admin`.
+ * Es igual al administrador en la administracion (resumen, usuarios, organizaciones, catalogos, auditoria), con DOS excepciones:
+ * no tiene Parametros y no administra claves. Puede: crear cuentas (sin clave: quedan pendientes de entrega y avisan a los
+ * administradores), editar, cambiar rol u organizacion, desactivar y reactivar, ver y cerrar sesiones, y todo lo operativo
+ * de las fichas. NO puede: restablecer claves, parametros, crear o promover administradores o supervisoras, ni tocar una
+ * cuenta de administrador o de supervisora. El candado de «ultimo administrador» solo cuenta el rol `admin`.
  */
 import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { account, asignacion, notificacion, organizacion, usuario } from '@/db/esquema';
+import { account, asignacion, auditoria, notificacion, organizacion, session, usuario } from '@/db/esquema';
 import type { Contexto } from '@/server/politicas/actor';
 
 // Las paginas piden la sesion al servidor: se les entrega el contexto de la prueba.
@@ -17,13 +18,17 @@ vi.mock('@/server/sesion', () => ({
   exigirActor: async () => (sesion.ctx as Contexto).actor,
   contextoDeAccion: async () => sesion.ctx,
 }));
+vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 
+import { crearCuentaAccion } from '@/app/acciones/admin';
+import { FormularioCrearCuenta } from '@/componentes/admin/FormularioCrearCuenta';
 import { SubNavAdmin } from '@/componentes/admin/SubNavAdmin';
 import { destinosPara } from '@/componentes/navegacion';
 import { SinPermiso } from '@/componentes/ui/pantallas';
-import { PanelDesactivar } from '@/componentes/admin/ReasignacionUsuario';
+import { PanelCambiarOrganizacion, PanelDesactivar } from '@/componentes/admin/ReasignacionUsuario';
 import { RestablecerClave } from '@/componentes/admin/RestablecerClave';
 import { FormularioAccion } from '@/componentes/admin/acciones';
+import { Aviso } from '@/componentes/ui/aviso';
 import { archivar, desarchivar, finalizar, reabrir, solicitarReapertura } from '@/server/acciones/aduana';
 import { enviarA } from '@/server/acciones/asignaciones';
 import { gestoresActivos } from '@/server/acciones/aduana-comun';
@@ -117,49 +122,188 @@ describe('la supervisora puede: administracion compartida', () => {
   });
 });
 
-describe('la supervisora NO puede: seguridad, cuentas y parametros (acciones de servidor)', () => {
-  it('niega lo reservado al administrador y no cambia nada', async () => {
-    const objetivo = e.charles.usuarioId;
-    const antes = await filaUsuario(objetivo);
-    const [credAntes] = await e.db.select().from(account).where(and(eq(account.userId, e.admin.usuarioId), eq(account.providerId, 'credential')));
-    const intentos: Array<[string, () => PromiseLike<unknown>]> = [
-      ['crear cuenta', () => crearCuenta(ctxAngie, { nombre: 'Nueva', usuario: 'nueva-sup', organizacionId: e.orgInterna, rol: 'lector' })],
-      ['restablecer clave', () => restablecerClave(ctxAngie, { usuarioId: objetivo })],
-      ['cambiar rol', () => cambiarRol(ctxAngie, { usuarioId: objetivo, rol: 'lector' })],
-      ['editar usuario', () => editarUsuario(ctxAngie, { usuarioId: objetivo, nombre: 'Otro nombre', area: 'Consumibles' })],
-      ['cambiar organizacion', () => cambiarOrganizacion(ctxAngie, { usuarioId: objetivo, organizacionId: e.orgInterna })],
-      ['desactivar', () => desactivarUsuario(ctxAngie, { usuarioId: objetivo })],
-      ['reactivar', () => reactivarUsuario(ctxAngie, { usuarioId: objetivo })],
-      ['cerrar sesiones', () => cerrarSesionesDeUsuario(ctxAngie, { usuarioId: objetivo })],
-      ['desactivar organizacion', () => cambiarEstadoOrganizacion(ctxAngie, { organizacionId: e.orgB, activa: false })],
-      ['pendientes de una persona', () => pendientesDeUsuario(e.db, angie, objetivo)],
-      ['candidatos de reasignacion', () => candidatosReasignacion(e.db, angie, objetivo)],
-      ['sesiones abiertas', () => listarSesionesDeUsuario(e.db, angie, objetivo)],
-      ['contar administradores', () => contarAdminsActivos(e.db, angie)],
-    ];
-    for (const [nombre, p] of intentos) expect(await codigoDe(p()), nombre).toBe('SIN_PERMISO');
+const FORMATO_CLAVE = /^[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}$/;
 
-    const despues = await filaUsuario(objetivo);
-    expect(despues).toMatchObject({ nombre: antes.nombre, rol: antes.rol, activo: antes.activo, organizacionId: antes.organizacionId, area: antes.area });
-    const [credDespues] = await e.db.select().from(account).where(and(eq(account.userId, e.admin.usuarioId), eq(account.providerId, 'credential')));
-    expect(credDespues?.password).toBe(credAntes?.password);
-    expect((await e.db.select().from(usuario).where(eq(usuario.username, 'nueva-sup'))).length).toBe(0);
-    expect((await e.db.select().from(organizacion).where(eq(organizacion.id, e.orgB)))[0]!.activa).toBe(true);
+async function abrirSesion(userId: string): Promise<string> {
+  const [s] = await e.db
+    .insert(session)
+    .values({ userId, token: `t-${Math.random().toString(36).slice(2)}-${Date.now()}`, expiresAt: new Date(Date.now() + 3_600_000), userAgent: 'Mozilla/5.0 Chrome/120', ipAddress: '10.0.0.7' })
+    .returning({ id: session.id });
+  return (s as { id: string }).id;
+}
+
+const avisosDeCuenta = (cuentaId: string) =>
+  e.db.select().from(notificacion).where(and(eq(notificacion.tipo, 'cuenta_creada'), eq(notificacion.cuentaId, cuentaId)));
+
+describe('la supervisora puede: gestionar personas como el administrador (menos las claves)', () => {
+  it('crea una cuenta sin clave: sin credencial, pendiente de entrega y con aviso a cada administrador activo', async () => {
+    const r = await crearCuenta(ctxAngie, { nombre: 'Cuenta de Angie', usuario: 'cuenta.angie', organizacionId: e.orgInterna, rol: 'solicitante', area: 'Consumibles' });
+    expect(r).toMatchObject({ usuario: 'cuenta.angie', rol: 'solicitante', claveTemporal: null });
+    // Ningun valor de la respuesta tiene la forma de una clave.
+    expect(Object.values(r).filter((v) => typeof v === 'string' && FORMATO_CLAVE.test(v))).toEqual([]);
+    expect(await e.db.select().from(account).where(eq(account.userId, r.id))).toHaveLength(0);
+    expect(await filaUsuario(r.id)).toMatchObject({ creadoPor: angie.usuarioId, activo: true, rol: 'solicitante', area: 'Consumibles' });
+    const [aud] = await e.db.select().from(auditoria).where(and(eq(auditoria.accion, 'crear_cuenta'), eq(auditoria.entidadId, r.id)));
+    expect(aud).toMatchObject({ usuarioId: angie.usuarioId });
+    expect(aud?.detalle).toMatchObject({ conClave: false });
+
+    const avisos = await avisosDeCuenta(r.id);
+    expect(avisos.map((a) => a.usuarioId)).toEqual([e.admin.usuarioId]);
+    expect(avisos[0]!.titulo).toContain('genera y entrega su clave');
+    expect((await listarUsuariosAdmin(e.db, angie, { q: 'cuenta.angie' }))[0]).toMatchObject({ id: r.id, sinClave: true });
+
+    // El administrador la entrega con Restablecer contraseña: ahora si hay clave y el aviso queda resuelto.
+    const entrega = await restablecerClave(e.ctx(e.admin), { usuarioId: r.id });
+    expect(entrega.claveTemporal).toMatch(FORMATO_CLAVE);
+    expect(await e.db.select().from(account).where(eq(account.userId, r.id))).toHaveLength(1);
+    expect((await avisosDeCuenta(r.id)).every((a) => a.leidaEn !== null)).toBe(true);
   });
 
-  it('no crea ni promueve administradores o supervisoras, ni toca la cuenta del administrador', async () => {
+  it('crea cuentas con los roles lector y aduana (en una agencia); la regla rol x organizacion sigue vigente', async () => {
+    const lector = await crearCuenta(ctxAngie, { nombre: 'Lectora Nueva', usuario: 'lectora.nueva', organizacionId: e.orgInterna, rol: 'lector' });
+    const aduana = await crearCuenta(ctxAngie, { nombre: 'Aduana Nueva', usuario: 'aduana.nueva', organizacionId: e.orgA, rol: 'aduana' });
+    expect(lector).toMatchObject({ rol: 'lector', claveTemporal: null });
+    expect(aduana).toMatchObject({ rol: 'aduana', organizacionTipo: 'agencia', claveTemporal: null });
+    expect(await codigoDe(crearCuenta(ctxAngie, { nombre: 'Mal puesta', usuario: 'mal.puesta.sup', organizacionId: e.orgA, rol: 'solicitante' }))).toBe('VALIDACION');
+  });
+
+  it('la Server Action no lleva clave al navegador: devuelve la cuenta como pendiente (con el administrador si la lleva)', async () => {
+    const datos = (usuario: string) => {
+      const d = new FormData();
+      d.set('nombre', 'Por Accion');
+      d.set('usuario', usuario);
+      d.set('organizacionId', e.orgInterna);
+      d.set('rol', 'lector');
+      return d;
+    };
+    sesion.ctx = ctxAngie;
+    const r = await crearCuentaAccion({ estado: 'inicial' }, datos('por.accion.sup'));
+    expect(r.estado).toBe('ok');
+    expect(r.secreto).toBeUndefined();
+    expect(r.pendiente).toMatchObject({ nombre: 'Por Accion', usuario: 'por.accion.sup' });
+    expect(JSON.stringify(r)).not.toMatch(/"clave"|[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}"/);
+
+    sesion.ctx = e.ctx(e.admin);
+    const a = await crearCuentaAccion({ estado: 'inicial' }, datos('por.accion.admin'));
+    expect(a.pendiente).toBeUndefined();
+    expect(a.secreto).toMatchObject({ usuario: 'por.accion.admin', accion: 'creada' });
+    expect(a.secreto?.clave).toMatch(FORMATO_CLAVE);
+  });
+
+  it('edita datos, cambia el rol entre solicitante, aduana y lector, y cambia de organizacion', async () => {
+    const { id } = await crearCuenta(ctxAngie, { nombre: 'Maleable', usuario: 'maleable', organizacionId: e.orgInterna, rol: 'solicitante', area: 'Consumibles' });
+    await editarUsuario(ctxAngie, { usuarioId: id, nombre: 'Maleable Editada', area: 'Instrumentos' });
+    expect(await filaUsuario(id)).toMatchObject({ nombre: 'Maleable Editada', area: 'Instrumentos' });
+    for (const rol of ['lector', 'aduana', 'solicitante'] as const) {
+      await cambiarRol(ctxAngie, { usuarioId: id, rol });
+      expect((await filaUsuario(id)).rol, rol).toBe(rol);
+    }
+    await cambiarRol(ctxAngie, { usuarioId: id, rol: 'aduana' });
+    await cambiarOrganizacion(ctxAngie, { usuarioId: id, organizacionId: e.orgA });
+    expect(await filaUsuario(id)).toMatchObject({ rol: 'aduana', organizacionId: e.orgA, organizacionTipo: 'agencia', area: null });
+    // Todo queda en la auditoria con ella como autora.
+    for (const accion of ['editar_usuario', 'cambiar_rol', 'cambiar_organizacion'] as const) {
+      const filas = await e.db.select().from(auditoria).where(and(eq(auditoria.accion, accion), eq(auditoria.entidadId, id)));
+      expect(filas.length, accion).toBeGreaterThanOrEqual(1);
+      expect(filas.every((f) => f.usuarioId === angie.usuarioId), accion).toBe(true);
+    }
+  });
+
+  it('ve y cierra sesiones, ve pendientes y candidatos, desactiva y reactiva', async () => {
+    const { id } = await crearCuenta(ctxAngie, { nombre: 'Con Sesiones', usuario: 'con.sesiones', organizacionId: e.orgInterna, rol: 'lector' });
+    const una = await abrirSesion(id);
+    await abrirSesion(id);
+    expect(await listarSesionesDeUsuario(e.db, angie, id)).toHaveLength(2);
+    expect(await pendientesDeUsuario(e.db, angie, id)).toEqual([]);
+    expect((await candidatosReasignacion(e.db, angie, id)).length).toBeGreaterThan(0);
+    expect(await contarAdminsActivos(e.db, angie)).toBeGreaterThanOrEqual(1);
+
+    expect(await cerrarSesionesDeUsuario(ctxAngie, { usuarioId: id, sesionId: una })).toEqual({ cerradas: 1 });
+    expect(await listarSesionesDeUsuario(e.db, angie, id)).toHaveLength(1);
+    expect(await cerrarSesionesDeUsuario(ctxAngie, { usuarioId: id })).toEqual({ cerradas: 1 });
+
+    await abrirSesion(id);
+    expect(await desactivarUsuario(ctxAngie, { usuarioId: id })).toMatchObject({ sesionesCerradas: 1, reasignadas: 0 });
+    expect((await filaUsuario(id)).activo).toBe(false);
+    await reactivarUsuario(ctxAngie, { usuarioId: id });
+    expect((await filaUsuario(id)).activo).toBe(true);
+  });
+
+  it('desactiva y reactiva una organizacion (sin personas activas)', async () => {
+    const { id } = await crearOrganizacion(ctxAngie, { nombre: 'Area Efimera', tipo: 'interna' });
+    await cambiarEstadoOrganizacion(ctxAngie, { organizacionId: id, activa: false });
+    expect((await e.db.select().from(organizacion).where(eq(organizacion.id, id)))[0]!.activa).toBe(false);
+    await cambiarEstadoOrganizacion(ctxAngie, { organizacionId: id, activa: true });
+    expect((await e.db.select().from(organizacion).where(eq(organizacion.id, id)))[0]!.activa).toBe(true);
+  });
+});
+
+describe('la supervisora NO puede: claves, parametros, ni crear o tocar administradores y supervisoras (acciones de servidor)', () => {
+  it('no restablece ninguna clave, ni la de una cuenta comun: no cambia ni la credencial ni las sesiones', async () => {
+    const objetivo = e.charles.usuarioId;
+    await abrirSesion(objetivo);
+    const [credAntes] = await e.db.select().from(account).where(and(eq(account.userId, objetivo), eq(account.providerId, 'credential')));
+    expect(await codigoDe(restablecerClave(ctxAngie, { usuarioId: objetivo }))).toBe('SIN_PERMISO');
+    const [credDespues] = await e.db.select().from(account).where(and(eq(account.userId, objetivo), eq(account.providerId, 'credential')));
+    expect(credDespues?.password).toBe(credAntes?.password);
+    expect((await listarSesionesDeUsuario(e.db, angie, objetivo)).length).toBeGreaterThanOrEqual(1);
+    expect(await e.db.select().from(auditoria).where(and(eq(auditoria.accion, 'restablecer_clave'), eq(auditoria.usuarioId, angie.usuarioId)))).toHaveLength(0);
+  });
+
+  it('no crea ni promueve administradores o supervisoras', async () => {
+    const antes = (await e.db.select().from(usuario).where(eq(usuario.rol, 'supervisor'))).length;
     for (const rol of ['admin', 'supervisor'] as const) {
       expect(await codigoDe(crearCuenta(ctxAngie, { nombre: 'Intrusa', usuario: `intrusa-${rol}`, organizacionId: e.orgInterna, rol })), `crear ${rol}`).toBe('SIN_PERMISO');
       expect(await codigoDe(cambiarRol(ctxAngie, { usuarioId: e.charles.usuarioId, rol })), `promover a ${rol}`).toBe('SIN_PERMISO');
       expect(await codigoDe(cambiarRol(ctxAngie, { usuarioId: angie.usuarioId, rol })), `ascenderse a ${rol}`).toBe('SIN_PERMISO');
     }
-    expect(await codigoDe(restablecerClave(ctxAngie, { usuarioId: e.admin.usuarioId }))).toBe('SIN_PERMISO');
+    expect((await filaUsuario(e.charles.usuarioId)).rol).toBe('solicitante');
+    expect((await e.db.select().from(usuario).where(eq(usuario.username, 'intrusa-admin'))).length).toBe(0);
+    expect((await e.db.select().from(usuario).where(eq(usuario.rol, 'supervisor'))).length).toBe(antes);
+  });
+
+  it('no toca la cuenta del administrador ni la de otra supervisora (ni la suya): nada cambia', async () => {
+    const otra = await crearSupervisora(e, 'Otra Supervisora', 'otra.sup@prueba.invalid');
+    await abrirSesion(e.admin.usuarioId);
+    await abrirSesion(otra.usuarioId);
+    for (const objetivo of [e.admin, otra, angie]) {
+      const antes = await filaUsuario(objetivo.usuarioId);
+      const [credAntes] = await e.db.select().from(account).where(and(eq(account.userId, objetivo.usuarioId), eq(account.providerId, 'credential')));
+      const intentos: Array<[string, () => PromiseLike<unknown>]> = [
+        ['editar', () => editarUsuario(ctxAngie, { usuarioId: objetivo.usuarioId, nombre: 'Cambiado' })],
+        ['cambiar rol', () => cambiarRol(ctxAngie, { usuarioId: objetivo.usuarioId, rol: 'lector' })],
+        ['cambiar organizacion', () => cambiarOrganizacion(ctxAngie, { usuarioId: objetivo.usuarioId, organizacionId: e.orgInterna })],
+        ['desactivar', () => desactivarUsuario(ctxAngie, { usuarioId: objetivo.usuarioId })],
+        ['reactivar', () => reactivarUsuario(ctxAngie, { usuarioId: objetivo.usuarioId })],
+        ['cerrar sesiones', () => cerrarSesionesDeUsuario(ctxAngie, { usuarioId: objetivo.usuarioId })],
+        ['restablecer clave', () => restablecerClave(ctxAngie, { usuarioId: objetivo.usuarioId })],
+      ];
+      for (const [nombre, p] of intentos) expect(await codigoDe(p()), `${objetivo.rol}: ${nombre}`).toBe('SIN_PERMISO');
+      expect(await codigoDe(listarSesionesDeUsuario(e.db, angie, objetivo.usuarioId)), `${objetivo.rol}: ver sesiones`).toBe('SIN_PERMISO');
+      const despues = await filaUsuario(objetivo.usuarioId);
+      expect(despues).toMatchObject({ nombre: antes.nombre, rol: antes.rol, activo: true, organizacionId: antes.organizacionId, area: antes.area });
+      const [credDespues] = await e.db.select().from(account).where(and(eq(account.userId, objetivo.usuarioId), eq(account.providerId, 'credential')));
+      expect(credDespues?.password).toBe(credAntes?.password);
+    }
+    // Las sesiones del administrador y de la otra supervisora siguen abiertas.
+    expect((await listarSesionesDeUsuario(e.db, e.admin, e.admin.usuarioId)).length).toBeGreaterThanOrEqual(1);
+    expect((await listarSesionesDeUsuario(e.db, e.admin, otra.usuarioId)).length).toBeGreaterThanOrEqual(1);
+    expect(await filaUsuario(e.admin.usuarioId)).toMatchObject({ rol: 'admin', activo: true, nombre: 'Ana Admin' });
+  });
+
+  it('no deja la plataforma sin administrador: no desactiva ni degrada al unico administrador activo', async () => {
+    expect(await contarAdminsActivos(e.db, angie)).toBe(1);
     expect(await codigoDe(desactivarUsuario(ctxAngie, { usuarioId: e.admin.usuarioId }))).toBe('SIN_PERMISO');
-    expect(await codigoDe(cambiarRol(ctxAngie, { usuarioId: e.admin.usuarioId, rol: 'lector' }))).toBe('SIN_PERMISO');
-    expect(await codigoDe(editarUsuario(ctxAngie, { usuarioId: e.admin.usuarioId, nombre: 'Cambiado' }))).toBe('SIN_PERMISO');
-    expect((await filaUsuario(e.admin.usuarioId))).toMatchObject({ rol: 'admin', activo: true, nombre: 'Ana Admin' });
-    expect((await filaUsuario(angie.usuarioId)).rol).toBe('supervisor');
-    expect((await e.db.select().from(usuario).where(eq(usuario.rol, 'supervisor'))).length).toBe(1);
+    expect(await codigoDe(cambiarRol(ctxAngie, { usuarioId: e.admin.usuarioId, rol: 'solicitante' }))).toBe('SIN_PERMISO');
+    expect(await filaUsuario(e.admin.usuarioId)).toMatchObject({ rol: 'admin', activo: true });
+  });
+
+  it('solicitante, aduana y lector siguen sin ninguna de estas acciones ni lecturas', async () => {
+    for (const actor of [e.edward, e.brian, e.lector]) {
+      expect(await codigoDe(crearCuenta(e.ctx(actor), { nombre: 'X', usuario: 'xx-sup', organizacionId: e.orgInterna, rol: 'lector' })), actor.rol).toBe('SIN_PERMISO');
+      expect(await codigoDe(cambiarEstadoOrganizacion(e.ctx(actor), { organizacionId: e.orgB, activa: false })), actor.rol).toBe('SIN_PERMISO');
+      expect(await codigoDe(listarSesionesDeUsuario(e.db, actor, e.charles.usuarioId)), actor.rol).toBe('SIN_PERMISO');
+    }
   });
 });
 
@@ -247,15 +391,22 @@ async function comoSesion<T>(actor: Actor, correr: () => Promise<T>): Promise<T>
 describe('las paginas de /admin respetan los dos niveles (nunca en blanco)', () => {
   const sp = Promise.resolve({});
 
-  it('la supervisora ve el aviso de permiso en parametros y en crear cuenta', async () => {
+  it('la supervisora ve el aviso de permiso en parametros; el administrador los ve', async () => {
     const { default: Parametros } = await import('@/app/(app)/admin/parametros/page');
-    const { default: Nueva } = await import('@/app/(app)/admin/usuarios/nueva/page');
     const p = await comoSesion(angie, () => Parametros());
     expect(p).not.toBeNull();
     expect(veSinPermiso(p)).toBe(true);
-    const n = await comoSesion(angie, () => Nueva({ searchParams: sp }));
-    expect(n).not.toBeNull();
-    expect(veSinPermiso(n)).toBe(true);
+    expect(veSinPermiso(await comoSesion(e.admin, () => Parametros()))).toBe(false);
+  });
+
+  it('crear cuenta: la supervisora y el administrador ven el formulario; solicitante, aduana y lector el aviso', async () => {
+    const { default: Nueva } = await import('@/app/(app)/admin/usuarios/nueva/page');
+    for (const actor of [angie, e.admin]) {
+      const n = await comoSesion(actor, () => Nueva({ searchParams: sp }));
+      expect(veSinPermiso(n), actor.rol).toBe(false);
+      expect((buscar(n, FormularioCrearCuenta)?.props as { actorRol?: string }).actorRol).toBe(actor.rol);
+    }
+    for (const actor of [e.edward, e.brian, e.lector]) expect(veSinPermiso(await comoSesion(actor, () => Nueva({ searchParams: sp }))), actor.rol).toBe(true);
   });
 
   it('el administrador ve crear cuenta; solicitante, aduana y lector ven el aviso en todas las paginas', async () => {
@@ -302,15 +453,30 @@ describe('las paginas de /admin respetan los dos niveles (nunca en blanco)', () 
     }
   });
 
-  it('la ficha de una persona es de solo lectura para la supervisora y completa para el administrador', async () => {
+  it('la ficha de una persona trae todos los controles para la supervisora salvo Restablecer contraseña', async () => {
     const { default: Persona } = await import('@/app/(app)/admin/usuarios/[id]/page');
     const params = Promise.resolve({ id: e.charles.usuarioId });
-    const lectura = await comoSesion(angie, () => Persona({ params }));
-    expect(veSinPermiso(lectura)).toBe(false);
-    for (const prohibido of [FormularioAccion, RestablecerClave, PanelDesactivar]) expect(buscar(lectura, prohibido)).toBeNull();
+    const suya = await comoSesion(angie, () => Persona({ params }));
+    expect(veSinPermiso(suya)).toBe(false);
+    for (const presente of [FormularioAccion, PanelDesactivar, PanelCambiarOrganizacion]) expect(buscar(suya, presente)).not.toBeNull();
+    expect(buscar(suya, RestablecerClave)).toBeNull();
 
     const completa = await comoSesion(e.admin, () => Persona({ params }));
+    for (const presente of [FormularioAccion, PanelDesactivar, PanelCambiarOrganizacion, RestablecerClave]) expect(buscar(completa, presente)).not.toBeNull();
+  });
+
+  it('la ficha de una cuenta de administrador o de supervisora es de solo lectura para la supervisora; el administrador la gestiona', async () => {
+    const { default: Persona } = await import('@/app/(app)/admin/usuarios/[id]/page');
+    const otra = await crearSupervisora(e, 'Supervisora de Lectura', 'lectura.sup@prueba.invalid');
+    for (const objetivo of [e.admin, otra, angie]) {
+      const lectura = await comoSesion(angie, () => Persona({ params: Promise.resolve({ id: objetivo.usuarioId }) }));
+      expect(veSinPermiso(lectura), objetivo.rol).toBe(false);
+      expect(buscar(lectura, Aviso), objetivo.rol).not.toBeNull();
+      for (const prohibido of [FormularioAccion, RestablecerClave, PanelDesactivar, PanelCambiarOrganizacion]) expect(buscar(lectura, prohibido), objetivo.rol).toBeNull();
+    }
+    const completa = await comoSesion(e.admin, () => Persona({ params: Promise.resolve({ id: otra.usuarioId }) }));
     expect(buscar(completa, FormularioAccion)).not.toBeNull();
+    expect(buscar(completa, RestablecerClave)).not.toBeNull();
   });
 
   it('el layout muestra a la supervisora la barra sin «Parametros» y al administrador con ella; los demas ven el aviso', async () => {
