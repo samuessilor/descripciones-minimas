@@ -12,6 +12,7 @@ import { CampoAdmin, RadiosAdmin } from '@/componentes/admin/campos';
 import { describirNavegador, fechaHora, formatearIp, hace, plural, ROL_DESCRIPCION, ROL_ETIQUETA } from '@/componentes/admin/formato';
 import { Dato, Datos, EstadosUsuario, InsigniaRol, InsigniaTipoOrg, Seccion } from '@/componentes/admin/piezas';
 import { PanelCambiarOrganizacion, PanelDesactivar } from '@/componentes/admin/ReasignacionUsuario';
+import { TextoCopiable } from '@/componentes/admin/TextoCopiable';
 import { RestablecerClave } from '@/componentes/admin/RestablecerClave';
 import { Aviso } from '@/componentes/ui/aviso';
 import { Avatar, nombreVisible } from '@/componentes/ui/avatar';
@@ -67,7 +68,7 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
           <Seccion id="datos" titulo="Datos">
             <Datos>
               <Dato etiqueta="Organización">{nombreVisible(u.organizacion)}</Dato>
-              <Dato etiqueta="Usuario"><span className="font-mono">{u.username ?? 'sin usuario'}</span></Dato>
+              <Dato etiqueta="Usuario">{u.username ? <TextoCopiable texto={u.username} etiqueta="usuario" /> : <span className="font-mono">sin usuario</span>}</Dato>
               <Dato etiqueta="Rol">{ROL_ETIQUETA[u.rol as keyof typeof ROL_ETIQUETA] ?? u.rol}</Dato>
               {u.area ? <Dato etiqueta="Área">{u.area}</Dato> : null}
               {u.encargado ? <Dato etiqueta="Encargado del área">{u.encargado}</Dato> : null}
@@ -151,7 +152,7 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
               </div>
               <Datos>
                 <Dato etiqueta="Organización">{nombreVisible(u.organizacion)}</Dato>
-                <Dato etiqueta="Usuario"><span className="font-mono">{u.username ?? 'sin usuario'}</span></Dato>
+                <Dato etiqueta="Usuario">{u.username ? <TextoCopiable texto={u.username} etiqueta="usuario" /> : <span className="font-mono">sin usuario</span>}</Dato>
                 <Dato etiqueta="Creada">{fechaHora(u.creadoEn)}</Dato>
                 <Dato etiqueta="Último ingreso">{u.ultimoIngreso ? `${hace(u.ultimoIngreso)} · ${fechaHora(u.ultimoIngreso)}` : 'Todavía no ha entrado'}</Dato>
               </Datos>
