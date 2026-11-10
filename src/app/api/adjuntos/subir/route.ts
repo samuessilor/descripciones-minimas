@@ -6,6 +6,7 @@
 import { MAX_BYTES_FOTO } from '@/server/almacen/imagen';
 import { subirAdjunto } from '@/server/acciones/adjuntos';
 import { ErrorAccion } from '@/server/acciones/resultado';
+import { fotosActivas } from '@/server/config';
 import { json, respuestaDeError } from '@/server/http';
 import { contextoDeAccion } from '@/server/sesion';
 
@@ -17,6 +18,9 @@ const MAX_CUERPO = MAX_BYTES_FOTO + 64 * 1024;
 export async function POST(request: Request): Promise<Response> {
   try {
     const ctx = await contextoDeAccion();
+    if (!fotosActivas()) {
+      throw new ErrorAccion('VALIDACION', 'La carga de fotos está desactivada por ahora.');
+    }
     const largo = Number(request.headers.get('content-length') ?? '0');
     if (Number.isFinite(largo) && largo > MAX_CUERPO) {
       throw new ErrorAccion('VALIDACION', 'Esa foto pesa más de 4 MB. Prueba con una más liviana.');

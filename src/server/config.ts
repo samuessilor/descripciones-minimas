@@ -33,6 +33,8 @@ const esquema = z.object({
   ALMACEN: z.preprocess(vacioComoAusente, z.enum(['local', 'blob']).default('local')),
   BLOB_READ_WRITE_TOKEN: texto(),
   UPLOADS_DIR: z.preprocess(vacioComoAusente, z.string().default('.data/uploads')),
+  /** Las fotos de la ficha: en produccion arrancan APAGADAS hasta definir FOTOS_ACTIVAS=1 (cuando exista el Blob). */
+  FOTOS_ACTIVAS: texto(),
 
   /**
    * Secreto del cron de retencion (Vercel lo envia como `Authorization: Bearer`). Sin definir, o con menos de 16
@@ -106,6 +108,11 @@ export function getConfig(): Config {
 /** Solo para pruebas. */
 export function reiniciarConfig(): void {
   memo = undefined;
+}
+
+/** En desarrollo y pruebas las fotos siempre estan activas; en produccion solo con FOTOS_ACTIVAS=1. */
+export function fotosActivas(c: Config = getConfig()): boolean {
+  return c.NODE_ENV !== 'production' || c.FOTOS_ACTIVAS === '1';
 }
 
 export const esDesarrollo = () => (process.env.NODE_ENV ?? 'development') === 'development';

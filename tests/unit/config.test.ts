@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cargarConfig } from '@/server/config';
+import { cargarConfig, fotosActivas } from '@/server/config';
 
 const SECRETO = 'a'.repeat(40);
 
@@ -60,6 +60,14 @@ describe('configuracion con zod (12.2)', () => {
     expect(() => cargarConfig(conBd)).toThrow(/Vercel Blob/);
     const conFotos = { ...conBd, ALMACEN: 'blob', BLOB_READ_WRITE_TOKEN: 'vercel_blob_rw_prueba' } as const;
     expect(cargarConfig(conFotos).NODE_ENV).toBe('production');
+  });
+
+  it('las fotos estan activas en desarrollo y pruebas; en produccion solo con FOTOS_ACTIVAS=1', () => {
+    expect(fotosActivas(cargarConfig({ NODE_ENV: 'test' }))).toBe(true);
+    const prod = { NODE_ENV: 'production', BETTER_AUTH_SECRET: SECRETO, DATABASE_URL: 'postgres://app@host/db', ALMACEN: 'blob', BLOB_READ_WRITE_TOKEN: 'vercel_blob_rw_prueba' } as const;
+    expect(fotosActivas(cargarConfig(prod))).toBe(false);
+    expect(fotosActivas(cargarConfig({ ...prod, FOTOS_ACTIVAS: '0' }))).toBe(false);
+    expect(fotosActivas(cargarConfig({ ...prod, FOTOS_ACTIVAS: '1' }))).toBe(true);
   });
 
   it('en Vercel, sin APP_URL usa la direccion del despliegue; con APP_URL manda la que se defina', () => {

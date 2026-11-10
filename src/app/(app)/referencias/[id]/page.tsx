@@ -4,6 +4,7 @@ import { FichaFormulario } from '@/componentes/ficha/FichaFormulario';
 import { listarPaisesFrecuentes } from '@/dominio/paises';
 import { listarAdjuntos } from '@/server/acciones/adjuntos';
 import { ErrorAccion } from '@/server/acciones/resultado';
+import { fotosActivas } from '@/server/config';
 import { opcionesDeCatalogo } from '@/server/politicas/catalogos';
 import { cargarReferenciaVisible, vistaFicha } from '@/server/politicas/referencias';
 import { responsablesPorParte } from '@/server/politicas/tablero';
@@ -41,6 +42,7 @@ export default async function PaginaFicha({ params }: { params: Promise<{ id: st
     <FichaFormulario
       inicial={ficha}
       adjuntosIniciales={adjuntos}
+      fotosActivas={fotosActivas()}
       actor={{
         usuarioId: actor.usuarioId,
         rol: actor.rol,

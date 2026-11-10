@@ -66,6 +66,7 @@ const ICONO_SECCION = { amarillo: TriangleAlert, verde: CircleCheck } as const;
 export function FichaFormulario({
   inicial,
   adjuntosIniciales,
+  fotosActivas,
   actor,
   catalogos,
   paises,
@@ -73,6 +74,8 @@ export function FichaFormulario({
 }: {
   inicial: FichaVista;
   adjuntosIniciales: AdjuntoVista[];
+  /** Falso en produccion mientras no exista el almacen de fotos: el bloque «Foto» no se muestra. */
+  fotosActivas: boolean;
   actor: ActorFicha;
   catalogos: OpcionesCatalogo;
   paises: readonly Pais[];
@@ -630,6 +633,7 @@ export function FichaFormulario({
               <div className="space-y-7">
                 {camposPorSeccion[s].map((def) => {
                   if (def.tipoDato === 'adjuntos') {
+                    if (!fotosActivas) return null;
                     return (
                       <FotosFicha
                         key="adjuntos"
