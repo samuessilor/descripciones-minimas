@@ -253,7 +253,7 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
       ) : null}
 
       <div className="mt-6">
-        <Seccion id="eliminar" titulo="Eliminar" descripcion="Para una cuenta creada por error o que nunca se usó. Desactivar es lo normal: conserva lo que la persona hizo.">
+        <Seccion id="eliminar" titulo="Eliminar" descripcion="Quita la cuenta de la plataforma. Si ya trabajó, su nombre queda en el historial de las referencias; si solo quieres que no entre, desactívala.">
           {esYo ? (
             <Aviso tipo="aviso" titulo="No puedes eliminarte a ti mismo">
               Pídele a otro administrador que lo haga.
@@ -262,16 +262,15 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
             <Aviso tipo="aviso" titulo="Es el único administrador activo">
               Para eliminarlo, primero dale el rol a otra persona.
             </Aviso>
-          ) : borrado.conTrabajo ? (
-            <Aviso tipo="info" titulo="No se puede eliminar">
-              Ya trabajó en referencias (historial, comentarios o fichas que creó o cerró): borrarla perdería quién lo hizo. Desactívala en su lugar.
-            </Aviso>
           ) : (
             <div className="space-y-3">
               <p className="max-w-[65ch] text-base text-tinta-suave">
                 {borrado.borraLaAgencia ? `Es la única cuenta de ${nombreVisible(u.organizacion)}: se elimina también la agencia. ` : ''}
                 {borrado.pendientes > 0 ? `Tiene ${plural(borrado.pendientes, 'referencia pendiente', 'referencias pendientes')}: se le quitan y quedan sin esa responsable. ` : ''}
-                Se van también sus avisos, sesiones y contraseña. En la auditoría se conserva lo que hizo, con su usuario anotado. No se puede deshacer.
+                {borrado.conTrabajo
+                  ? 'Ya trabajó en referencias: su cuenta se elimina, pero el historial, los comentarios y las referencias cerradas siguen diciendo que las hizo «' + nombreVisible(u.nombre) + ' (cuenta eliminada)». '
+                  : ''}
+                Se van también sus avisos, sesiones y contraseña. En la auditoría se conserva lo que hizo. No se puede deshacer.
               </p>
               <BotonAccion
                 accion={eliminarCuentaAccion}
@@ -280,7 +279,7 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
                 tamano="md"
                 confirmar={{
                   titulo: `Eliminar la cuenta ${u.username ?? nombreVisible(u.nombre)}`,
-                  descripcion: `${borrado.borraLaAgencia ? `Se elimina también la agencia ${nombreVisible(u.organizacion)}. ` : ''}Esta cuenta deja de existir para siempre. No se puede deshacer.`,
+                  descripcion: `${borrado.borraLaAgencia ? `Se elimina también la agencia ${nombreVisible(u.organizacion)}. ` : ''}Esta cuenta deja de existir para siempre.${borrado.conTrabajo ? ' Su nombre queda en el historial de lo que hizo.' : ''} No se puede deshacer.`,
                   confirmar: 'Eliminar cuenta',
                   cancelar: 'Todavía no',
                   peligro: true,

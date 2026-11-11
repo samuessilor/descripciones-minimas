@@ -5,7 +5,7 @@ import { asignacion, auditoria, comentario, organizacion, usuario } from '@/db/e
 import { ErrorAccion } from '@/server/acciones/resultado';
 import { cambiarEstadoOrganizacion, crearAgencia, crearOrganizacion, editarOrganizacion, eliminarOrganizacion, retirarAccesoAgencia } from '@/server/acciones/organizaciones';
 import { retirarAccesoAgencia as retirarDesdeAduana } from '@/server/acciones/aduana';
-import { accesosDeAgencia, fichasConVariasAgencias, listarOrganizacionesAdmin, obtenerOrganizacionAdmin } from '@/server/politicas/administracion';
+import { accesosDeAgencia, fichasConVariasAgencias, listarOrganizacionesAdmin, listarUsuariosAdmin, obtenerOrganizacionAdmin, obtenerUsuarioAdmin } from '@/server/politicas/administracion';
 import { fichaVisibleParaTest } from './ayudas-visibilidad';
 import { crearSupervisora, nuevaFicha, nuevoEscenario, type Escenario } from './ayudas';
 
@@ -127,19 +127,23 @@ describe('crear, renombrar y estado', () => {
 
   it('no borra una organizacion con cuentas (activas o no) ni con cambios registrados, y no existe -> no encontrada', async () => {
     expect(await codigoDe(eliminarOrganizacion(e.ctx(e.admin), { organizacionId: e.orgInterna }))).toBe('VALIDACION');
-    // Una AGENCIA con una cuenta que ya trabajo en una referencia tampoco: borrarla perderia quien hizo ese cambio.
+    // Una AGENCIA con una cuenta que ya trabajo SI se borra (2026-11-11): se retira y su nombre sigue en el historial.
     const conTrabajo = await crearAgencia(e.ctx(e.admin), { nombre: 'Agencia con trabajo', usuario: 'agencia.trabajo' });
-    await e.db.insert(comentario).values({ referenciaId: await nuevaFicha(e), autorId: conTrabajo.cuentaId, texto: 'Ya trabajé aquí', visibilidad: 'todos' });
-    let sinPermiso: ErrorAccion | undefined;
-    try {
-      await eliminarOrganizacion(e.ctx(e.admin), { organizacionId: conTrabajo.organizacionId });
-    } catch (err) {
-      sinPermiso = err as ErrorAccion;
-    }
-    expect(sinPermiso?.codigo).toBe('VALIDACION');
-    expect(sinPermiso?.message).toMatch(/ya trabajó/);
-    expect(await e.db.select().from(organizacion).where(eq(organizacion.id, conTrabajo.organizacionId))).toHaveLength(1);
-    expect(await e.db.select().from(usuario).where(eq(usuario.id, conTrabajo.cuentaId))).toHaveLength(1);
+    const fichaTrabajo = await nuevaFicha(e);
+    await e.db.insert(comentario).values({ referenciaId: fichaTrabajo, autorId: conTrabajo.cuentaId, texto: 'Ya trabajé aquí', visibilidad: 'todos' });
+    expect(await eliminarOrganizacion(e.ctx(e.admin), { organizacionId: conTrabajo.organizacionId })).toMatchObject({ ok: true, cuentasEliminadas: 1 });
+    const [orgRetirada] = await e.db.select().from(organizacion).where(eq(organizacion.id, conTrabajo.organizacionId));
+    expect(orgRetirada).toMatchObject({ nombre: 'Agencia con trabajo (eliminada)', activa: false });
+    expect(orgRetirada?.eliminadaEn).not.toBeNull();
+    const [cuentaRetirada] = await e.db.select().from(usuario).where(eq(usuario.id, conTrabajo.cuentaId));
+    expect(cuentaRetirada).toMatchObject({ nombre: expect.stringMatching(/\(cuenta eliminada\)$/) as unknown as string, activo: false });
+    expect(cuentaRetirada?.username).toMatch(/^eliminada-/);
+    expect((await e.db.select().from(comentario).where(eq(comentario.referenciaId, fichaTrabajo)))[0]?.autorId).toBe(conTrabajo.cuentaId); // el historial sigue firmado
+    // Ya no sale en las listas y su usuario queda libre para otra agencia.
+    expect((await listarOrganizacionesAdmin(e.db, e.admin)).some((o) => o.id === conTrabajo.organizacionId)).toBe(false);
+    expect((await listarUsuariosAdmin(e.db, e.admin)).some((u) => u.id === conTrabajo.cuentaId)).toBe(false);
+    expect(await obtenerUsuarioAdmin(e.db, e.admin, conTrabajo.cuentaId)).toBeNull();
+    await crearAgencia(e.ctx(e.admin), { nombre: 'Agencia con trabajo', usuario: 'agencia.trabajo' }); // mismo nombre y usuario: ya estan libres
     const conInactiva = await crearOrganizacion(e.ctx(e.admin), { nombre: 'Con cuenta inactiva', tipo: 'interna' });
     const [u] = await e.db
       .insert(usuario)

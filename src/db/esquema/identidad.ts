@@ -25,6 +25,8 @@ export const organizacion = pgTable(
     nombre: text('nombre').notNull().unique(),
     tipo: text('tipo').notNull(),
     activa: boolean('activa').notNull().default(true),
+    /** Retirada con «Borrar organizacion» cuando dejo trabajo en el historial: la fila se conserva (renombrada «… (eliminada)») y no se lista. */
+    eliminadaEn: timestamp('eliminada_en', { withTimezone: true }),
     creadaEn: timestamp('creada_en', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -53,6 +55,8 @@ export const usuario = pgTable(
     /** Quien lleva hoy la cuenta de un area (ej. «Edgar»). Es solo un dato: la cuenta sigue siendo del area. */
     encargado: text('encargado'),
     activo: boolean('activo').notNull().default(true),
+    /** Retirada con «Eliminar cuenta» cuando dejo trabajo en el historial: la fila se conserva anonimizada («… (cuenta eliminada)») y no se lista ni entra. */
+    eliminadoEn: timestamp('eliminado_en', { withTimezone: true }),
     /**
      * Guardia latente: si es true, hasta que cambie la contrasena solo puede entrar a «Mi cuenta». YA NO se activa por
      * defecto (la contrasena entregada o restablecida se puede conservar); se deja la columna y la guardia por si hiciera

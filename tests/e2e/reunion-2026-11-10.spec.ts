@@ -250,12 +250,13 @@ test('eliminar una cuenta que no trabajó: la ficha lo explica, pide confirmar y
   await a.goto('/admin/organizaciones');
   await expect(a.getByText(nombre)).toHaveCount(0);
 
-  // Una cuenta que SI trabajo (Edgar creo referencias) no ofrece el boton: dice por que.
+  // Una cuenta que SI trabajo (Edgar creo referencias) tambien se puede eliminar: avisa que su nombre queda en el historial (no se pulsa).
   await a.goto('/admin/usuarios');
   await a.getByRole('link', { name: /Abrir a Edgar/ }).click();
   await expect(a.getByRole('heading', { level: 1, name: /Edgar/ })).toBeVisible();
-  await expect(a.getByText('No se puede eliminar')).toBeVisible();
-  await expect(a.getByRole('button', { name: 'Eliminar cuenta' })).toHaveCount(0);
+  await expect(a.getByText('No se puede eliminar')).toHaveCount(0);
+  await expect(a.getByText(/Ya trabajó en referencias: su cuenta se elimina/)).toBeVisible();
+  await expect(a.getByRole('button', { name: 'Eliminar cuenta' })).toBeVisible();
 });
 
 test('borrar una agencia desde su página la elimina con su cuenta', async () => {

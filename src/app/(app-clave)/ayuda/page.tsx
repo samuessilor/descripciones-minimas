@@ -154,10 +154,10 @@ export default async function Ayuda() {
               quién pasar sus pendientes. Después desactiva la organización: el historial conserva lo que escribió.
             </li>
             <li>
-              <b>Eliminar</b> es para lo que se creó por error o nunca se usó. Una cuenta se elimina con «Eliminar cuenta» en su ficha y una agencia con
-              «Borrar organización» en la suya (la agencia se va con sus cuentas, y si se elimina su única cuenta se elimina también la agencia). Solo se
-              puede si la cuenta <b>no trabajó</b>: si escribió un campo, comentó, subió una foto o creó o cerró una referencia, hay que desactivarla,
-              porque borrarla perdería quién hizo cada cambio.
+              <b>Eliminar</b> quita la cuenta o la agencia de la plataforma: una cuenta con «Eliminar cuenta» en su ficha y una agencia con «Borrar
+              organización» en la suya (la agencia se va con sus cuentas, y si se elimina su única cuenta se elimina también la agencia). Si ya
+              <b>trabajó</b> (escribió un campo, comentó, subió una foto o creó o cerró una referencia), no se pierde quién hizo cada cosa: el historial
+              y las referencias cerradas siguen diciendo, por ejemplo, «Agencia X (eliminada)». Si solo quieres que no entre, desactívala.
             </li>
             <li>
               Una <b>referencia</b>, cerrada o pendiente, la elimina el administrador o la supervisora general con el botón rojo «Eliminar» arriba a la

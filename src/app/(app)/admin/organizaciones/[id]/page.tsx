@@ -149,7 +149,7 @@ export default async function AdminOrganizacion({ params }: { params: Promise<{ 
                     Tiene {plural(org.usuariosActivos, 'persona activa', 'personas activas')}. Desactívalas o muévelas a otra organización y vuelve aquí; así nadie se queda sin poder entrar sin que lo hayas decidido.
                   </Aviso>
                 ) : (
-                  <p className="max-w-[65ch] text-base text-tinta-suave">Desactivarla la oculta de las listas para crear cuentas. No se borra nada: el historial conserva a quién perteneció cada cambio.</p>
+                  <p className="max-w-[65ch] text-base text-tinta-suave">Desactivarla la oculta de las listas para crear cuentas. No se borra nada: el historial conserva a quién perteneció cada cambio. (Borrarla del todo está más abajo.)</p>
                 )
               ) : (
                 <p className="max-w-[65ch] text-base text-tinta-suave">Está desactivada: no aparece al crear cuentas y su gente no puede entrar. Reactívala para volver a usarla.</p>
@@ -184,7 +184,10 @@ export default async function AdminOrganizacion({ params }: { params: Promise<{ 
                 <p className="max-w-[65ch] text-base text-tinta-suave">
                   {esAgencia && borrado.cuentas.length > 0
                     ? `Se borra la agencia junto con ${borrado.cuentas.length === 1 ? 'su cuenta' : `sus ${borrado.cuentas.length} cuentas`} (${borrado.cuentas.map((c) => c.usuario ?? c.nombre).join(', ')}). `
-                    : 'No tiene cuentas ni historial, así que puedes borrarla del todo (por ejemplo, una creada por error). '}
+                    : 'No tiene cuentas, así que puedes borrarla (por ejemplo, una creada por error). '}
+                  {borrado.conHistorial || borrado.cuentas.some((c) => c.conTrabajo)
+                    ? `Ya trabajó en referencias: el historial y las referencias cerradas siguen diciendo que las hizo «${org.nombre} (eliminada)», aunque la agencia y su cuenta dejen de existir. `
+                    : ''}
                   {pendientesQuitados > 0 ? `Tiene ${plural(pendientesQuitados, 'referencia pendiente', 'referencias pendientes')}: se le quitan y quedan sin esa agencia. ` : ''}
                   Esto no se puede deshacer.
                 </p>
@@ -197,7 +200,7 @@ export default async function AdminOrganizacion({ params }: { params: Promise<{ 
                 deshabilitado={borrado.impedimento !== null}
                 confirmar={{
                   titulo: `Borrar ${org.nombre}`,
-                  descripcion: `${esAgencia && borrado.cuentas.length > 0 ? `Se borra la agencia y ${borrado.cuentas.length === 1 ? 'su cuenta' : 'sus cuentas'} para siempre. ` : 'Se borra la organización para siempre y deja de aparecer en las listas. '}Queda anotado en la auditoría. No se puede deshacer.`,
+                  descripcion: `${esAgencia && borrado.cuentas.length > 0 ? `Se borra la agencia y ${borrado.cuentas.length === 1 ? 'su cuenta' : 'sus cuentas'} para siempre. ` : 'Se borra la organización para siempre y deja de aparecer en las listas. '}${borrado.conHistorial || borrado.cuentas.some((c) => c.conTrabajo) ? 'Su nombre queda en el historial de lo que hizo. ' : ''}Queda anotado en la auditoría. No se puede deshacer.`,
                   confirmar: 'Borrar organización',
                   cancelar: 'Todavía no',
                   peligro: true,

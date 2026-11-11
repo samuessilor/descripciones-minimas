@@ -31,6 +31,7 @@ import { ErrorAccion } from '@/server/acciones/resultado';
 import { crearCuenta, diagnosticoBorradoCuenta, eliminarCuenta, restablecerClave, verClaveEntrega } from '@/server/acciones/usuarios';
 import { auditar } from '@/server/auditoria';
 import { cifrarClave, descifrarClave } from '@/server/clave-entrega';
+import { listarUsuariosAdmin, obtenerUsuarioAdmin } from '@/server/politicas/administracion';
 import { cargarActorPorId } from '@/server/politicas/actor';
 import { crearSupervisora, nuevaFicha, nuevoEscenario, rechazaCon, type Escenario } from './ayudas';
 import { escribir, fichaEnAduana } from './ayudas-aduana';
@@ -205,30 +206,41 @@ describe('eliminar una cuenta', () => {
     expect(aud?.detalle).toMatchObject({ usuario: ag.usuario, rol: 'aduana', organizacion: 'Agencia Efimera', agenciaEliminada: true, pendientesQuitados: 1 });
   });
 
-  it('una cuenta que ya trabajo (comento, escribio un campo, creo una ficha) NO se elimina: se desactiva', async () => {
+  it('una cuenta que ya trabajo (comento, escribio un campo, creo una ficha) SI se elimina: se retira y el historial conserva su nombre', async () => {
     const r = await crearCuenta(e.ctx(e.admin), { nombre: 'Trabajadora', usuario: 'trabajadora', organizacionId: e.orgInterna, rol: 'solicitante', area: 'Consumibles' });
     const actor = (await cargarActorPorId(e.db, r.id))!;
     const ficha = await crearReferencia(e.ctx(actor), { codigo: 'ELIM-TRAB-1', nombreProducto: 'Con trabajo', tipoProducto: 'INSUMO' });
     expect(await diagnosticoBorradoCuenta(e.db, r.id)).toMatchObject({ conTrabajo: true });
-    const err = await eliminarCuenta(e.ctx(e.admin), { usuarioId: r.id }).catch((x: unknown) => x as ErrorAccion);
-    expect(err).toBeInstanceOf(ErrorAccion);
-    expect((err as ErrorAccion).codigo).toBe('VALIDACION');
-    expect((err as ErrorAccion).message).toMatch(/ya trabajó/);
-    expect(await hay(usuario, r.id)).toBe(true);
-    expect(await hay(referencia, ficha.id)).toBe(true);
-    expect(await e.db.select().from(auditoria).where(and(eq(auditoria.accion, 'eliminar_cuenta'), eq(auditoria.entidadId, r.id)))).toHaveLength(0);
+    expect(await eliminarCuenta(e.ctx(e.admin), { usuarioId: r.id })).toMatchObject({ ok: true, agenciaEliminada: false });
+    // La fila se conserva anonimizada: la referencia sigue siendo suya y no entra mas.
+    const [fila] = await e.db.select().from(usuario).where(eq(usuario.id, r.id));
+    expect(fila).toMatchObject({ activo: false, nombre: 'Trabajadora (cuenta eliminada)' });
+    expect(fila?.eliminadoEn).not.toBeNull();
+    expect(fila?.username).toMatch(/^eliminada-/);
+    expect(fila?.email).toMatch(/@eliminada\.invalid$/);
+    expect(await e.db.select().from(account).where(eq(account.userId, r.id))).toHaveLength(0);
+    expect(await e.db.select().from(claveEntrega).where(eq(claveEntrega.usuarioId, r.id))).toHaveLength(0);
+    const [ref] = await e.db.select().from(referencia).where(eq(referencia.id, ficha.id));
+    expect(ref?.creadaPor).toBe(r.id);
+    expect((await e.db.select().from(auditoria).where(and(eq(auditoria.accion, 'eliminar_cuenta'), eq(auditoria.entidadId, r.id))))[0]?.detalle).toMatchObject({ conservadaEnHistorial: true });
+    // El usuario queda libre y la cuenta ya no sale en la lista ni se puede abrir.
+    expect((await listarUsuariosAdmin(e.db, e.admin)).some((u) => u.id === r.id)).toBe(false);
+    expect(await obtenerUsuarioAdmin(e.db, e.admin, r.id)).toBeNull();
+    await crearCuenta(e.ctx(e.admin), { nombre: 'Otra', usuario: 'trabajadora', organizacionId: e.orgInterna, rol: 'lector' });
+    // Una vez retirada no se puede volver a eliminar.
+    expect(await codigoDe(eliminarCuenta(e.ctx(e.admin), { usuarioId: r.id }))).toBe('NO_ENCONTRADO');
   });
 
-  it('una cuenta que ENVIO una ficha a otra persona no se elimina: borrarla le quitaria el acceso al destinatario', async () => {
+  it('una cuenta que ENVIO una ficha a otra persona se retira sin quitarle el acceso al destinatario', async () => {
     const r = await crearCuenta(e.ctx(e.admin), { nombre: 'Remitente', usuario: 'remitente', organizacionId: e.orgInterna, rol: 'supervisor' });
     const remitente = (await cargarActorPorId(e.db, r.id))!;
     const id = await fichaEnAduana(e, { llena: true, codigo: 'ELIM-REM-1', nombre: 'Enviada' });
     await enviarA(e.ctx(remitente), { referenciaId: id, destinatarios: [{ usuarioId: e.charles.usuarioId }] });
     expect(await diagnosticoBorradoCuenta(e.db, r.id)).toMatchObject({ conTrabajo: true });
-    const err = await eliminarCuenta(e.ctx(e.admin), { usuarioId: r.id }).catch((x: unknown) => x as ErrorAccion);
-    expect(err).toBeInstanceOf(ErrorAccion);
-    expect(await hay(usuario, r.id)).toBe(true);
-    expect((await e.db.select().from(asignacion).where(eq(asignacion.referenciaId, id))).length).toBeGreaterThan(0);
+    expect(await eliminarCuenta(e.ctx(e.admin), { usuarioId: r.id })).toMatchObject({ ok: true });
+    expect(await hay(usuario, r.id)).toBe(true); // retirada, no borrada
+    const asignaciones = await e.db.select().from(asignacion).where(eq(asignacion.referenciaId, id));
+    expect(asignaciones.some((a) => a.aUsuarioId === e.charles.usuarioId && a.deUsuarioId === r.id)).toBe(true); // el destinatario conserva su pendiente
   });
 
   it('una cuenta de area sin trabajo se elimina sola: la organizacion interna se queda', async () => {
@@ -284,13 +296,30 @@ describe('eliminar una agencia (organizacion)', () => {
     await crearAgencia(e.ctx(e.admin), { nombre: 'Agencia Con Dos Cuentas' });
   });
 
-  it('la funcion de la base tambien se niega a borrar una cuenta con trabajo, aunque la aplicacion no lo revisara', async () => {
+  it('la agencia que ya trabajo se retira completa: la organizacion queda «(eliminada)», sus cuentas anonimizadas y el historial sigue firmado', async () => {
     const ag = await crearAgencia(e.ctx(e.admin), { nombre: 'Agencia Que Comento' });
-    await e.db.insert(comentario).values({ referenciaId: await nuevaFicha(e), autorId: ag.cuentaId, texto: 'Hola', visibilidad: 'todos' });
-    await rechazaCon(e.db.execute(sql`select public.eliminar_usuario(${ag.cuentaId}::uuid)`), /usuario_con_trabajo/);
-    await rechazaCon(e.db.execute(sql`select public.eliminar_organizacion(${ag.organizacionId}::uuid)`), /usuario_con_trabajo/);
-    expect(await hay(usuario, ag.cuentaId)).toBe(true);
-    expect(await hay(organizacion, ag.organizacionId)).toBe(true);
+    const ficha = await nuevaFicha(e);
+    await e.db.insert(comentario).values({ referenciaId: ficha, autorId: ag.cuentaId, texto: 'Hola', visibilidad: 'todos' });
+    const r = await eliminarOrganizacion(e.ctx(e.admin), { organizacionId: ag.organizacionId });
+    expect(r).toMatchObject({ ok: true, cuentasEliminadas: 1 });
+    const [org] = await e.db.select().from(organizacion).where(eq(organizacion.id, ag.organizacionId));
+    expect(org).toMatchObject({ nombre: 'Agencia Que Comento (eliminada)', activa: false });
+    const [cuenta] = await e.db.select().from(usuario).where(eq(usuario.id, ag.cuentaId));
+    expect(cuenta?.eliminadoEn).not.toBeNull();
+    expect((await e.db.select().from(comentario).where(eq(comentario.referenciaId, ficha)))[0]?.autorId).toBe(ag.cuentaId);
+    // La funcion de la base tampoco la vuelve a retirar y sigue sin darle a `app` permisos de borrado directo.
+    await rechazaCon(e.db.execute(sql`select public.eliminar_organizacion(${ag.organizacionId}::uuid)`), /organizacion_no_existe/);
+    await rechazaCon(e.db.execute(sql`select public.eliminar_usuario(${ag.cuentaId}::uuid)`), /usuario_no_existe/);
+  });
+
+  it('se puede borrar y volver a crear la misma agencia varias veces: los nombres retirados no chocan', async () => {
+    for (let i = 0; i < 3; i++) {
+      const ag = await crearAgencia(e.ctx(e.admin), { nombre: 'Agencia Repetida' });
+      await e.db.insert(comentario).values({ referenciaId: await nuevaFicha(e), autorId: ag.cuentaId, texto: `Ronda ${i}`, visibilidad: 'todos' });
+      await eliminarOrganizacion(e.ctx(e.admin), { organizacionId: ag.organizacionId });
+    }
+    const nombres = (await e.db.select({ n: organizacion.nombre }).from(organizacion)).map((o) => o.n).filter((x) => x.startsWith('Agencia Repetida'));
+    expect(nombres.sort()).toEqual(['Agencia Repetida (eliminada 2)', 'Agencia Repetida (eliminada 3)', 'Agencia Repetida (eliminada)']);
   });
 
   it('una organizacion interna con cuentas no se borra; el trabajo ajeno de otras cuentas no estorba', async () => {

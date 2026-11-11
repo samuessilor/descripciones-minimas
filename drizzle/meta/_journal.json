@@ -113,6 +113,13 @@
       "when": 1794377260670,
       "tag": "0015_eliminaciones_y_clave_entrega",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794411423423,
+      "tag": "0016_cuentas_y_agencias_retiradas",
+      "breakpoints": true
     }
   ]
 }

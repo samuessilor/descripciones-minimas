@@ -221,10 +221,10 @@ test('la aduana pide información, el área responde, observaciones «No aplica�
   await expect(zona(p).getByText('Pendiente de respuesta del área')).toHaveCount(0);
   await p.getByRole('group', { name: 'Restricciones y observaciones' }).getByRole('checkbox', { name: 'No aplica' }).last().check();
   await expect(zona(p).getByText('Guardado').first()).toBeVisible();
-  await p.locator('[data-campo="arancel"]').selectOption('5%');
-  await expect(zona(p).getByText('Guardado').first()).toBeVisible();
-  await p.locator('[data-campo="iva"]').selectOption('19%');
-  await expect(zona(p).getByText('Guardado').first()).toBeVisible();
+  for (const [campo, valor] of [['arancel', '5%'], ['iva', '19%']] as const) {
+    const lista = p.locator(`[data-campo="${campo}"]`);
+    await Promise.all([p.waitForResponse((r) => r.request().method() === 'POST'), lista.selectOption(valor)]); // espera ESTE guardado, no uno anterior
+  }
   await abrirZona(p, idFicha);
 
   await expect(p.getByText('Todo está listo para cerrar')).toBeVisible();

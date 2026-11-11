@@ -27,7 +27,7 @@ export async function editarUsuario(ctx: Contexto, entrada: unknown): Promise<{ 
   const ahora = ahoraDe(ctx);
   await ctx.db.transaction(async (tx) => {
     const [u] = await tx.select().from(usuario).where(eq(usuario.id, e.usuarioId)).for('update').limit(1);
-    if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
+    if (!u || u.eliminadoEn) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
     exigirCuentaTocable(ctx.actor, u.rol);
     // Una cuenta de agencia no tiene area interna (C3).
     const area = u.organizacionTipo === 'agencia' ? null : e.area;

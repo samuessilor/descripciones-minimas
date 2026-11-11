@@ -73,7 +73,8 @@ const COLUMNAS_USUARIO = {
 
 export async function listarUsuariosAdmin(ej: Ejecutor, actor: Actor, filtros: FiltrosUsuarios = {}): Promise<FilaUsuarioAdmin[]> {
   exigir(actor, 'supervisar');
-  const condiciones: SQL[] = [];
+  // Una cuenta retirada (eliminada con trabajo en el historial) se conserva anonimizada pero no se lista.
+  const condiciones: SQL[] = [isNull(usuario.eliminadoEn)];
   const q = normalizarTexto(filtros.q ?? '');
   if (q) {
     const patron = `%${escaparLike(q)}%`;
@@ -111,7 +112,7 @@ export async function obtenerUsuarioAdmin(ej: Ejecutor, actor: Actor, usuarioId:
     .select(COLUMNAS_USUARIO)
     .from(usuario)
     .innerJoin(organizacion, eq(organizacion.id, usuario.organizacionId))
-    .where(eq(usuario.id, usuarioId))
+    .where(and(eq(usuario.id, usuarioId), isNull(usuario.eliminadoEn)))
     .limit(1);
   if (!f) return null;
   return { ...f, ultimoIngreso: f.ultimoIngreso?.toISOString() ?? null, creadoEn: f.creadoEn.toISOString() };
@@ -217,12 +218,13 @@ export async function listarOrganizacionesAdmin(ej: Ejecutor, actor: Actor): Pro
       activa: organizacion.activa,
       creadaEn: organizacion.creadaEn,
       usuariosActivos: sql<number>`(select count(*)::int from ${usuario} u where u.organizacion_id = "organizacion"."id" and u.activo)`,
-      usuariosTotal: sql<number>`(select count(*)::int from ${usuario} u where u.organizacion_id = "organizacion"."id")`,
+      usuariosTotal: sql<number>`(select count(*)::int from ${usuario} u where u.organizacion_id = "organizacion"."id" and u.eliminado_en is null)`,
       fichasConAcceso: sql<number>`(select count(distinct a.referencia_id)::int from ${asignacion} a join ${usuario} u on u.id = a.a_usuario_id
         where u.organizacion_id = "organizacion"."id" and "organizacion"."tipo" = 'agencia'
           and (a.estado in ('pendiente','en_curso') or (a.estado in ('hecha','reasignada') and a.acceso_hasta is not null and a.acceso_hasta > now())))`,
     })
     .from(organizacion)
+    .where(isNull(organizacion.eliminadaEn))
     .orderBy(asc(organizacion.tipo), desc(organizacion.activa), asc(organizacion.nombre));
   return filas.map((o) => ({ ...o, tipo: o.tipo as 'interna' | 'agencia', creadaEn: o.creadaEn.toISOString() }));
 }
@@ -330,10 +332,11 @@ export async function resumenAdmin(ej: Ejecutor, actor: Actor): Promise<ResumenA
   const [u] = await ej
     .select({
       activos: sql<number>`(count(*) filter (where ${usuario.activo}))::int`,
-      inactivos: sql<number>`(count(*) filter (where not ${usuario.activo}))::int`,
+      inactivos: sql<number>`(count(*) filter (where not ${usuario.activo} and ${usuario.eliminadoEn} is null))::int`,
       sinIngreso: sql<number>`(count(*) filter (where ${usuario.activo} and ${usuario.ultimoIngreso} is null))::int`,
     })
-    .from(usuario);
+    .from(usuario)
+    .where(isNull(usuario.eliminadoEn));
   const sinIngresoLista = await ej
     .select({ id: usuario.id, nombre: usuario.nombre, email: usuario.email, creadoEn: usuario.creadoEn })
     .from(usuario)

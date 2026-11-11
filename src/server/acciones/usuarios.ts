@@ -22,7 +22,7 @@ import { revocarSesionesDeUsuario } from '../sesiones';
 import { ahoraDe, type Contexto } from '../politicas/actor';
 import { exigir, exigirCuentaTocable, exigirRolAsignable } from '../politicas/exigir';
 import { ErrorAccion, esViolacionUnica } from './resultado';
-import { filasDe, llamarBorrado, mensajeDeBase } from '../sql';
+import { filasDe, llamarBorrado } from '../sql';
 import { areaUsuario, parsear, textoLimpio } from './validacion';
 
 /** Clave del candado de la guarda «no dejar la plataforma sin administrador activo». */
@@ -274,7 +274,7 @@ export async function restablecerClave(ctx: Contexto, entrada: unknown): Promise
 
   return ctx.db.transaction(async (tx) => {
     const [u] = await tx.select().from(usuario).where(eq(usuario.id, usuarioId)).for('update').limit(1);
-    if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
+    if (!u || u.eliminadoEn) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
     exigirCuentaTocable(ctx.actor, u.rol);
     const [cred] = await tx
       .select({ id: account.id })
@@ -328,7 +328,7 @@ export async function verClaveEntrega(ctx: Contexto, entrada: unknown): Promise<
   const ahora = ahoraDe(ctx);
   return ctx.db.transaction(async (tx) => {
     const [u] = await tx.select().from(usuario).where(eq(usuario.id, usuarioId)).limit(1);
-    if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
+    if (!u || u.eliminadoEn) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
     exigirCuentaTocable(ctx.actor, u.rol);
     const [fila] = await tx.select().from(claveEntrega).where(eq(claveEntrega.usuarioId, u.id)).limit(1);
     const clave = fila ? descifrarClave(fila.cifrada, u.id) : null;
@@ -374,7 +374,7 @@ export async function desactivarUsuario(ctx: Contexto, entrada: unknown): Promis
   return ctx.db.transaction(async (tx) => {
     await serializarGuardaUltimoAdmin(tx);
     const [u] = await tx.select().from(usuario).where(eq(usuario.id, e.usuarioId)).for('update').limit(1);
-    if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
+    if (!u || u.eliminadoEn) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
     exigirCuentaTocable(ctx.actor, u.rol);
 
     if (u.rol === 'admin' && u.activo) {
@@ -415,7 +415,7 @@ export async function reactivarUsuario(ctx: Contexto, entrada: unknown): Promise
     const r = await tx
       .update(usuario)
       .set({ activo: true, actualizadoEn: ahora })
-      .where(eq(usuario.id, usuarioId))
+      .where(and(eq(usuario.id, usuarioId), isNull(usuario.eliminadoEn)))
       .returning({ id: usuario.id });
     if (r.length === 0) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
     await auditar(tx, {
@@ -438,7 +438,7 @@ export async function cambiarRol(ctx: Contexto, entrada: unknown): Promise<{ ok:
   await ctx.db.transaction(async (tx) => {
     await serializarGuardaUltimoAdmin(tx);
     const [u] = await tx.select().from(usuario).where(eq(usuario.id, e.usuarioId)).for('update').limit(1);
-    if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
+    if (!u || u.eliminadoEn) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
     exigirCuentaTocable(ctx.actor, u.rol);
     const regla = validarRolOrganizacion(e.rol, u.organizacionTipo as TipoOrganizacion);
     if (!regla.ok) throw new ErrorAccion('VALIDACION', regla.mensaje);
@@ -489,7 +489,7 @@ export async function cambiarOrganizacion(ctx: Contexto, entrada: unknown): Prom
   const org = await cargarOrganizacion(ctx, e.organizacionId);
   await ctx.db.transaction(async (tx) => {
     const [u] = await tx.select().from(usuario).where(eq(usuario.id, e.usuarioId)).for('update').limit(1);
-    if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
+    if (!u || u.eliminadoEn) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
     exigirCuentaTocable(ctx.actor, u.rol);
     if (u.organizacionId === org.id) return; // sin cambio
     const regla = validarRolOrganizacion(u.rol as Rol, org.tipo as TipoOrganizacion);
@@ -540,7 +540,7 @@ export async function cambiarOrganizacion(ctx: Contexto, entrada: unknown): Prom
 
 /** Lo que se sabe de una cuenta antes de borrarla: lo que se llevaria y lo que lo impide. La usa la pagina de la cuenta y el nucleo. */
 export interface DiagnosticoBorradoCuenta {
-  /** Dejo trabajo propio (historial, comentarios, fotos, fichas creadas o cerradas): borrarla perderia quien lo hizo. */
+  /** Dejo trabajo propio (historial, comentarios, fotos, fichas creadas o cerradas): al eliminarla se RETIRA y su nombre sigue en el historial. */
   conTrabajo: boolean;
   /** Referencias que tiene pendientes ahora; al borrarla se le quitan. */
   pendientes: number;
@@ -553,7 +553,7 @@ export async function diagnosticoBorradoCuenta(ej: Ejecutor, usuarioId: string):
     await ej.execute(sql`
       select public.usuario_tiene_trabajo(u.id) as con_trabajo,
              (select count(*)::int from asignacion a where a.a_usuario_id = u.id and a.estado in ('pendiente','en_curso')) as pendientes,
-             (select count(*)::int from usuario o where o.organizacion_id = u.organizacion_id and o.id <> u.id) as otros,
+             (select count(*)::int from usuario o where o.organizacion_id = u.organizacion_id and o.id <> u.id and o.eliminado_en is null) as otros,
              u.organizacion_tipo as tipo
         from usuario u where u.id = ${usuarioId}::uuid`),
   );
@@ -562,10 +562,10 @@ export async function diagnosticoBorradoCuenta(ej: Ejecutor, usuarioId: string):
 }
 
 /**
- * Elimina una cuenta (reunion 2026-11-10). Solo si NO dejo trabajo propio: el historial, los comentarios y las fichas la
- * referencian y borrarla los dejaria sin saber de quien eran; ahi se desactiva. Lo operativo (pendientes, avisos, sesiones,
- * clave) se va con ella y sus filas de auditoria se conservan con el usuario anotado. Si es la unica cuenta de una agencia,
- * la agencia se borra tambien. No se borra a uno mismo, ni al unico administrador activo, y la supervisora no toca cuentas de
+ * Elimina una cuenta (reunion 2026-11-10). Si NO dejo trabajo propio se borra del todo. Si ya trabajo (2026-11-11) se RETIRA: la fila
+ * queda anonimizada («… (cuenta eliminada)», sin usuario ni clave, fuera de las listas) para que el historial, los comentarios y las
+ * fichas cerradas sigan diciendo quien las hizo. Lo operativo (pendientes, avisos, sesiones, clave) se va siempre. Si es la unica
+ * cuenta de una agencia, la agencia se elimina tambien (retirada si la agencia dejo trabajo). No se borra a uno mismo, ni al unico administrador activo, y la supervisora no toca cuentas de
  * administrador ni de supervisora.
  */
 export async function eliminarCuenta(ctx: Contexto, entrada: unknown): Promise<{ ok: true; nombre: string; usuario: string; agenciaEliminada: boolean }> {
@@ -575,7 +575,7 @@ export async function eliminarCuenta(ctx: Contexto, entrada: unknown): Promise<{
   return ctx.db.transaction(async (tx) => {
     await serializarGuardaUltimoAdmin(tx);
     const [u] = await tx.select().from(usuario).where(eq(usuario.id, usuarioId)).for('update').limit(1);
-    if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
+    if (!u || u.eliminadoEn) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
     exigirCuentaTocable(ctx.actor, u.rol);
     if (u.id === ctx.actor.usuarioId) throw new ErrorAccion('VALIDACION', 'No puedes eliminar tu propia cuenta. Pídele a otro administrador que lo haga.');
     if (u.rol === 'admin' && u.activo) {
@@ -588,23 +588,9 @@ export async function eliminarCuenta(ctx: Contexto, entrada: unknown): Promise<{
     const [org] = await tx.select().from(organizacion).where(eq(organizacion.id, u.organizacionId)).limit(1);
     const d = await diagnosticoBorradoCuenta(tx, u.id);
     const nombreCuenta = u.username ?? u.email;
-    if (d.conTrabajo) {
-      throw new ErrorAccion(
-        'VALIDACION',
-        `${nombreCuenta} ya trabajó en referencias (historial, comentarios o fichas que creó o cerró): borrarla perdería quién lo hizo. Desactívala en su lugar.`,
-        { conTrabajo: true },
-      );
-    }
-    try {
-      // La unica cuenta de una agencia se va con la agencia (la funcion de la organizacion borra sus cuentas y la organizacion).
-      if (d.borraLaAgencia && org) await llamarBorrado(tx, 'eliminar_organizacion', org.id);
-      else await llamarBorrado(tx, 'eliminar_usuario', u.id);
-    } catch (err) {
-      if (mensajeDeBase(err).includes('usuario_con_trabajo') || mensajeDeBase(err).includes('organizacion_con_historial')) {
-        throw new ErrorAccion('VALIDACION', `${nombreCuenta} ya trabajó en referencias: borrarla perdería quién lo hizo. Desactívala en su lugar.`);
-      }
-      throw err;
-    }
+    // La unica cuenta de una agencia se va con la agencia (la funcion de la organizacion borra o retira sus cuentas y la organizacion).
+    if (d.borraLaAgencia && org) await llamarBorrado(tx, 'eliminar_organizacion', org.id);
+    else await llamarBorrado(tx, 'eliminar_usuario', u.id);
     await auditar(tx, {
       usuarioId: ctx.actor.usuarioId,
       accion: 'eliminar_cuenta',
@@ -616,6 +602,7 @@ export async function eliminarCuenta(ctx: Contexto, entrada: unknown): Promise<{
         rol: u.rol,
         organizacion: org?.nombre ?? null,
         agenciaEliminada: d.borraLaAgencia,
+        conservadaEnHistorial: d.conTrabajo,
         pendientesQuitados: d.pendientes,
       },
       ip: ctx.ip,
