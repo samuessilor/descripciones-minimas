@@ -1,10 +1,10 @@
 /**
- * Administracion de personas, segunda parte (H5): editar datos y cerrar sesiones de otra persona (10.4, 13.1).
+ * Administracion de personas, segunda parte (H5): editar datos de otra persona (10.4). Ya no hay lista de sesiones abiertas (2026-11-10).
  * Crear cuenta, restablecer contrasena, desactivar, reactivar y cambiar rol u organizacion viven en `usuarios.ts`.
  */
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { session, usuario } from '@/db/esquema';
+import { usuario } from '@/db/esquema';
 import { exigeArea, MENSAJE_AREA_OBLIGATORIA } from '@/dominio/areas';
 import { auditar } from '../auditoria';
 import { ahoraDe, type Contexto } from '../politicas/actor';
@@ -48,38 +48,4 @@ export async function editarUsuario(ctx: Contexto, entrada: unknown): Promise<{ 
     });
   });
   return { ok: true };
-}
-
-// ---- Sesiones -----------------------------------------------------------------------------------
-
-/**
- * Cierra las sesiones de OTRA persona (todas, o una sola con `sesionId`). Es inmediato: la siguiente
- * peticion de esa persona vuelve a /entrar (13.1). Queda en auditoria con quien lo hizo.
- */
-export async function cerrarSesionesDeUsuario(ctx: Contexto, entrada: unknown): Promise<{ cerradas: number }> {
-  exigir(ctx.actor, 'supervisar');
-  const e = parsear(z.object({ usuarioId: z.uuid(), sesionId: z.uuid().optional() }), entrada);
-  const ahora = ahoraDe(ctx);
-  return ctx.db.transaction(async (tx) => {
-    const [u] = await tx.select({ id: usuario.id, rol: usuario.rol }).from(usuario).where(eq(usuario.id, e.usuarioId)).for('update').limit(1);
-    if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
-    exigirCuentaTocable(ctx.actor, u.rol);
-    const borradas = await tx
-      .delete(session)
-      .where(e.sesionId ? and(eq(session.userId, u.id), eq(session.id, e.sesionId)) : eq(session.userId, u.id))
-      .returning({ id: session.id });
-    if (e.sesionId && borradas.length === 0) {
-      throw new ErrorAccion('NO_ENCONTRADO', 'Esa sesión ya no está abierta.');
-    }
-    await auditar(tx, {
-      usuarioId: ctx.actor.usuarioId,
-      accion: 'cerrar_sesion',
-      entidad: 'usuario',
-      entidadId: u.id,
-      detalle: { porAdmin: true, cerradas: borradas.length, ...(e.sesionId ? { sesionId: e.sesionId } : { todas: true }) },
-      ip: ctx.ip,
-      creadoEn: ahora,
-    });
-    return { cerradas: borradas.length };
-  });
 }

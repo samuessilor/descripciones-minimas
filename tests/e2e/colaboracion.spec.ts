@@ -196,7 +196,7 @@ test('restaurar un valor anterior desde el campo: siempre pide motivo y deja una
   const id = await crearFicha(a, `E2E-${SUFIJO}-2`, 'Producto para restaurar');
 
   // A escribe, B (otra persona) lo reemplaza con motivo.
-  await abrirSeccion(a, 'producto');
+  await abrirSeccion(a, 'detalle');
   const campoA = a.getByLabel('Nombre comercial');
   await campoA.fill('LIMPIADOR VERSION UNO');
   await campoA.blur();
@@ -204,7 +204,7 @@ test('restaurar un valor anterior desde el campo: siempre pide motivo y deja una
   await expect(a.locator('[data-campo="descripcion_factura"]').getByRole('button', { name: /Ver el historial de este campo/ })).toBeVisible({ timeout: 180_000 });
 
   await b.goto(`/referencias/${id}`);
-  await abrirSeccion(b, 'producto');
+  await abrirSeccion(b, 'detalle');
   const campoB = b.getByLabel('Nombre comercial');
   await campoB.fill('LIMPIADOR VERSION DOS');
   await campoB.blur();
@@ -214,7 +214,7 @@ test('restaurar un valor anterior desde el campo: siempre pide motivo y deja una
 
   // B abre el historial DE ESE campo y restaura la version 1, con motivo.
   await b.reload();
-  await abrirSeccion(b, 'producto'); // tras recargar todo vuelve a plegado
+  await abrirSeccion(b, 'detalle'); // tras recargar todo vuelve a plegado
   const bloque = b.locator('[data-campo="descripcion_factura"]');
   await bloque.getByRole('button', { name: /Ver el historial de este campo/ }).click();
   const versiones = b.getByRole('dialog', { name: 'Versiones de este campo' });

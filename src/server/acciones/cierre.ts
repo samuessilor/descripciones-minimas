@@ -83,6 +83,7 @@ export function evaluarCierreDeFicha(actor: Actor, ficha: FilaReferencia, modo: 
     descripcionesVacias: estaVacio(valores.descripciones_minimas),
     restriccionesVacias: estaVacio(valores.restricciones),
     observacionesVacias: estaVacio(valores.observaciones_aduana),
+    arancelIvaVacios: estaVacio(valores.arancel) || estaVacio(valores.iva),
     modo,
   };
   const base = evaluarCierre(entrada);

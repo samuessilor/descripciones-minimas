@@ -182,6 +182,11 @@ export interface PropsDialogoEnviarA {
   onEnviado?: (r: ResultadoEnviarA) => void;
   /** Partes que ya vienen marcadas (p. ej. «Dejar pendiente a…» desde una seccion). */
   seccionesIniciales?: Seccion[];
+  /**
+   * «Designar la agencia aduanera responsable» (las tres secciones del area ya estan completas): ofrece SOLO las cuentas de las
+   * agencias de aduana. Las areas de EssilorLuxottica no son responsables de esta parte; un enlace permite ver a todos igual.
+   */
+  soloAgencias?: boolean;
 }
 
 export function DialogoEnviarA(props: PropsDialogoEnviarA) {
@@ -190,7 +195,7 @@ export function DialogoEnviarA(props: PropsDialogoEnviarA) {
   return <ContenidoEnviarA {...props} />;
 }
 
-function ContenidoEnviarA({ referenciaIds, abierto, onCerrar, onEnviado, seccionesIniciales }: PropsDialogoEnviarA) {
+function ContenidoEnviarA({ referenciaIds, abierto, onCerrar, onEnviado, seccionesIniciales, soloAgencias = false }: PropsDialogoEnviarA) {
   const router = useRouter();
   const [actualizando, iniciarActualizacion] = useTransition();
   const lote = referenciaIds.length > 1;
@@ -206,7 +211,10 @@ function ContenidoEnviarA({ referenciaIds, abierto, onCerrar, onEnviado, seccion
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<ResultadoEnviarA | null>(null);
 
-  const candidatos = candidatosLectura.estado.tipo === 'ok' ? candidatosLectura.estado.data : [];
+  const [verTodos, setVerTodos] = useState(false);
+  const soloAg = soloAgencias && !verTodos && !lote;
+  const todosLosCandidatos = candidatosLectura.estado.tipo === 'ok' ? candidatosLectura.estado.data : [];
+  const candidatos = soloAg ? todosLosCandidatos.filter((c) => c.esAgencia) : todosLosCandidatos;
   const contexto = contextoLectura.estado.tipo === 'ok' ? contextoLectura.estado.data : null;
   const seleccionados = candidatos.filter((c) => sel[c.id]);
   const idsSel = useMemo(() => new Set(Object.keys(sel)), [sel]);
@@ -278,12 +286,18 @@ function ContenidoEnviarA({ referenciaIds, abierto, onCerrar, onEnviado, seccion
     fase === 'listo'
       ? resultado && sinCambios(resultado)
         ? 'Sin cambios'
-        : 'Enviado'
+        : soloAgencias
+          ? 'Agencia designada'
+          : 'Enviado'
       : lote
         ? `Enviar ${referenciaIds.length} referencias a…`
-        : contexto
-          ? `Enviar ${contexto.codigo} a…`
-          : 'Enviar a…';
+        : soloAg
+          ? contexto
+            ? `Designar la agencia aduanera de ${contexto.codigo}`
+            : 'Designar la agencia aduanera'
+          : contexto
+            ? `Enviar ${contexto.codigo} a…`
+            : 'Enviar a…';
 
   return (
     <Dialogo
@@ -292,7 +306,13 @@ function ContenidoEnviarA({ referenciaIds, abierto, onCerrar, onEnviado, seccion
       titulo={titulo}
       tamano="md"
       bloquear={fase === 'enviando'}
-      descripcion={fase === 'listo' ? undefined : 'Le queda como pendiente en la plataforma, con aviso en la campana.'}
+      descripcion={
+        fase === 'listo'
+          ? undefined
+          : soloAg
+            ? 'Elige la cuenta de la agencia que clasifica esta referencia. Le queda como pendiente, con aviso en la campana.'
+            : 'Le queda como pendiente en la plataforma, con aviso en la campana.'
+      }
       pie={
         fase === 'listo' ? (
           <>
@@ -323,7 +343,7 @@ function ContenidoEnviarA({ referenciaIds, abierto, onCerrar, onEnviado, seccion
             </Boton>
             <Boton onClick={() => void enviar()} cargando={fase === 'enviando'} disabled={seleccionados.length === 0}>
               <Send aria-hidden className="size-4" />
-              {fase === 'enviando' ? 'Enviando…' : textoEnviar(seleccionados, referenciaIds.length)}
+              {fase === 'enviando' ? 'Enviando…' : soloAg && seleccionados.length > 0 ? `Designar a ${primerNombre(seleccionados[0]!.nombre)}` : textoEnviar(seleccionados, referenciaIds.length)}
             </Boton>
           </>
         )
@@ -377,15 +397,28 @@ function ContenidoEnviarA({ referenciaIds, abierto, onCerrar, onEnviado, seccion
               {candidatosLectura.estado.mensaje}
             </Aviso>
           ) : (
-            <SelectorPersonas
-              candidatos={candidatos}
-              seleccion={idsSel}
-              q={q}
-              onQ={setQ}
-              onAlternar={alternar}
-              onAgregarGrupo={agregarGrupo}
-              agentesPrimero={agentesPrimero}
-            />
+            <>
+              {soloAg && candidatos.length === 0 ? (
+                <Aviso tipo="aviso" titulo="No hay agencias de aduana activas">
+                  Un administrador las crea en Administración › Organizaciones › «Nueva agencia de aduana».
+                </Aviso>
+              ) : null}
+              <SelectorPersonas
+                candidatos={candidatos}
+                seleccion={idsSel}
+                q={q}
+                onQ={setQ}
+                onAlternar={alternar}
+                onAgregarGrupo={agregarGrupo}
+                agentesPrimero={agentesPrimero || soloAgencias}
+              />
+              {soloAg ? (
+                <Boton variante="terciario" tamano="sm" onClick={() => setVerTodos(true)} data-testid="ver-todos-destinos">
+                  <Users aria-hidden className="size-4" />
+                  Enviarla a otra persona (no es una agencia)
+                </Boton>
+              ) : null}
+            </>
           )}
 
           {seleccionados.length > 0 ? (
@@ -594,6 +627,8 @@ export function BotonEnviarACliente({ referenciaId }: { referenciaId: string }) 
   const { avisar } = useAvisos();
   const [abierto, setAbierto] = useState(false);
   const [seccionesIni, setSeccionesIni] = useState<Seccion[] | undefined>(undefined);
+  /** Abierto desde «Designar la agencia aduanera responsable»: solo agencias. */
+  const [designando, setDesignando] = useState(false);
   const [marcando, setMarcando] = useState(false);
   /** Asignacion ya marcada como lista: el boton se oculta en el acto, sin esperar la recarga del contexto. */
   const [marcadaId, setMarcadaId] = useState<string | null>(null);
@@ -605,11 +640,12 @@ export function BotonEnviarACliente({ referenciaId }: { referenciaId: string }) 
   // en varios sitios (uno queda oculto segun el ancho): solo responde el primero visible, o se apilarian dialogos.
   useEffect(() => {
     const alPedir = (e: Event) => {
-      const d = (e as CustomEvent<{ referenciaId?: string; secciones?: Seccion[]; atendido?: boolean }>).detail;
+      const d = (e as CustomEvent<{ referenciaId?: string; secciones?: Seccion[]; atendido?: boolean; modo?: 'aduana' }>).detail;
       if (d?.referenciaId !== referenciaId || d.atendido) return;
       if (!raiz.current || raiz.current.getClientRects().length === 0) return;
       d.atendido = true;
       setSeccionesIni(d.secciones);
+      setDesignando(d.modo === 'aduana');
       setAbierto(true);
     };
     window.addEventListener('dm:abrir-enviar-a', alPedir);
@@ -649,17 +685,24 @@ export function BotonEnviarACliente({ referenciaId }: { referenciaId: string }) 
           {marcando ? 'Guardando…' : 'Listo por mi parte'}
         </Boton>
       ) : null}
-      <Boton onClick={() => setAbierto(true)}>
+      <Boton
+        onClick={() => {
+          setDesignando(false);
+          setAbierto(true);
+        }}
+      >
         <Send aria-hidden className="size-4" />
         Enviar a…
       </Boton>
       <DialogoEnviarA
         referenciaIds={[referenciaId]}
         abierto={abierto}
+        soloAgencias={designando}
         {...(seccionesIni ? { seccionesIniciales: seccionesIni } : {})}
         onCerrar={() => {
           setAbierto(false);
           setSeccionesIni(undefined);
+          setDesignando(false);
           contexto.recargar();
         }}
       />

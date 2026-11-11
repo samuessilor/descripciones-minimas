@@ -17,6 +17,7 @@ import { BloqueCierre } from './BloqueCierre';
 import { BloqueDescripciones } from './BloqueDescripciones';
 import { BloquePartida } from './BloquePartida';
 import { BloqueRestricciones } from './BloqueRestricciones';
+import { BloqueImpuestos } from './BloqueImpuestos';
 import { BloqueRim } from './BloqueRim';
 import { diligenciado, sinTexto } from './comun';
 
@@ -168,10 +169,14 @@ export function ZonaAduana({ referenciaId }: { referenciaId: string }) {
   const partidaLista = !!vista.partida && sinTexto(vista.partida.valor) !== '';
   // «No aplica» cuenta como hecho; una solicitud sin respuesta del area, no.
   const rimListo = vista.requiereRim?.valor === 'SI' || vista.requiereRim?.valor === 'NO';
+  const arancelListo = sinTexto(vista.arancel?.valor) !== '';
+  const ivaListo = sinTexto(vista.iva?.valor) !== '';
+  const impuestosListos = arancelListo && ivaListo;
   const descripcionesListas = diligenciado(vista.descripcionesMinimas?.valor) && !vista.solicitudPendiente;
   const restriccionesListas = diligenciado(vista.restricciones?.valor) && diligenciado(vista.observaciones?.valor);
   const pasos = [
     { id: 'aduana-partida', texto: 'Partida', hecho: partidaLista },
+    { id: 'aduana-impuestos', texto: 'Arancel e IVA', hecho: impuestosListos },
     { id: 'aduana-rim', texto: 'RIM', hecho: rimListo },
     { id: 'aduana-descripciones', texto: 'Descripciones adicionales', hecho: descripcionesListas },
     { id: 'aduana-restricciones', texto: 'Restricciones', hecho: restriccionesListas },
@@ -179,7 +184,7 @@ export function ZonaAduana({ referenciaId }: { referenciaId: string }) {
   ];
 
   const subtitulo = vista.permisos.editar
-    ? 'Aquí clasificas: partida, RIM, descripciones mínimas adicionales, restricciones, observaciones y cierre. Todo queda con tu nombre y la fecha.'
+    ? 'Aquí clasificas: partida, arancel e IVA, RIM, descripciones mínimas adicionales, restricciones, observaciones y cierre. Todo queda con tu nombre y la fecha.'
     : cerrada
       ? 'La clasificación está cerrada. Esta zona es de solo lectura.'
       : 'Esta zona la completa la agencia de aduana. Si pide información adicional, te llega como pendiente y la respondes aquí.';
@@ -255,6 +260,9 @@ export function ZonaAduana({ referenciaId }: { referenciaId: string }) {
         ) : null}
         <Bloque titulo="Partida arancelaria" {...plegado('aduana-partida', partidaLista)}>
           <BloquePartida vista={vista} alCambiar={alCambiar} />
+        </Bloque>
+        <Bloque titulo="Arancel e IVA" {...plegado('aduana-impuestos', impuestosListos, textoFalta((arancelListo ? 0 : 1) + (ivaListo ? 0 : 1)))}>
+          <BloqueImpuestos vista={vista} alCambiar={alCambiar} />
         </Bloque>
         <Bloque titulo="Registro de importación (RIM)" {...plegado('aduana-rim', rimListo)}>
           <BloqueRim vista={vista} alCambiar={alCambiar} />

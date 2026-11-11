@@ -7,7 +7,7 @@ import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { account, usuario } from '@/db/esquema';
 import { cambiarOrganizacion, cambiarRol, crearCuenta, desactivarUsuario, reactivarUsuario, restablecerClave } from '@/server/acciones/usuarios';
-import { cerrarSesionesDeUsuario, editarUsuario } from '@/server/acciones/usuarios-admin';
+import { editarUsuario } from '@/server/acciones/usuarios-admin';
 import type { Actor, Contexto } from '@/server/politicas/actor';
 import { crearSupervisora, nuevoEscenario, rechazaCon, type Escenario } from './ayudas';
 
@@ -59,7 +59,6 @@ describe('la supervisora actua sobre cuentas comunes pero las guardas por objeti
       await rechazaCon(cambiarOrganizacion(ctxAngie, { usuarioId: objetivo, organizacionId: e.orgInterna }), CUENTA_RESERVADA);
       await rechazaCon(desactivarUsuario(ctxAngie, { usuarioId: objetivo }), CUENTA_RESERVADA);
       await rechazaCon(reactivarUsuario(ctxAngie, { usuarioId: objetivo }), CUENTA_RESERVADA);
-      await rechazaCon(cerrarSesionesDeUsuario(ctxAngie, { usuarioId: objetivo }), CUENTA_RESERVADA);
 
       const [despues] = await e.db.select().from(account).where(and(eq(account.userId, objetivo), eq(account.providerId, 'credential')));
       expect(despues?.password).toBe(antes?.password);

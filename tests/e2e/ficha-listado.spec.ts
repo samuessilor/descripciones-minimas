@@ -117,7 +117,7 @@ test('ficha: llenar las tres secciones, ver amarillo y verde por seccion, y reca
 
   // Producto
   await llenar(page, 'descripcion_factura', () => page.getByLabel(/^Nombre comercial/).fill('LIMPIADOR ALCALINO (prueba)'));
-  await llenar(page, 'uso', () => page.getByLabel(/^Uso del producto$/).fill('Preparar la superficie del lente antes del recubrimiento.'));
+  await llenar(page, 'uso', () => page.getByLabel(/^Uso\/Función específica del producto$/).fill('Preparar la superficie del lente antes del recubrimiento.'));
   await llenar(page, 'funciones', () => page.getByLabel(/^Función de la máquina$/).fill('Elimina grasa y partículas.'));
   await page.getByLabel('Unidad de medida').click();
   await page.getByRole('option', { name: 'Kilogramos' }).click();
@@ -167,7 +167,7 @@ test('ficha: llenar las tres secciones, ver amarillo y verde por seccion, y reca
     await expect(botonDeSeccion(page, s)).toContainText('Completa');
   }
   await abrirTodo(page);
-  await expect(page.getByLabel(/^Uso del producto$/)).toHaveValue('Preparar la superficie del lente antes del recubrimiento.');
+  await expect(page.getByLabel(/^Uso\/Función específica del producto$/)).toHaveValue('Preparar la superficie del lente antes del recubrimiento.');
   await expect(page.getByLabel('Componente 1', { exact: true })).toHaveValue('1-metoxi-2-propanol');
   await expect(page.getByLabel(/^Marca/)).toHaveValue('NAGA');
   await expect(page.getByLabel(/^Contenido por empaque/)).toHaveValue('20 litros');
@@ -187,7 +187,7 @@ test('segunda sesion: editar un valor ajeno pide motivo y, si se guardo a la vez
     }
 
     // Valor ajeno: Carla edita el «Uso» de Edgar -> franja de motivo; sin motivo no se guarda.
-    const uso = b.page.getByLabel(/^Uso del producto$/);
+    const uso = b.page.getByLabel(/^Uso\/Función específica del producto$/);
     await uso.fill('Preparar la superficie y quitar residuos.');
     await expect(b.page.getByText(/Este valor lo puso/)).toBeVisible();
     // Salir del campo sin motivo no guarda ni pierde el texto: la franja se resalta.
@@ -431,13 +431,13 @@ test('ficha: el encabezado se opera con teclado y un enlace con ancla abre solo 
   const producto = botonDeSeccion(page, 'producto');
   await producto.focus();
   await expect(producto).toBeFocused();
-  await expect(page.getByLabel(/^Uso del producto$/)).toBeHidden();
+  await expect(page.getByLabel(/^Proveedor/)).toBeHidden();
   await page.keyboard.press('Enter');
   await expect(producto).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.getByLabel(/^Uso del producto$/)).toBeVisible();
+  await expect(page.getByLabel(/^Proveedor/)).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(producto).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.getByLabel(/^Uso del producto$/)).toBeHidden();
+  await expect(page.getByLabel(/^Proveedor/)).toBeHidden();
 
   // La zona de la aduana: bloques plegados, con su estado en el encabezado, y el atajo de arriba abre el bloque.
   const partida = botonDeSeccion(page, 'aduana-partida');

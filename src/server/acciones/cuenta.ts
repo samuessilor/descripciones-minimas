@@ -8,6 +8,7 @@ import { account, session, usuario } from '@/db/esquema';
 import { CLAVE_MAX, validarClaveNueva } from '@/dominio/credenciales';
 import { auditar } from '../auditoria';
 import { hashearClave, verificarClave } from '../claves';
+import { borrarClaveEntrega } from '../clave-entrega';
 import { limitarTasa, REGLAS_TASA } from '../limite-tasa';
 import { ahoraDe, type Contexto } from '../politicas/actor';
 import { ErrorAccion } from './resultado';
@@ -33,57 +34,6 @@ export async function actualizarPreferencias(ctx: Contexto, entrada: unknown): P
       entidad: 'usuario',
       entidadId: u.id,
       detalle: { de: { atajosTeclado: u.atajosTeclado }, a: cambios },
-      ip: ctx.ip,
-      creadoEn: ahora,
-    });
-  });
-  return { ok: true };
-}
-
-/** Cierra todas mis sesiones MENOS la actual (la que esta usando quien pide). */
-export async function cerrarOtrasSesiones(ctx: Contexto): Promise<{ cerradas: number }> {
-  if (!ctx.actor.sesionId) throw new ErrorAccion('VALIDACION', 'No pudimos identificar tu sesión actual. Cierra sesión y vuelve a entrar.');
-  const sesionActual = ctx.actor.sesionId;
-  const ahora = ahoraDe(ctx);
-  return ctx.db.transaction(async (tx) => {
-    const borradas = await tx
-      .delete(session)
-      .where(and(eq(session.userId, ctx.actor.usuarioId), ne(session.id, sesionActual)))
-      .returning({ id: session.id });
-    if (borradas.length > 0) {
-      await auditar(tx, {
-        usuarioId: ctx.actor.usuarioId,
-        accion: 'cerrar_sesion',
-        entidad: 'usuario',
-        entidadId: ctx.actor.usuarioId,
-        detalle: { otras: true, cerradas: borradas.length },
-        ip: ctx.ip,
-        creadoEn: ahora,
-      });
-    }
-    return { cerradas: borradas.length };
-  });
-}
-
-/** Cierra UNA de mis otras sesiones. La actual se cierra con «Cerrar sesión». */
-export async function cerrarSesionPropia(ctx: Contexto, entrada: unknown): Promise<{ ok: true }> {
-  const { sesionId } = parsear(z.object({ sesionId: z.uuid() }), entrada);
-  if (sesionId === ctx.actor.sesionId) {
-    throw new ErrorAccion('VALIDACION', 'Esa es la sesión que estás usando. Para salir, usa «Cerrar sesión».');
-  }
-  const ahora = ahoraDe(ctx);
-  await ctx.db.transaction(async (tx) => {
-    const r = await tx
-      .delete(session)
-      .where(and(eq(session.id, sesionId), eq(session.userId, ctx.actor.usuarioId)))
-      .returning({ id: session.id });
-    if (r.length === 0) throw new ErrorAccion('NO_ENCONTRADO', 'Esa sesión ya no está abierta.');
-    await auditar(tx, {
-      usuarioId: ctx.actor.usuarioId,
-      accion: 'cerrar_sesion',
-      entidad: 'usuario',
-      entidadId: ctx.actor.usuarioId,
-      detalle: { sesionId },
       ip: ctx.ip,
       creadoEn: ahora,
     });
@@ -134,6 +84,8 @@ export async function cambiarMiClave(ctx: Contexto, entrada: unknown): Promise<{
       });
     }
     await tx.update(account).set({ password: nuevoHash, updatedAt: ahora }).where(eq(account.id, cred.id));
+    // La contrasena de entrega ya no es la vigente: el administrador deja de poder verla (solo restablecerla).
+    await borrarClaveEntrega(tx, ctx.actor.usuarioId);
     const [antes] = await tx.select({ inicial: usuario.debeCambiarClave }).from(usuario).where(eq(usuario.id, ctx.actor.usuarioId)).limit(1);
     await tx.update(usuario).set({ debeCambiarClave: false, actualizadoEn: ahora }).where(eq(usuario.id, ctx.actor.usuarioId));
     const otras = ctx.actor.sesionId

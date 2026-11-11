@@ -33,6 +33,8 @@ function llenar(tipo: TipoProducto, sobre: Record<string, unknown> = {}): Record
 const aduanaCompleta = {
   requiere_rim: 'NO',
   partida_arancelaria: '8501.31.20.00',
+  arancel: '5%',
+  iva: '19%',
   descripciones_minimas: { no_aplica: true },
   restricciones: 'Sin restricciones',
   observaciones_aduana: { no_aplica: true },
@@ -53,9 +55,9 @@ describe('semaforo por seccion (D-13, D-26, 8.2)', () => {
   it('los obligatorios de la aduana se cuentan aparte y no tiñen la seccion', () => {
     const c = calcularCompletitud({ tipo: 'INSUMO', valores: llenar('INSUMO') });
     expect(c.aduana.faltantes.sort()).toEqual(
-      ['clasificacion_finalizada', 'descripciones_minimas', 'observaciones_aduana', 'partida_arancelaria', 'requiere_rim', 'restricciones'].sort(),
+      ['arancel', 'clasificacion_finalizada', 'descripciones_minimas', 'iva', 'observaciones_aduana', 'partida_arancelaria', 'requiere_rim', 'restricciones'].sort(),
     );
-    expect(c.aduana).toMatchObject({ faltan: 6, total: 6, completo: false });
+    expect(c.aduana).toMatchObject({ faltan: 8, total: 8, completo: false });
   });
 
   it('cuenta lo que falta por seccion con el texto "Faltan N"', () => {
@@ -64,9 +66,11 @@ describe('semaforo por seccion (D-13, D-26, 8.2)', () => {
     delete v.unidad_medida;
     delete v.marca;
     const c = calcularCompletitud({ tipo: 'INSUMO', valores: v });
-    expect(c.secciones.producto).toMatchObject({ estado: 'amarillo', faltan: 2, texto: 'Faltan 2' });
-    expect(c.secciones.producto.faltantes.sort()).toEqual(['unidad_medida', 'uso']);
-    expect(c.secciones.detalle).toMatchObject({ estado: 'amarillo', faltan: 1, texto: 'Falta 1' });
+    // Reunion 2026-11-10: la unidad de medida es de Producto; el uso y la marca son de Detalle.
+    expect(c.secciones.producto).toMatchObject({ estado: 'amarillo', faltan: 1, texto: 'Falta 1' });
+    expect(c.secciones.producto.faltantes).toEqual(['unidad_medida']);
+    expect(c.secciones.detalle).toMatchObject({ estado: 'amarillo', faltan: 2, texto: 'Faltan 2' });
+    expect(c.secciones.detalle.faltantes.sort()).toEqual(['marca', 'uso']);
     expect(c.area.faltan).toBe(3);
     expect(c.tresSeccionesVerdes).toBe(false);
   });
@@ -92,7 +96,7 @@ describe('semaforo por seccion (D-13, D-26, 8.2)', () => {
       tipo: 'INSUMO',
       valores: llenar('INSUMO', { uso: '   ', marca: { texto: '' } }),
     });
-    expect(c.secciones.producto.faltantes).toContain('uso');
+    expect(c.secciones.detalle.faltantes).toContain('uso');
     expect(c.secciones.detalle.faltantes).toContain('marca');
   });
 
@@ -129,7 +133,8 @@ describe('R1: diligenciar y luego borrar, desmarcar o cambiar vuelve a pendiente
     const lleno = calcularCompletitud({ tipo: 'INSUMO', valores: llenar('INSUMO') });
     expect(lleno.secciones.producto.estado).toBe('verde');
     const borrado = calcularCompletitud({ tipo: 'INSUMO', valores: llenar('INSUMO', { funciones: null }) });
-    expect(borrado.secciones.producto).toMatchObject({ estado: 'amarillo', faltan: 1, faltantes: ['funciones'] });
+    expect(borrado.secciones.producto.estado).toBe('verde');
+    expect(borrado.secciones.detalle).toMatchObject({ estado: 'amarillo', faltan: 1, faltantes: ['funciones'] });
   });
 
   it('el area responsable es obligatoria en los cinco tipos: vacia, Producto queda pendiente (P4)', () => {
@@ -187,14 +192,14 @@ describe('R1: diligenciar y luego borrar, desmarcar o cambiar vuelve a pendiente
     for (const tipo of TIPOS_PRODUCTO) {
       const c = calcularCompletitud({ tipo, valores: llenar(tipo) });
       expect(c.aduana.faltantes, tipo).toContain('requiere_rim');
-      expect(c.aduana.total, tipo).toBe(6);
+      expect(c.aduana.total, tipo).toBe(8);
       for (const seccion of ['producto', 'detalle', 'especificaciones'] as const) {
         expect(c.secciones[seccion].faltantes, `${tipo}/${seccion}`).not.toContain('requiere_rim');
       }
       expect(c.area.completo, tipo).toBe(true);
       const respondida = calcularCompletitud({ tipo, valores: llenar(tipo, { requiere_rim: 'NO' }) });
       expect(respondida.aduana.faltantes, tipo).not.toContain('requiere_rim');
-      expect(respondida.aduana.total, tipo).toBe(6);
+      expect(respondida.aduana.total, tipo).toBe(8);
     }
   });
 
@@ -293,7 +298,7 @@ describe('A2: solicitud de la aduana y respuesta del area', () => {
   it('una solicitud sin respuesta deja pendiente la parte de la aduana (sin teñir las secciones del area)', () => {
     const c = calcularCompletitud({ tipo: 'REPUESTO', valores: conSolicitud() });
     expect(c.aduana.faltantes).toEqual(['respuesta_area', 'clasificacion_finalizada']);
-    expect(c.aduana.total).toBe(7);
+    expect(c.aduana.total).toBe(9);
     expect(c.area.completo).toBe(true);
     expect(solicitudSinRespuesta(conSolicitud())).toBe(true);
   });
@@ -313,6 +318,16 @@ describe('A2: solicitud de la aduana y respuesta del area', () => {
     const noAplica = { ...conSolicitud({ texto: 'x', sobre: 'otra' }), descripciones_minimas: { no_aplica: true } };
     const c = calcularCompletitud({ tipo: 'REPUESTO', valores: noAplica });
     expect(c.aduana.faltantes).toEqual(['clasificacion_finalizada']);
-    expect(c.aduana.total).toBe(6);
+    expect(c.aduana.total).toBe(8);
+  });
+
+  it('arancel e IVA sin elegir faltan en la aduana y no tiñen las secciones del area', () => {
+    const base = llenar('INSUMO', aduanaCompleta);
+    const sin = calcularCompletitud({ tipo: 'INSUMO', valores: { ...base, arancel: null, iva: null } });
+    expect(sin.aduana.faltantes.sort()).toEqual(['arancel', 'clasificacion_finalizada', 'iva']);
+    expect(sin.area.completo).toBe(true);
+    for (const s of ['producto', 'detalle', 'especificaciones'] as const) expect(sin.secciones[s].faltantes).not.toContain('arancel');
+    const soloIva = calcularCompletitud({ tipo: 'INSUMO', valores: { ...base, iva: null } });
+    expect(soloIva.aduana.faltantes.sort()).toEqual(['clasificacion_finalizada', 'iva']);
   });
 });

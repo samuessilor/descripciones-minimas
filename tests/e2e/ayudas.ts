@@ -70,7 +70,7 @@ export function vigilarErrores(page: Page): string[] {
 
 /** Las tres secciones de la ficha y los bloques de la zona de la aduana: todos arrancan PLEGADOS (reunion 2026-11). */
 export const SECCIONES_FICHA = ['producto', 'detalle', 'especificaciones'] as const;
-export const BLOQUES_ADUANA = ['aduana-partida', 'aduana-rim', 'aduana-descripciones', 'aduana-restricciones', 'aduana-cierre'] as const;
+export const BLOQUES_ADUANA = ['aduana-partida', 'aduana-impuestos', 'aduana-rim', 'aduana-descripciones', 'aduana-restricciones', 'aduana-cierre'] as const;
 
 /** El boton que pliega/despliega una seccion de la ficha (`#producto`) o un bloque de la zona (`#aduana-partida`). */
 export function botonDeSeccion(page: Page, id: string): Locator {

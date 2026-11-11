@@ -93,6 +93,8 @@ export interface EntradaCierre {
   restriccionesVacias: boolean;
   /** Las observaciones de la aduana estan vacias: ni texto ni «No aplica» (A3). */
   observacionesVacias?: boolean;
+  /** Falta elegir el arancel o el IVA de la partida (A3). */
+  arancelIvaVacios?: boolean;
   modo: ModoCierre;
 }
 
@@ -146,6 +148,9 @@ export function evaluarCierre(e: EntradaCierre): ResultadoCierre {
   }
   if (e.observacionesVacias) {
     advertencias.push({ regla: 'A3', mensaje: 'Las observaciones de la aduana están vacías', detalle: [] });
+  }
+  if (e.arancelIvaVacios) {
+    advertencias.push({ regla: 'A3', mensaje: 'Falta elegir el arancel o el IVA', detalle: [] });
   }
 
   if (e.modo === 'bloquear') bloqueos.push(...advertencias);

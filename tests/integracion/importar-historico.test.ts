@@ -281,7 +281,7 @@ describe('carga', () => {
 
     const despues = await cargarHistorial({ ej: e.db, actor: e.admin, nombres }, undefined);
     const cambios = despues.filas.map((f) => f.valores);
-    expect(cambios.find((c) => c.campo === 'Uso del producto')).toMatchObject({
+    expect(cambios.find((c) => c.campo === 'Uso/Función específica del producto')).toMatchObject({
       codigo: 'IMP-001',
       evento: 'Cambio',
       anterior: 'Recubrir la cara externa de lentes',
@@ -351,7 +351,7 @@ describe('defectos que encontro la revision', () => {
     const plan = await planificarImportacion(e.db, lectura.filas, new Date('2026-11-10T15:00:00Z'));
     expect(plan.validas).toHaveLength(0);
     const errores = plan.rechazadas[0]!.errores.join(' | ');
-    expect(errores).toContain('Uso del producto: la celda tiene una fórmula sin valor calculado');
+    expect(errores).toContain('Uso/Función específica del producto: la celda tiene una fórmula sin valor calculado');
     expect(errores).toContain('Fabricante: la celda tiene una fórmula sin valor calculado');
     expect(lectura.filas[0]!.celdas.materia_constitutiva).toBe('85%');
   });

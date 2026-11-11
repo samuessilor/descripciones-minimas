@@ -43,10 +43,12 @@ async function ponerPartida(id: string, partida = '8421.39.90.00', actor = e.bri
   return fijarPartida(e.ctx(actor), { referenciaId: id, partida, versionEsperada: await versionDe(e.db, id, 'partida_arancelaria') });
 }
 
-/** La aduana no necesita informacion adicional ni tiene observaciones («No aplica»): sin advertencias A2/A3 por eso. */
+/** La aduana no necesita informacion adicional ni tiene observaciones («No aplica») y ya eligio arancel e IVA: sin advertencias A2/A3 por eso. */
 async function describir(id: string) {
   await escribir(e, e.brian, id, 'descripciones_minimas', { no_aplica: true });
   await escribir(e, e.brian, id, 'observaciones_aduana', { no_aplica: true });
+  await escribir(e, e.brian, id, 'arancel', '5%');
+  await escribir(e, e.brian, id, 'iva', '19%');
 }
 
 describe('finalizar: guardas duras (G1, G6)', () => {
@@ -97,8 +99,11 @@ describe('finalizar: advertencias A1-A3 y "cerrar de todos modos"', () => {
     // El RIM ya no es del area: lo responde la aduana y su falta es una guarda dura (G7), no un campo del area.
     expect(a1?.detalle).not.toContain('¿Requiere registro de importación (RIM)?');
     expect(adv.find((a) => a.regla === 'A2')).toMatchObject({ mensaje: 'Las descripciones mínimas adicionales están vacías' });
-    // La restriccion se prellenó; las observaciones siguen vacias.
-    expect(adv.filter((a) => a.regla === 'A3').map((a) => (a as { mensaje?: string }).mensaje)).toEqual(['Las observaciones de la aduana están vacías']);
+    // La restriccion se prellenó; las observaciones, el arancel y el IVA siguen vacios.
+    expect(adv.filter((a) => a.regla === 'A3').map((a) => (a as { mensaje?: string }).mensaje)).toEqual([
+      'Las observaciones de la aduana están vacías',
+      'Falta elegir el arancel o el IVA',
+    ]);
     expect((await estadoDe(e, id)).estado).toBe('EN_GESTION');
 
     const r = await finalizar(e.ctx(e.brian), { referenciaId: id, motivoCerrarDeTodosModos: 'La agencia ya lo despachó, el área completa después.' });

@@ -10,12 +10,18 @@ import { comoResultado, ErrorAccion, type Resultado } from '@/server/acciones/re
 import { listarAdjuntos, retirarAdjunto, type AdjuntoVista } from '@/server/acciones/adjuntos';
 import { corregirCodigo, type ResultadoCorregirCodigo } from '@/server/acciones/corregir-codigo';
 import { crearReferencia, revisarCodigo, type RevisionCodigo, type ResultadoCrearReferencia } from '@/server/acciones/crear-referencia';
+import { eliminarReferencia, type ResultadoEliminarReferencia } from '@/server/acciones/eliminar-referencia';
 import { estadoFicha, latidoEdicion, terminarEdicion, type EstadoFicha } from '@/server/acciones/estado-ficha';
 import { guardarCampo, type ResultadoGuardarCampo } from '@/server/acciones/guardar-campo';
 import { restaurarCampo, type ResultadoRestaurarCampo } from '@/server/acciones/restaurar-campo';
 import { resolverConflicto, type ResultadoResolverConflicto } from '@/server/acciones/resolver-conflicto';
 import { historialDeCampo, vistaFicha, type EntradaHistorialVista, type FichaVista } from '@/server/politicas/referencias';
 import { contextoDeAccion } from '@/server/sesion';
+
+/** Eliminar la referencia con todo lo suyo (cerrada o pendiente). Solo administrador y supervisora general; el nucleo lo vuelve a exigir. */
+export async function eliminarReferenciaAccion(entrada: unknown): Promise<Resultado<ResultadoEliminarReferencia>> {
+  return comoResultado(async () => eliminarReferencia(await contextoDeAccion(), entrada));
+}
 
 export async function guardarCampoAccion(entrada: unknown): Promise<Resultado<ResultadoGuardarCampo>> {
   return comoResultado(async () => guardarCampo(await contextoDeAccion(), entrada));

@@ -65,9 +65,9 @@ export const COLUMNAS_HISTORICO: readonly ColumnaHistorico[] = [
   { clave: 'fecha_solicitud', encabezado: 'Fecha de solicitud', requerida: true, ancho: 16, formato: 'fecha', ejemplo: '15/03/2025', ayuda: 'Día/mes/año. Cuándo se pidió la clasificación. No puede ser futura.' },
   { clave: 'fecha_clasificacion', encabezado: 'Fecha de clasificación', ancho: 18, formato: 'fecha', ejemplo: '02/04/2025', ayuda: 'Día/mes/año. Cuándo se cerró. Si queda vacía se usa la fecha de solicitud y «Días en gestión» saldrá en 0. Muy recomendada.' },
   { clave: 'descripcion_factura', encabezado: 'Nombre comercial', ancho: 30, formato: 'normal', ejemplo: 'NSR E1', ayuda: 'Hasta 500 caracteres.' },
-  { clave: 'uso', encabezado: 'Uso del producto', ancho: 40, formato: 'normal', ejemplo: 'Filtrar el aire de la cabina de recubrimiento', ayuda: 'Hasta 2.000 caracteres.' },
+  { clave: 'uso', encabezado: 'Uso/Función específica del producto', alias: ['Uso del producto'], ancho: 40, formato: 'normal', ejemplo: 'Filtrar el aire de la cabina de recubrimiento', ayuda: 'Hasta 2.000 caracteres.' },
   { clave: 'funciones', encabezado: 'Función de la máquina', alias: ['Función'], ancho: 40, formato: 'normal', ejemplo: 'Retiene partículas de 0,3 micras', ayuda: 'Hasta 2.000 caracteres.' },
-  { clave: 'unidad_medida', encabezado: 'Unidad de medida', ancho: 16, formato: 'normal', ejemplo: 'Unidades', ayuda: 'Debe estar en la lista (hoja «Listas»). Si falta una, se agrega antes en Administración › Catálogos.' },
+  { clave: 'unidad_medida', encabezado: 'Unidad de medida según factura', alias: ['Unidad de medida'], ancho: 16, formato: 'normal', ejemplo: 'Unidades', ayuda: 'Debe estar en la lista (hoja «Listas»). Si falta una, se agrega antes en Administración › Catálogos.' },
   { clave: 'pais_origen', encabezado: 'País de origen', ancho: 18, formato: 'normal', ejemplo: 'Francia', ayuda: 'Nombre en español (hoja «Listas») o código de 2 letras. «No se conoce» también vale.' },
   { clave: 'fabricante', encabezado: 'Fabricante', ancho: 24, formato: 'normal', ejemplo: 'NAGA', ayuda: 'Hasta 200 caracteres.' },
   { clave: 'proveedor', encabezado: 'Proveedor', ancho: 24, formato: 'normal', ejemplo: 'Essilor International', ayuda: 'Hasta 200 caracteres. «El mismo fabricante» si lo es.' },
@@ -81,6 +81,8 @@ export const COLUMNAS_HISTORICO: readonly ColumnaHistorico[] = [
   { clave: 'fecha_fabricacion', encabezado: 'Fecha de fabricación', ancho: 20, formato: 'fecha', ejemplo: '10/01/2024', ayuda: 'Solo equipos. Día/mes/año o «Por confirmar».' },
   { clave: 'requiere_rim', encabezado: 'Requiere RIM', alias: ['¿Requiere registro de importación (RIM)?'], ancho: 14, formato: 'normal', ejemplo: 'No', ayuda: 'Sí o No: si requería registro de importación.' },
   { clave: 'partida_arancelaria', encabezado: 'Partida arancelaria final', alias: ['Partida arancelaria', 'Partida'], ancho: 20, formato: 'texto', ejemplo: '8421.39.20.00', ayuda: '10 dígitos, con o sin puntos.' },
+  { clave: 'arancel', encabezado: 'Arancel', ancho: 10, formato: 'normal', ejemplo: '5%', ayuda: '0%, 5%, 10% o 15% (también vale escribir solo el número).' },
+  { clave: 'iva', encabezado: 'IVA', ancho: 10, formato: 'normal', ejemplo: '19%', ayuda: '0% o 19% (también vale escribir solo el número).' },
   { clave: 'descripciones_minimas', encabezado: 'Descripciones mínimas adicionales', ancho: 44, formato: 'normal', ejemplo: 'No aplica', ayuda: 'Lo que la aduana pidió saber, o «No aplica». Hasta 5.000 caracteres.' },
   { clave: 'respuesta_area', encabezado: 'Respuesta del área', ancho: 40, formato: 'normal', ejemplo: '', ayuda: 'Solo si «Descripciones mínimas adicionales» trae una solicitud. Si no, se ignora.' },
   { clave: 'restricciones', encabezado: 'Restricciones', ancho: 36, formato: 'normal', ejemplo: 'No aplica', ayuda: 'Texto de la restricción o «No aplica». Hasta 5.000 caracteres.' },
@@ -266,7 +268,10 @@ function entradaDeCampo(
     }
     case 'lista': {
       if (def.opciones) {
-        const o = coincidir(texto, def.opciones);
+        // Arancel e IVA (opciones en porcentaje): «5», «5 %», «5%» o una celda de porcentaje (0,05) son lo mismo.
+        const porcentaje = def.clave === 'arancel' || def.clave === 'iva';
+        const n = typeof celda === 'number' ? (celda > 0 && celda < 1 ? Math.round(celda * 10_000) / 100 : celda) : Number(texto.replace(/[\s%]/g, '').replace(',', '.'));
+        const o = coincidir(porcentaje && Number.isFinite(n) ? `${n}%` : texto, def.opciones);
         return o ? { ok: true, entrada: o } : { ok: false, mensaje: `«${texto}» no es una opción. Elige: ${def.opciones.join(', ')}.` };
       }
       if (def.catalogo) {

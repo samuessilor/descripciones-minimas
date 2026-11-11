@@ -107,11 +107,20 @@ export const EMPAQUES = ['Bidón', 'Paquete', 'Unidad'] as const;
 /** Con estos empaques se pide ademas «por cuanto» viene (litros/kilos por bidon, unidades por paquete). */
 export const EMPAQUES_CON_CONTENIDO: readonly string[] = ['Bidón', 'Paquete'];
 
+/** Opciones de la lista «Arancel» y «IVA» que la aduana elige despues de la partida (reunion 2026-11-10). */
+export const ARANCELES = ['0%', '5%', '10%', '15%'] as const;
+export const IVAS = ['0%', '19%'] as const;
+
 function def(c: Omit<CampoDef, 'subbloque' | 'escribible' | 'ayuda'> & Partial<Pick<CampoDef, 'subbloque' | 'escribible' | 'ayuda'>>): CampoDef {
   return { subbloque: null, escribible: true, ayuda: '', ...c };
 }
 
-/** En el orden de la pantalla (REU Estructura + D-08). */
+/**
+ * En el orden de la pantalla. Reunion 2026-11-10: PRODUCTO es la identificacion y la compra (referencia, descripcion segun
+ * factura, tipo, area, pais, unidad, proveedor, reembolsable); DETALLE es lo que se sabe del producto (nombre comercial, uso,
+ * maquina de destino, funcion de la maquina, fabricante, y lo demas de siempre). ESPECIFICACIONES no cambia, salvo que la
+ * aduana agrega Arancel e IVA despues de la partida.
+ */
 export const CAMPOS: readonly CampoDef[] = [
   // ---- Producto
   def({
@@ -126,18 +135,6 @@ export const CAMPOS: readonly CampoDef[] = [
     tipoDato: 'texto_largo', reglas: TODOS_O, maximo: 500, ayuda: 'Ej.: FILTRO ABSOLUTO -AIRE NUEVO',
   }),
   def({
-    clave: 'descripcion_factura', etiqueta: 'Nombre comercial', seccion: 'producto', grupo: 'C', fila: 6,
-    confianza: 'F', tipoDato: 'texto_largo', reglas: TODOS_O, maximo: 500, ayuda: 'Ej.: NSR E1',
-  }),
-  def({
-    clave: 'fecha_solicitud', etiqueta: 'Fecha de solicitud', seccion: 'producto', grupo: 'S', fila: 3, confianza: 'F',
-    tipoDato: 'fecha', reglas: TODOS_P,
-  }),
-  def({
-    clave: 'dias_gestion', etiqueta: 'Días en gestión', seccion: 'producto', grupo: 'S', fila: 4, confianza: 'F',
-    tipoDato: 'calculado', reglas: TODOS_P, escribible: false,
-  }),
-  def({
     clave: 'tipo_producto', etiqueta: 'Tipo de producto', seccion: 'producto', grupo: 'C', fila: 5, confianza: 'F',
     tipoDato: 'tipo_producto', reglas: TODOS_O,
   }),
@@ -148,35 +145,14 @@ export const CAMPOS: readonly CampoDef[] = [
     tipoDato: 'area', reglas: TODOS_O,
     ayuda: 'El área a la que le pertenece la referencia. Sus personas la verán en «Para mí».',
   }),
-  // Uso, funcion y unidad de medida: obligatorios en todos los tipos (reunion con el area).
-  def({
-    clave: 'uso', etiqueta: 'Uso del producto', seccion: 'producto', grupo: 'C', fila: 7, confianza: 'F',
-    tipoDato: 'texto_largo', reglas: TODOS_O, maximo: 2000,
-    ayuda: 'Ej.: preparación de las superficies del lente oftálmico para la aplicación de recubrimientos',
-    ayudaPorTipo: {
-      REPUESTO: 'Ej.: aspirado de polvo',
-      ACCESORIO: 'Ej.: sujetar plantilla de marcado',
-      EQUIPO: 'Ej.: aspirado de polvo',
-      MONTURA: 'Ej.: montura oftálmica para exhibir en tienda',
-    },
-  }),
-  def({
-    clave: 'funciones', etiqueta: 'Función de la máquina', seccion: 'producto', grupo: 'C', fila: 8, confianza: 'F',
-    tipoDato: 'texto_largo', reglas: TODOS_O, maximo: 2000,
-    ayuda: 'Ej.: Sujetar, fijar el eje Z',
-  }),
-  def({
-    clave: 'unidad_medida', etiqueta: 'Unidad de medida', seccion: 'producto', grupo: 'C', fila: 9, confianza: 'F',
-    tipoDato: 'lista', catalogo: 'unidad_medida', reglas: TODOS_O, maximo: 100,
-    ayuda: 'Ej.: Kilogramos, Unidades, Paquete',
-  }),
   def({
     clave: 'pais_origen', etiqueta: 'País de origen', seccion: 'producto', grupo: 'C', fila: 13, confianza: 'F',
     tipoDato: 'pais', reglas: TODOS_O, ayuda: 'Ej.: Francia',
   }),
   def({
-    clave: 'fabricante', etiqueta: 'Fabricante', seccion: 'producto', grupo: 'C', fila: 14, confianza: 'F',
-    tipoDato: 'texto', reglas: TODOS_O, maximo: 200, ayuda: 'Ej.: NAGA',
+    clave: 'unidad_medida', etiqueta: 'Unidad de medida según factura', seccion: 'producto', grupo: 'C', fila: 9, confianza: 'F',
+    tipoDato: 'lista', catalogo: 'unidad_medida', reglas: TODOS_O, maximo: 100,
+    ayuda: 'Ej.: Kilogramos, Unidades, Paquete',
   }),
   // Texto, o `{ mismo_fabricante: true }` (casilla «El proveedor es el mismo fabricante»): vinculado, no copiado.
   def({
@@ -190,7 +166,46 @@ export const CAMPOS: readonly CampoDef[] = [
     tipoDato: 'lista', opciones: REEMBOLSABLE, reglas: TODOS_O, maximo: 100,
     ayuda: 'Elige Sí, No o No aplica.',
   }),
+  def({
+    clave: 'fecha_solicitud', etiqueta: 'Fecha de solicitud', seccion: 'producto', grupo: 'S', fila: 3, confianza: 'F',
+    tipoDato: 'fecha', reglas: TODOS_P,
+  }),
+  def({
+    clave: 'dias_gestion', etiqueta: 'Días en gestión', seccion: 'producto', grupo: 'S', fila: 4, confianza: 'F',
+    tipoDato: 'calculado', reglas: TODOS_P, escribible: false,
+  }),
   // ---- Detalle
+  def({
+    clave: 'descripcion_factura', etiqueta: 'Nombre comercial', seccion: 'detalle', grupo: 'C', fila: 6,
+    confianza: 'F', tipoDato: 'texto_largo', reglas: TODOS_O, maximo: 500, ayuda: 'Ej.: NSR E1',
+  }),
+  // Uso y funcion especifica del producto: obligatorio en todos los tipos (reunion con el area).
+  def({
+    clave: 'uso', etiqueta: 'Uso/Función específica del producto', seccion: 'detalle', grupo: 'C', fila: 7, confianza: 'F',
+    tipoDato: 'texto_largo', reglas: TODOS_O, maximo: 2000,
+    ayuda: 'Ej.: preparación de las superficies del lente oftálmico para la aplicación de recubrimientos',
+    ayudaPorTipo: {
+      REPUESTO: 'Ej.: aspirado de polvo',
+      ACCESORIO: 'Ej.: sujetar plantilla de marcado',
+      EQUIPO: 'Ej.: aspirado de polvo',
+      MONTURA: 'Ej.: montura oftálmica para exhibir en tienda',
+    },
+  }),
+  // Obligatoria donde aplica hoy (repuesto y accesorio); a la montura no le aplica.
+  def({
+    clave: 'maquina_destino', etiqueta: 'Máquina de destino', seccion: 'detalle', grupo: 'C', fila: 17,
+    confianza: 'S', tipoDato: 'texto_largo', reglas: r('-', 'O', '-', 'O', '-'), maximo: 500,
+    ayuda: 'Ej.: Aspiradora MEI',
+  }),
+  def({
+    clave: 'funciones', etiqueta: 'Función de la máquina', seccion: 'detalle', grupo: 'C', fila: 8, confianza: 'F',
+    tipoDato: 'texto_largo', reglas: TODOS_O, maximo: 2000,
+    ayuda: 'Ej.: Sujetar, fijar el eje Z',
+  }),
+  def({
+    clave: 'fabricante', etiqueta: 'Fabricante', seccion: 'detalle', grupo: 'C', fila: 14, confianza: 'F',
+    tipoDato: 'texto', reglas: TODOS_O, maximo: 200, ayuda: 'Ej.: NAGA',
+  }),
   def({
     clave: 'materia_constitutiva', etiqueta: 'Materia constitutiva', seccion: 'detalle', grupo: 'C',
     fila: 10, confianza: 'S', tipoDato: 'texto_largo', reglas: r('O', 'O', 'P', 'O'), maximo: 2000,
@@ -215,12 +230,6 @@ export const CAMPOS: readonly CampoDef[] = [
     tipoDato: 'texto', reglas: TODOS_O, maximo: 60, soloSi: { clave: 'tipo_empaque', valor: EMPAQUES_CON_CONTENIDO.join('|') },
     ayuda: 'Bidón: litros o kilos por bidón (ej.: 20 litros). Paquete: unidades por paquete (ej.: 10 unidades).',
   }),
-  // Obligatoria donde aplica hoy (repuesto y accesorio); a la montura no le aplica.
-  def({
-    clave: 'maquina_destino', etiqueta: 'Máquina donde se instala', seccion: 'detalle', grupo: 'C', fila: 17,
-    confianza: 'S', tipoDato: 'texto_largo', reglas: r('-', 'O', '-', 'O', '-'), maximo: 500,
-    ayuda: 'Ej.: Aspiradora MEI',
-  }),
   // Solo para equipos/instrumentos y «si aplica» (reunion 2026-11): opcional, con calendario.
   def({
     clave: 'fecha_fabricacion', etiqueta: 'Fecha de fabricación', seccion: 'detalle', grupo: 'C', fila: 20,
@@ -241,6 +250,17 @@ export const CAMPOS: readonly CampoDef[] = [
   def({
     clave: 'partida_arancelaria', etiqueta: 'Partida arancelaria', seccion: 'especificaciones', grupo: 'A', fila: 23,
     confianza: 'F', tipoDato: 'partida', reglas: TODOS_O, ayuda: 'Ej.: 8501.31.20.00',
+  }),
+  // Reunion 2026-11-10: despues de la partida, la aduana elige el arancel y el IVA de la lista.
+  def({
+    clave: 'arancel', etiqueta: 'Arancel', seccion: 'especificaciones', grupo: 'A', fila: 36, confianza: 'F',
+    tipoDato: 'lista', opciones: ARANCELES, reglas: TODOS_O, maximo: 10,
+    ayuda: 'Porcentaje de arancel de la partida: 0 %, 5 %, 10 % o 15 %.',
+  }),
+  def({
+    clave: 'iva', etiqueta: 'IVA', seccion: 'especificaciones', grupo: 'A', fila: 37, confianza: 'F',
+    tipoDato: 'lista', opciones: IVAS, reglas: TODOS_O, maximo: 10,
+    ayuda: 'IVA de la partida: 0 % o 19 %.',
   }),
   // Lo que a la aduana le falta saber del producto. Si escribe una solicitud, el area la contesta en `respuesta_area`;
   // si no le falta nada, marca «No es necesario por ahora / no aplica».

@@ -62,9 +62,9 @@ test('«Combinar» en un campo de una linea separa los dos textos', async ({ bro
     const url = await crearFicha(a.page);
     await b.page.goto(url);
     await expect(b.page.locator('[data-barra-ficha]')).toBeVisible({ timeout: 120_000 });
-    // El Fabricante vive en Producto, que arranca plegada.
-    await abrirSeccion(a.page, 'producto');
-    await abrirSeccion(b.page, 'producto');
+    // El Fabricante vive en Detalle (desde la reunion 2026-11-10), que arranca plegada.
+    await abrirSeccion(a.page, 'detalle');
+    await abrirSeccion(b.page, 'detalle');
 
     const fabB = b.page.getByLabel(/^Fabricante/);
     await fabB.click();

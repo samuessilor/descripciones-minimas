@@ -4,6 +4,7 @@
  */
 import ExcelJS from 'exceljs';
 import { listarPaises } from '@/dominio/paises';
+import { ARANCELES, IVAS } from '@/dominio/campos';
 import { COLUMNAS_HISTORICO, OPCIONES_PLANTILLA } from '@/dominio/plantilla-historico';
 import { AREAS } from '@/dominio/areas';
 
@@ -50,6 +51,8 @@ export async function crearPlantilla(opciones: OpcionesPlantilla): Promise<Buffe
     { nombre: 'Unidad de medida', valores: opciones.unidades },
     { nombre: 'Aspecto físico', valores: [...opciones.aspectos, 'No aplica'] },
     { nombre: 'País de origen', valores: paises },
+    { nombre: 'Arancel', valores: ARANCELES },
+    { nombre: 'IVA', valores: IVAS },
   ];
   columnasLista.forEach((l, i) => {
     const col = listas.getColumn(i + 1);
@@ -111,6 +114,8 @@ export async function crearPlantilla(opciones: OpcionesPlantilla): Promise<Buffe
   lista('unidad_medida', 'Unidad de medida', false);
   lista('aspecto_fisico', 'Aspecto físico', false);
   lista('pais_origen', 'País de origen', false);
+  lista('arancel', 'Arancel', false);
+  lista('iva', 'IVA', false);
 
   // ---- Instrucciones (primera hoja del libro) ---------------------------------------------------------------------
   instrucciones.getColumn(1).width = 30;

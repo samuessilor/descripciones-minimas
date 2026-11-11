@@ -105,6 +105,9 @@ export const ETIQUETA_ACCION: Record<string, string> = {
   cancelar_asignacion: 'Canceló un pendiente',
   retencion: 'Limpieza automática',
   importar_historico: 'Cargó el histórico anterior a la plataforma',
+  ver_clave: 'Vio la contraseña de entrega de una cuenta',
+  eliminar_referencia: 'Eliminó una referencia',
+  eliminar_cuenta: 'Eliminó una cuenta',
 };
 
 export function etiquetaAccion(accion: string): string {
@@ -131,21 +134,3 @@ export const ETIQUETA_PEDIDO: Record<string, string> = {
   responder: 'Responder',
   revisar: 'Revisar',
 };
-
-/** «Chrome en Windows», «Safari en iPhone»... a partir del agente de usuario, sin librerias. */
-export function describirNavegador(ua: string | null | undefined): string {
-  if (!ua) return 'Dispositivo desconocido';
-  const nav = /Edg\//.test(ua) ? 'Edge' : /OPR\/|Opera/.test(ua) ? 'Opera' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\/|CriOS/.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : null;
-  const so = /Windows/.test(ua) ? 'Windows' : /iPhone|iPad|iOS/.test(ua) ? 'iPhone o iPad' : /Android/.test(ua) ? 'Android' : /Mac OS X|Macintosh/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : null;
-  if (nav && so) return `${nav} en ${so}`;
-  return nav ?? so ?? 'Dispositivo desconocido';
-}
-
-/** IP legible: el equipo local en vez de `::1` o ceros, y nada si el dato es la direccion «vacia» de IPv6. */
-export function formatearIp(ip: string | null | undefined): string | null {
-  if (!ip) return null;
-  const v = ip.trim();
-  if (/^(0{1,4}:){7}0{1,4}$/.test(v) || v === '::') return null;
-  if (/^(0{1,4}:){7}0{0,3}1$/.test(v) || v === '::1' || v === '127.0.0.1' || v === '::ffff:127.0.0.1') return 'este equipo';
-  return v;
-}

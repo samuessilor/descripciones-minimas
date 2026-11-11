@@ -32,8 +32,8 @@ interface Creada {
 
 /**
  * Crear una cuenta suelta (administrador o supervisora): organizacion, nombre y usuario; rol, area y encargado solo si aplican.
- * Si la crea el administrador, la contrasena la genera el servidor y se muestra UNA vez. Si la crea la supervisora no hay
- * clave: la cuenta queda pendiente de entrega y el administrador la genera desde la ficha de la cuenta (la supervisora
+ * La contrasena la genera siempre el servidor. Si la crea el administrador se muestra UNA vez; si la crea la supervisora no la ve:
+ * el administrador la ve y la entrega desde la ficha de la cuenta (la supervisora
  * no crea administradores ni supervisoras: el servidor lo exige y aqui ni se ofrecen). Una cuenta de area (Consumibles, Mantenimiento...) es la forma normal: a esa cuenta se le envian las
  * referencias de su area. Si la organizacion es una agencia, el unico rol es `aduana` (D-28).
  */
@@ -76,9 +76,9 @@ export function FormularioCrearCuenta({ organizaciones, organizacionInicial, act
         {creada.secreto ? (
           <CredencialesEntrega secreto={creada.secreto} />
         ) : (
-          <Aviso tipo="info" titulo="Cuenta pendiente de entrega">
-            Creamos la cuenta <span className="font-mono font-bold">{creada.usuario}</span>, pero todavía no tiene contraseña y no puede entrar. Avisamos al
-            administrador para que genere la clave y se la entregue.
+          <Aviso tipo="info" titulo="Cuenta lista: el administrador entrega la contraseña">
+            Creamos la cuenta <span className="font-mono font-bold">{creada.usuario}</span> con su contraseña, que solo ve el administrador. Le avisamos: abre la
+            cuenta, ve el usuario y la contraseña y se las entrega.
           </Aviso>
         )}
         <div className="flex flex-wrap gap-3">
@@ -206,9 +206,8 @@ export function FormularioCrearCuenta({ organizaciones, organizacionInicial, act
           {administrador ? (
             <p className="text-sm text-tinta-suave">Al crear la cuenta generamos una contraseña temporal y te la mostramos una vez para que se la entregues.</p>
           ) : (
-            <Aviso tipo="info" titulo="La contraseña la genera el administrador">
-              Esta cuenta se crea sin contraseña y queda «Pendiente de entrega»: no puede entrar todavía. Avisamos a los administradores para que generen la clave
-              y se la entreguen.
+            <Aviso tipo="info" titulo="La contraseña la entrega el administrador">
+              Al crear la cuenta se genera una contraseña que solo ve el administrador. Le avisamos para que abra la cuenta y se la entregue a la persona.
             </Aviso>
           )}
         </>

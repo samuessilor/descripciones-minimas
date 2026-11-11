@@ -5,12 +5,12 @@
  */
 import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
-import { account, asignacion, organizacion, referencia, session, usuario } from '@/db/esquema';
+import { account, asignacion, organizacion, referencia, usuario } from '@/db/esquema';
 import type { Ejecutor } from '@/db/tipos';
 import { normalizarTexto } from '@/dominio/normalizacion';
 import type { Rol } from '@/dominio/permisos';
 import type { Actor } from './actor';
-import { exigir, exigirCuentaTocable } from './exigir';
+import { exigir } from './exigir';
 
 /** Escapa `%`, `_` y `\` para usarlos dentro de un LIKE ... ESCAPE '\'. */
 export function escaparLike(s: string): string {
@@ -181,46 +181,6 @@ export async function candidatosReasignacion(ej: Ejecutor, actor: Actor, excluir
     .innerJoin(organizacion, and(eq(organizacion.id, usuario.organizacionId), eq(organizacion.activa, true)))
     .where(and(eq(usuario.activo, true), sql`${usuario.rol} <> 'lector'`, sql`${usuario.id} <> ${excluirUsuarioId}`))
     .orderBy(asc(organizacion.nombre), asc(usuario.nombre));
-}
-
-export interface SesionVista {
-  id: string;
-  creadaEn: string;
-  ultimaActividad: string;
-  expiraEn: string;
-  ip: string | null;
-  agente: string | null;
-}
-
-/** Sesiones vigentes (no vencidas por tope absoluto) de una persona. Nunca expone el token. */
-export async function sesionesDe(ej: Ejecutor, usuarioId: string): Promise<SesionVista[]> {
-  const filas = await ej
-    .select({
-      id: session.id,
-      creadaEn: session.createdAt,
-      ultimaActividad: session.ultimaActividad,
-      expiraEn: session.expiresAt,
-      ip: session.ipAddress,
-      agente: session.userAgent,
-    })
-    .from(session)
-    .where(and(eq(session.userId, usuarioId), sql`${session.expiresAt} > now()`))
-    .orderBy(desc(session.ultimaActividad));
-  return filas.map((s) => ({
-    ...s,
-    creadaEn: s.creadaEn.toISOString(),
-    ultimaActividad: s.ultimaActividad.toISOString(),
-    expiraEn: s.expiraEn.toISOString(),
-  }));
-}
-
-export async function listarSesionesDeUsuario(ej: Ejecutor, actor: Actor, usuarioId: string): Promise<SesionVista[]> {
-  exigir(actor, 'supervisar');
-  if (!esUuid(usuarioId)) return [];
-  // Las sesiones (IP y navegador) de un administrador o de una supervisora no las lee la supervisora.
-  const [objetivo] = await ej.select({ rol: usuario.rol }).from(usuario).where(eq(usuario.id, usuarioId)).limit(1);
-  if (objetivo) exigirCuentaTocable(actor, objetivo.rol);
-  return sesionesDe(ej, usuarioId);
 }
 
 /** Cuantos administradores activos hay (para explicar por que no se puede quitar al ultimo). */

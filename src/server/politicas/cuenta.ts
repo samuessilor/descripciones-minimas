@@ -1,18 +1,8 @@
-/** Lecturas de «Mi cuenta»: solo lo del propio actor. */
+/** Lecturas de «Mi cuenta»: solo lo del propio actor (la lista de sesiones abiertas se quito el 2026-11-10). */
 import { eq } from 'drizzle-orm';
 import { usuario } from '@/db/esquema';
 import type { Ejecutor } from '@/db/tipos';
 import type { Actor } from './actor';
-import { sesionesDe, type SesionVista } from './administracion';
-
-export interface SesionPropia extends SesionVista {
-  esActual: boolean;
-}
-
-export async function misSesiones(ej: Ejecutor, actor: Actor): Promise<SesionPropia[]> {
-  const filas = await sesionesDe(ej, actor.usuarioId);
-  return filas.map((s) => ({ ...s, esActual: s.id === actor.sesionId }));
-}
 
 export interface MisPreferencias {
   atajosTeclado: boolean;

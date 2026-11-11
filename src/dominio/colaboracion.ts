@@ -75,15 +75,28 @@ export function parsearSecciones(texto: string | null | undefined): Seccion[] {
 export const CORTE_PAIS_FABRICANTE_PROVEEDOR = new Date('2026-11-09T18:00:00.000Z');
 
 /**
- * Las secciones que una asignacion cubre de verdad. Pais de origen, fabricante y proveedor pasaron de Detalle a Producto
- * (reunion 2026-11-09): quien tenia pendiente Detalle antes del corte sigue cubriendo tambien Producto, para que esos
- * tres campos no queden sin dueno en las asignaciones ya hechas. Las posteriores se leen tal cual. Se resuelve al leer;
- * no se reescribe nada.
+ * Asignaciones creadas desde esta fecha ya conocen el nuevo reparto de campos (reunion 2026-11-10): Producto es la
+ * identificacion y la compra; nombre comercial, uso, funcion de la maquina y fabricante pasaron a Detalle.
+ */
+export const CORTE_REORDEN_SECCIONES = new Date('2026-11-11T05:00:00.000Z');
+
+/**
+ * Las secciones que una asignacion cubre de verdad. Los campos cambiaron de seccion dos veces y las asignaciones ya hechas
+ * no se reescriben: se resuelve al leer, para que ningun campo quede sin dueno.
+ *  - Reunion 2026-11-09: pais de origen, fabricante y proveedor pasaron de Detalle a Producto; quien tenia pendiente Detalle
+ *    antes de ese corte sigue cubriendo tambien Producto.
+ *  - Reunion 2026-11-10: nombre comercial, uso, funcion y fabricante pasaron de Producto a Detalle; quien tenia pendiente
+ *    Producto antes de ese corte sigue cubriendo tambien Detalle.
+ * Las posteriores a cada corte se leen tal cual.
  */
 export function seccionesCubiertas(texto: string | null | undefined, creadaEn?: Date | null): Seccion[] {
-  const elegidas = parsearSecciones(texto);
-  const antigua = !!creadaEn && creadaEn < CORTE_PAIS_FABRICANTE_PROVEEDOR;
-  return antigua && elegidas.includes('detalle') && !elegidas.includes('producto') ? ['producto', ...elegidas] : elegidas;
+  let cubiertas = parsearSecciones(texto);
+  if (!creadaEn) return cubiertas;
+  if (creadaEn < CORTE_PAIS_FABRICANTE_PROVEEDOR && cubiertas.includes('detalle') && !cubiertas.includes('producto')) cubiertas = ['producto', ...cubiertas];
+  if (creadaEn < CORTE_REORDEN_SECCIONES && cubiertas.includes('producto') && !cubiertas.includes('detalle')) {
+    cubiertas = SECCIONES.filter((s) => s === 'detalle' || cubiertas.includes(s));
+  }
+  return cubiertas;
 }
 
 /** Lo que se guarda: nulo si no se eligio nada o se eligieron las tres (= toda su parte). */

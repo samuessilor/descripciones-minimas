@@ -60,6 +60,9 @@ export interface VistaAduana {
   /** Por que no se puede editar, si es el caso (para decirlo en pantalla). */
   bloqueo: 'clasificada' | 'archivada' | 'borrador' | 'sin_permiso' | null;
   partida: CampoAduanaVista | null;
+  /** Arancel de la partida (`valor` = '0%' | '5%' | '10%' | '15%') e IVA ('0%' | '19%'): la aduana los elige despues de la partida. */
+  arancel: CampoAduanaVista | null;
+  iva: CampoAduanaVista | null;
   /** ¿Requiere registro de importacion (RIM)? La responde la aduana: `valor` = 'SI' | 'NO'. */
   requiereRim: CampoAduanaVista | null;
   infoPartida: InfoPartida | null;
@@ -202,6 +205,8 @@ export async function vistaAduana(ej: Ejecutor, actor: Actor, referenciaId: stri
     },
     bloqueo,
     partida: campo('partida_arancelaria'),
+    arancel: campo('arancel'),
+    iva: campo('iva'),
     requiereRim: campo('requiere_rim'),
     infoPartida,
     descripcionesMinimas: campo('descripciones_minimas'),

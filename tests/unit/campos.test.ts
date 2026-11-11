@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import matriz from '../fixtures/matriz-spec7.json';
 import {
+  ARANCELES,
   CAMPOS,
   CAMPOS_RETIRADOS,
   EMPAQUES,
   EMPAQUES_CON_CONTENIDO,
   ETIQUETA_TIPO,
+  IVAS,
   TIPOS_PRODUCTO,
   aplicaEnFicha,
   ayudaPara,
@@ -20,7 +22,7 @@ import {
 
 describe('catalogo de campos contra la matriz del SPEC 7 con los cambios de la reunion (R-06)', () => {
   it('tiene exactamente las filas de la matriz', () => {
-    expect(matriz.filas).toHaveLength(30);
+    expect(matriz.filas).toHaveLength(32);
     expect(CAMPOS.map((c) => c.clave).sort()).toEqual(matriz.filas.map((f) => f.clave).sort());
   });
 
@@ -156,7 +158,7 @@ describe('catalogo de campos contra la matriz del SPEC 7 con los cambios de la r
   });
 
   it('las etiquetas de uso y funciones son las que pidio la usuaria en todos los tipos, sin el duplicado «Máquina:» en las ayudas', () => {
-    expect(getCampo('uso')?.etiqueta).toBe('Uso del producto');
+    expect(getCampo('uso')?.etiqueta).toBe('Uso/Función específica del producto');
     expect(getCampo('funciones')?.etiqueta).toBe('Función de la máquina');
     for (const tipo of TIPOS_PRODUCTO) expect(ayudaPara(getCampo('uso')!, tipo), tipo).not.toMatch(/máquina/i);
     expect(ayudaPara(getCampo('uso')!, 'INSUMO')).not.toBe(ayudaPara(getCampo('uso')!, 'REPUESTO'));
@@ -168,16 +170,43 @@ describe('catalogo de campos contra la matriz del SPEC 7 con los cambios de la r
     expect(titulo).toMatchObject({ etiqueta: 'Descripción según factura', maximo: 500, tipoDato: 'texto_largo' });
     expect(titulo.ayuda).toMatch(/FILTRO/);
     const comercial = getCampo('descripcion_factura')!;
-    expect(comercial).toMatchObject({ etiqueta: 'Nombre comercial', seccion: 'producto' });
+    expect(comercial).toMatchObject({ etiqueta: 'Nombre comercial', seccion: 'detalle' });
     expect(comercial.ayuda).toBe('Ej.: NSR E1');
   });
 
-  it('pais de origen, fabricante y proveedor viven en Producto, en ese orden y despues de la unidad de medida', () => {
+  it('Producto es la identificacion y la compra, en este orden (reunion 2026-11-10)', () => {
     const claves = CAMPOS.filter((c) => c.seccion === 'producto').map((c) => c.clave);
-    const desde = claves.indexOf('unidad_medida');
-    expect(claves.slice(desde)).toEqual(['unidad_medida', 'pais_origen', 'fabricante', 'proveedor', 'reembolsable']);
-    for (const k of ['pais_origen', 'fabricante', 'proveedor']) expect(getCampo(k)).toMatchObject({ seccion: 'producto', grupo: 'C' });
-    expect(getCampo('fabricante')?.tipoDato).toBe('texto');
+    expect(claves).toEqual([
+      'codigo', 'nombre_producto', 'tipo_producto', 'area_responsable', 'pais_origen', 'unidad_medida', 'proveedor', 'reembolsable',
+      'fecha_solicitud', 'dias_gestion',
+    ]);
+    for (const k of ['pais_origen', 'proveedor']) expect(getCampo(k)).toMatchObject({ seccion: 'producto', grupo: 'C' });
+    expect(getCampo('unidad_medida')?.etiqueta).toBe('Unidad de medida según factura');
+  });
+
+  it('Detalle empieza por nombre comercial, uso, maquina de destino, funcion y fabricante, y sigue con lo de siempre', () => {
+    const claves = CAMPOS.filter((c) => c.seccion === 'detalle').map((c) => c.clave);
+    expect(claves).toEqual([
+      'descripcion_factura', 'uso', 'maquina_destino', 'funciones', 'fabricante',
+      'materia_constitutiva', 'aspecto_fisico', 'marca', 'tipo_empaque', 'cantidad_empaque', 'fecha_fabricacion',
+    ]);
+    expect(getCampo('maquina_destino')?.etiqueta).toBe('Máquina de destino');
+    expect(getCampo('fabricante')).toMatchObject({ seccion: 'detalle', grupo: 'C', tipoDato: 'texto' });
+  });
+
+  it('arancel e IVA: la aduana los elige de una lista, justo despues de la partida', () => {
+    expect(ARANCELES).toEqual(['0%', '5%', '10%', '15%']);
+    expect(IVAS).toEqual(['0%', '19%']);
+    expect(getCampo('arancel')).toMatchObject({ etiqueta: 'Arancel', grupo: 'A', tipoDato: 'lista', seccion: 'especificaciones', escribible: true, fila: 36 });
+    expect(getCampo('iva')).toMatchObject({ etiqueta: 'IVA', grupo: 'A', tipoDato: 'lista', seccion: 'especificaciones', escribible: true, fila: 37 });
+    expect(getCampo('arancel')?.opciones).toEqual(ARANCELES);
+    expect(getCampo('iva')?.opciones).toEqual(IVAS);
+    const espec = CAMPOS.filter((c) => c.seccion === 'especificaciones' && c.subbloque === null).map((c) => c.clave);
+    expect(espec.slice(espec.indexOf('partida_arancelaria'), espec.indexOf('partida_arancelaria') + 3)).toEqual(['partida_arancelaria', 'arancel', 'iva']);
+    for (const tipo of TIPOS_PRODUCTO) {
+      expect(camposObligatoriosAduana(tipo).map((c) => c.clave)).toEqual(expect.arrayContaining(['arancel', 'iva']));
+      expect(camposObligatoriosCliente(tipo).map((c) => c.clave)).not.toContain('arancel');
+    }
   });
 
   it('reembolsable: lista fija Sí / No / No aplica, obligatoria en todos los tipos, del cliente y sin catalogo', () => {
@@ -195,7 +224,7 @@ describe('catalogo de campos contra la matriz del SPEC 7 con los cambios de la r
   it('solo el cliente (C) cuenta para el color de seccion: los O de la aduana y la respuesta del area quedan fuera (D-26)', () => {
     for (const tipo of TIPOS_PRODUCTO) {
       const claves = camposObligatoriosCliente(tipo).map((c) => c.clave);
-      for (const fuera of ['partida_arancelaria', 'descripciones_minimas', 'restricciones', 'observaciones_aduana', 'clasificacion_finalizada', 'respuesta_area']) {
+      for (const fuera of ['partida_arancelaria', 'arancel', 'iva', 'descripciones_minimas', 'restricciones', 'observaciones_aduana', 'clasificacion_finalizada', 'respuesta_area']) {
         expect(claves).not.toContain(fuera);
       }
     }
@@ -203,13 +232,13 @@ describe('catalogo de campos contra la matriz del SPEC 7 con los cambios de la r
     expect(camposObligatoriosCliente('EQUIPO').map((c) => c.clave)).not.toContain('fecha_fabricacion');
   });
 
-  it('descripciones minimas adicionales: texto de la aduana, obligatorio; la aduana cuenta seis obligatorios (con requiere_rim)', () => {
+  it('descripciones minimas adicionales: texto de la aduana, obligatorio; la aduana cuenta ocho obligatorios (con requiere_rim, arancel e iva)', () => {
     const dm = getCampo('descripciones_minimas');
     expect(dm).toMatchObject({ etiqueta: 'Descripciones mínimas adicionales', grupo: 'A', tipoDato: 'texto_largo', escribible: true, subbloque: null });
     expect(dm?.maximo).toBeGreaterThanOrEqual(2000);
     for (const tipo of TIPOS_PRODUCTO) {
       expect(camposObligatoriosAduana(tipo).map((c) => c.clave).sort()).toEqual(
-        ['clasificacion_finalizada', 'descripciones_minimas', 'observaciones_aduana', 'partida_arancelaria', 'requiere_rim', 'restricciones'],
+        ['arancel', 'clasificacion_finalizada', 'descripciones_minimas', 'iva', 'observaciones_aduana', 'partida_arancelaria', 'requiere_rim', 'restricciones'],
       );
     }
     expect(getCampo('respuesta_area')).toMatchObject({ grupo: 'C', tipoDato: 'respuesta', subbloque: 'complementos_aduana' });

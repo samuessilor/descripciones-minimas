@@ -16,6 +16,7 @@ import { EncabezadoPagina } from '@/componentes/ui/pagina';
 import { TablaDatos } from '@/componentes/ui/tabla';
 import { puede } from '@/dominio/permisos';
 import { accesosDeAgencia, listarUsuariosAdmin, obtenerOrganizacionAdmin } from '@/server/politicas/administracion';
+import { diagnosticoBorradoOrganizacion } from '@/server/acciones/organizaciones';
 import { SinPermiso } from '@/componentes/ui/pantallas';
 import { contextoAdmin } from '../../_contexto';
 
@@ -28,13 +29,15 @@ export default async function AdminOrganizacion({ params }: { params: Promise<{ 
   const org = await obtenerOrganizacionAdmin(ctx.db, ctx.actor, id);
   if (!org) notFound();
 
-  const [personas, accesos] = await Promise.all([
+  const [personas, accesos, borrado] = await Promise.all([
     listarUsuariosAdmin(ctx.db, ctx.actor, { organizacionId: org.id }),
     org.tipo === 'agencia' ? accesosDeAgencia(ctx.db, ctx.actor, org.id) : Promise.resolve([]),
+    diagnosticoBorradoOrganizacion(ctx.db, org.id, org.nombre, org.tipo),
   ]);
   const esAgencia = org.tipo === 'agencia';
   const entregaClaves = puede(ctx.actor, 'administrar');
   const ahora = new Date();
+  const pendientesQuitados = borrado.cuentas.reduce((n, c) => n + c.pendientes, 0);
 
   return (
     <>
@@ -173,13 +176,17 @@ export default async function AdminOrganizacion({ params }: { params: Promise<{ 
             </div>
 
             <div className="space-y-3 border-t border-borde-suave pt-5">
-              {personas.length > 0 ? (
+              {borrado.impedimento ? (
                 <Aviso tipo="info" titulo="No se puede borrar">
-                  Tiene {plural(personas.length, 'cuenta', 'cuentas')} (activas o desactivadas): borrarla haría perder quién hizo cada cambio. Si ya no se usa, desactívala.
+                  {borrado.impedimento}
                 </Aviso>
               ) : (
                 <p className="max-w-[65ch] text-base text-tinta-suave">
-                  No tiene cuentas ni historial, así que puedes borrarla del todo (por ejemplo, una creada por error). Esto no se puede deshacer.
+                  {esAgencia && borrado.cuentas.length > 0
+                    ? `Se borra la agencia junto con ${borrado.cuentas.length === 1 ? 'su cuenta' : `sus ${borrado.cuentas.length} cuentas`} (${borrado.cuentas.map((c) => c.usuario ?? c.nombre).join(', ')}). `
+                    : 'No tiene cuentas ni historial, así que puedes borrarla del todo (por ejemplo, una creada por error). '}
+                  {pendientesQuitados > 0 ? `Tiene ${plural(pendientesQuitados, 'referencia pendiente', 'referencias pendientes')}: se le quitan y quedan sin esa agencia. ` : ''}
+                  Esto no se puede deshacer.
                 </p>
               )}
               <BotonAccion
@@ -187,10 +194,10 @@ export default async function AdminOrganizacion({ params }: { params: Promise<{ 
                 campos={{ organizacionId: org.id }}
                 variante="peligro"
                 tamano="md"
-                deshabilitado={personas.length > 0}
+                deshabilitado={borrado.impedimento !== null}
                 confirmar={{
                   titulo: `Borrar ${org.nombre}`,
-                  descripcion: 'Se borra la organización para siempre y deja de aparecer en las listas. Queda anotado en la auditoría. No se puede deshacer.',
+                  descripcion: `${esAgencia && borrado.cuentas.length > 0 ? `Se borra la agencia y ${borrado.cuentas.length === 1 ? 'su cuenta' : 'sus cuentas'} para siempre. ` : 'Se borra la organización para siempre y deja de aparecer en las listas. '}Queda anotado en la auditoría. No se puede deshacer.`,
                   confirmar: 'Borrar organización',
                   cancelar: 'Todavía no',
                   peligro: true,

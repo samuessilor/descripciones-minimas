@@ -1,8 +1,7 @@
 /**
  * Supervisora general: que puede y que NO puede, por las acciones de servidor y por las paginas de /admin.
  * Es igual al administrador en la administracion (resumen, usuarios, organizaciones, catalogos, auditoria), con DOS excepciones:
- * no tiene Parametros y no administra claves. Puede: crear cuentas (sin clave: quedan pendientes de entrega y avisan a los
- * administradores), editar, cambiar rol u organizacion, desactivar y reactivar, ver y cerrar sesiones, y todo lo operativo
+ * no tiene Parametros y no administra claves. Puede: crear cuentas (nacen con su clave, que solo ve el administrador, y le avisan), editar, cambiar rol u organizacion, desactivar y reactivar, y todo lo operativo
  * de las fichas. NO puede: restablecer claves, parametros, crear o promover administradores o supervisoras, ni tocar una
  * cuenta de administrador o de supervisora. El candado de «ultimo administrador» solo cuenta el rol `admin`.
  */
@@ -38,15 +37,14 @@ import { guardarCampo } from '@/server/acciones/guardar-campo';
 import { cambiarEstadoOrganizacion, crearOrganizacion, editarOrganizacion, retirarAccesoAgencia } from '@/server/acciones/organizaciones';
 import { fijarPartida } from '@/server/acciones/partida';
 import { ErrorAccion } from '@/server/acciones/resultado';
-import { cambiarOrganizacion, cambiarRol, crearCuenta, desactivarUsuario, reactivarUsuario, restablecerClave } from '@/server/acciones/usuarios';
-import { cerrarSesionesDeUsuario, editarUsuario } from '@/server/acciones/usuarios-admin';
+import { cambiarOrganizacion, cambiarRol, crearCuenta, desactivarUsuario, reactivarUsuario, restablecerClave, verClaveEntrega } from '@/server/acciones/usuarios';
+import { editarUsuario } from '@/server/acciones/usuarios-admin';
 import {
   accesosDeAgencia,
   candidatosReasignacion,
   contarAdminsActivos,
   fichasConVariasAgencias,
   listarOrganizacionesAdmin,
-  listarSesionesDeUsuario,
   listarUsuariosAdmin,
   obtenerUsuarioAdmin,
   pendientesDeUsuario,
@@ -70,6 +68,11 @@ beforeAll(async () => {
 afterAll(async () => {
   await e.c.cerrar();
 });
+
+/** Sesiones abiertas de una persona, leidas directo (la pantalla que las listaba se quito el 2026-11-10). */
+async function sesionesAbiertasDe(usuarioId: string) {
+  return e.db.select().from(session).where(eq(session.userId, usuarioId));
+}
 
 async function codigoDe(p: PromiseLike<unknown>): Promise<string> {
   try {
@@ -136,26 +139,26 @@ const avisosDeCuenta = (cuentaId: string) =>
   e.db.select().from(notificacion).where(and(eq(notificacion.tipo, 'cuenta_creada'), eq(notificacion.cuentaId, cuentaId)));
 
 describe('la supervisora puede: gestionar personas como el administrador (menos las claves)', () => {
-  it('crea una cuenta sin clave: sin credencial, pendiente de entrega y con aviso a cada administrador activo', async () => {
+  it('crea una cuenta con su clave (que ella no ve): el administrador la ve, y cada administrador activo recibe el aviso', async () => {
     const r = await crearCuenta(ctxAngie, { nombre: 'Cuenta de Angie', usuario: 'cuenta.angie', organizacionId: e.orgInterna, rol: 'solicitante', area: 'Consumibles' });
     expect(r).toMatchObject({ usuario: 'cuenta.angie', rol: 'solicitante', claveTemporal: null });
     // Ningun valor de la respuesta tiene la forma de una clave.
     expect(Object.values(r).filter((v) => typeof v === 'string' && FORMATO_CLAVE.test(v))).toEqual([]);
-    expect(await e.db.select().from(account).where(eq(account.userId, r.id))).toHaveLength(0);
+    expect(await e.db.select().from(account).where(eq(account.userId, r.id))).toHaveLength(1);
     expect(await filaUsuario(r.id)).toMatchObject({ creadoPor: angie.usuarioId, activo: true, rol: 'solicitante', area: 'Consumibles' });
     const [aud] = await e.db.select().from(auditoria).where(and(eq(auditoria.accion, 'crear_cuenta'), eq(auditoria.entidadId, r.id)));
     expect(aud).toMatchObject({ usuarioId: angie.usuarioId });
-    expect(aud?.detalle).toMatchObject({ conClave: false });
+    expect(aud?.detalle).toMatchObject({ conClave: true });
 
     const avisos = await avisosDeCuenta(r.id);
     expect(avisos.map((a) => a.usuarioId)).toEqual([e.admin.usuarioId]);
-    expect(avisos[0]!.titulo).toContain('genera y entrega su clave');
-    expect((await listarUsuariosAdmin(e.db, angie, { q: 'cuenta.angie' }))[0]).toMatchObject({ id: r.id, sinClave: true });
+    expect(avisos[0]!.titulo).toContain('revisa su clave y entrégala');
+    expect((await listarUsuariosAdmin(e.db, angie, { q: 'cuenta.angie' }))[0]).toMatchObject({ id: r.id, sinClave: false });
 
-    // El administrador la entrega con Restablecer contraseña: ahora si hay clave y el aviso queda resuelto.
-    const entrega = await restablecerClave(e.ctx(e.admin), { usuarioId: r.id });
-    expect(entrega.claveTemporal).toMatch(FORMATO_CLAVE);
-    expect(await e.db.select().from(account).where(eq(account.userId, r.id))).toHaveLength(1);
+    // Solo el administrador la ve; al verla el aviso queda atendido.
+    expect(await codigoDe(verClaveEntrega(ctxAngie, { usuarioId: r.id }))).toBe('SIN_PERMISO');
+    const vista = await verClaveEntrega(e.ctx(e.admin), { usuarioId: r.id });
+    expect(vista.clave).toMatch(FORMATO_CLAVE);
     expect((await avisosDeCuenta(r.id)).every((a) => a.leidaEn !== null)).toBe(true);
   });
 
@@ -209,18 +212,11 @@ describe('la supervisora puede: gestionar personas como el administrador (menos 
     }
   });
 
-  it('ve y cierra sesiones, ve pendientes y candidatos, desactiva y reactiva', async () => {
+  it('ve pendientes y candidatos, desactiva (cierra sus sesiones) y reactiva', async () => {
     const { id } = await crearCuenta(ctxAngie, { nombre: 'Con Sesiones', usuario: 'con.sesiones', organizacionId: e.orgInterna, rol: 'lector' });
-    const una = await abrirSesion(id);
-    await abrirSesion(id);
-    expect(await listarSesionesDeUsuario(e.db, angie, id)).toHaveLength(2);
     expect(await pendientesDeUsuario(e.db, angie, id)).toEqual([]);
     expect((await candidatosReasignacion(e.db, angie, id)).length).toBeGreaterThan(0);
     expect(await contarAdminsActivos(e.db, angie)).toBeGreaterThanOrEqual(1);
-
-    expect(await cerrarSesionesDeUsuario(ctxAngie, { usuarioId: id, sesionId: una })).toEqual({ cerradas: 1 });
-    expect(await listarSesionesDeUsuario(e.db, angie, id)).toHaveLength(1);
-    expect(await cerrarSesionesDeUsuario(ctxAngie, { usuarioId: id })).toEqual({ cerradas: 1 });
 
     await abrirSesion(id);
     expect(await desactivarUsuario(ctxAngie, { usuarioId: id })).toMatchObject({ sesionesCerradas: 1, reasignadas: 0 });
@@ -246,7 +242,7 @@ describe('la supervisora NO puede: claves, parametros, ni crear o tocar administ
     expect(await codigoDe(restablecerClave(ctxAngie, { usuarioId: objetivo }))).toBe('SIN_PERMISO');
     const [credDespues] = await e.db.select().from(account).where(and(eq(account.userId, objetivo), eq(account.providerId, 'credential')));
     expect(credDespues?.password).toBe(credAntes?.password);
-    expect((await listarSesionesDeUsuario(e.db, angie, objetivo)).length).toBeGreaterThanOrEqual(1);
+    expect((await sesionesAbiertasDe(objetivo)).length).toBeGreaterThanOrEqual(1);
     expect(await e.db.select().from(auditoria).where(and(eq(auditoria.accion, 'restablecer_clave'), eq(auditoria.usuarioId, angie.usuarioId)))).toHaveLength(0);
   });
 
@@ -275,19 +271,17 @@ describe('la supervisora NO puede: claves, parametros, ni crear o tocar administ
         ['cambiar organizacion', () => cambiarOrganizacion(ctxAngie, { usuarioId: objetivo.usuarioId, organizacionId: e.orgInterna })],
         ['desactivar', () => desactivarUsuario(ctxAngie, { usuarioId: objetivo.usuarioId })],
         ['reactivar', () => reactivarUsuario(ctxAngie, { usuarioId: objetivo.usuarioId })],
-        ['cerrar sesiones', () => cerrarSesionesDeUsuario(ctxAngie, { usuarioId: objetivo.usuarioId })],
         ['restablecer clave', () => restablecerClave(ctxAngie, { usuarioId: objetivo.usuarioId })],
       ];
       for (const [nombre, p] of intentos) expect(await codigoDe(p()), `${objetivo.rol}: ${nombre}`).toBe('SIN_PERMISO');
-      expect(await codigoDe(listarSesionesDeUsuario(e.db, angie, objetivo.usuarioId)), `${objetivo.rol}: ver sesiones`).toBe('SIN_PERMISO');
       const despues = await filaUsuario(objetivo.usuarioId);
       expect(despues).toMatchObject({ nombre: antes.nombre, rol: antes.rol, activo: true, organizacionId: antes.organizacionId, area: antes.area });
       const [credDespues] = await e.db.select().from(account).where(and(eq(account.userId, objetivo.usuarioId), eq(account.providerId, 'credential')));
       expect(credDespues?.password).toBe(credAntes?.password);
     }
     // Las sesiones del administrador y de la otra supervisora siguen abiertas.
-    expect((await listarSesionesDeUsuario(e.db, e.admin, e.admin.usuarioId)).length).toBeGreaterThanOrEqual(1);
-    expect((await listarSesionesDeUsuario(e.db, e.admin, otra.usuarioId)).length).toBeGreaterThanOrEqual(1);
+    expect((await sesionesAbiertasDe(e.admin.usuarioId)).length).toBeGreaterThanOrEqual(1);
+    expect((await sesionesAbiertasDe(otra.usuarioId)).length).toBeGreaterThanOrEqual(1);
     expect(await filaUsuario(e.admin.usuarioId)).toMatchObject({ rol: 'admin', activo: true, nombre: 'Ana Admin' });
   });
 
@@ -302,7 +296,6 @@ describe('la supervisora NO puede: claves, parametros, ni crear o tocar administ
     for (const actor of [e.edward, e.brian, e.lector]) {
       expect(await codigoDe(crearCuenta(e.ctx(actor), { nombre: 'X', usuario: 'xx-sup', organizacionId: e.orgInterna, rol: 'lector' })), actor.rol).toBe('SIN_PERMISO');
       expect(await codigoDe(cambiarEstadoOrganizacion(e.ctx(actor), { organizacionId: e.orgB, activa: false })), actor.rol).toBe('SIN_PERMISO');
-      expect(await codigoDe(listarSesionesDeUsuario(e.db, actor, e.charles.usuarioId)), actor.rol).toBe('SIN_PERMISO');
     }
   });
 });

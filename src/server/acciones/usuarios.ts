@@ -7,8 +7,8 @@
  */
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { account, asignacion, notificacion, organizacion, usuario } from '@/db/esquema';
-import type { Tx } from '@/db/tipos';
+import { account, asignacion, claveEntrega, notificacion, organizacion, usuario } from '@/db/esquema';
+import type { Ejecutor, Tx } from '@/db/tipos';
 import { exigeArea, MENSAJE_AREA_OBLIGATORIA } from '@/dominio/areas';
 import { correoSinCorreo, normalizarUsuario, USUARIO_AYUDA, validarUsuario } from '@/dominio/credenciales';
 import { ROLES, puede, validarRolOrganizacion, type Rol, type TipoOrganizacion } from '@/dominio/permisos';
@@ -16,11 +16,13 @@ import { nombreSinMarca } from '@/dominio/colaboracion';
 import { auditar } from '../auditoria';
 import { crearNotificacion } from '../notificaciones/crear';
 import { generarClave, hashearClave } from '../claves';
+import { descifrarClave, guardarClaveEntrega } from '../clave-entrega';
 import { avisarAsignacionExistente } from './asignaciones';
 import { revocarSesionesDeUsuario } from '../sesiones';
 import { ahoraDe, type Contexto } from '../politicas/actor';
 import { exigir, exigirCuentaTocable, exigirRolAsignable } from '../politicas/exigir';
 import { ErrorAccion, esViolacionUnica } from './resultado';
+import { filasDe, llamarBorrado, mensajeDeBase } from '../sql';
 import { areaUsuario, parsear, textoLimpio } from './validacion';
 
 /** Clave del candado de la guarda «no dejar la plataforma sin administrador activo». */
@@ -135,9 +137,9 @@ export interface ResultadoCrearCuenta {
   rol: Rol;
   organizacionTipo: TipoOrganizacion;
   /**
-   * Se muestra UNA vez a quien crea la cuenta; en la base solo queda su hash. Solo el administrador la recibe: si crea
-   * la supervisora, el servidor no genera ninguna (`null`) y la cuenta queda sin credencial («Pendiente de entrega»)
-   * hasta que el administrador la restablezca.
+   * Se muestra UNA vez a quien crea la cuenta. En la base queda su hash y una copia CIFRADA que solo el administrador puede volver
+   * a ver (`verClaveEntrega`). Solo el administrador la recibe en pantalla: si crea la supervisora (`null`), la cuenta nace igual con
+   * su contrasena y el administrador la ve y la entrega desde la ficha de la cuenta.
    */
   claveTemporal: string | null;
 }
@@ -153,11 +155,18 @@ interface CuentaNueva {
 }
 
 /**
- * Inserta la cuenta dentro de la transaccion de quien llama: usuario, su credencial si hay clave (`hash`), auditoria y,
- * si quien la crea no es administrador, el aviso `cuenta_creada` a todos los administradores activos para que generen y
- * entreguen la clave. No genera ni devuelve ninguna clave.
+ * Inserta la cuenta dentro de la transaccion de quien llama: usuario, su credencial (`hash`), la copia cifrada de la clave de
+ * entrega (`claveEntregada`, solo la ve el administrador), auditoria y, si quien la crea no es administrador, el aviso
+ * `cuenta_creada` a todos los administradores activos para que revisen la clave y la entreguen. No devuelve ninguna clave.
  */
-export async function insertarCuenta(ctx: Contexto, tx: Tx, c: CuentaNueva, hash: string | null, ahora: Date): Promise<string> {
+export async function insertarCuenta(
+  ctx: Contexto,
+  tx: Tx,
+  c: CuentaNueva,
+  hash: string | null,
+  ahora: Date,
+  claveEntregada: string | null = null,
+): Promise<string> {
   // El usuario se revisa primero: sin correo propio el correo reservado `usuario@sin-correo.invalid` choca igual y el
   // mensaje diria «correo» cuando lo repetido es el usuario.
   const [yaUsuario] = await tx.select({ id: usuario.id }).from(usuario).where(eq(usuario.username, c.usuario)).limit(1);
@@ -183,6 +192,7 @@ export async function insertarCuenta(ctx: Contexto, tx: Tx, c: CuentaNueva, hash
     .returning({ id: usuario.id });
   if (!u) throw new ErrorAccion('ERROR_INTERNO', 'No se pudo crear la cuenta.');
   if (hash) await tx.insert(account).values({ accountId: u.id, providerId: 'credential', userId: u.id, password: hash, createdAt: ahora, updatedAt: ahora });
+  if (hash && claveEntregada) await guardarClaveEntrega(tx, u.id, claveEntregada, ahora);
   await auditar(tx, {
     usuarioId: ctx.actor.usuarioId,
     accion: 'crear_cuenta',
@@ -200,7 +210,7 @@ export async function insertarCuenta(ctx: Contexto, tx: Tx, c: CuentaNueva, hash
         tipo: 'cuenta_creada',
         referenciaId: null,
         cuentaId: u.id,
-        titulo: `${nombreSinMarca(ctx.actor.nombre)} creó la cuenta ${c.usuario} de ${c.organizacion.nombre}: genera y entrega su clave`,
+        titulo: `${nombreSinMarca(ctx.actor.nombre)} creó la cuenta ${c.usuario} de ${c.organizacion.nombre}: revisa su clave y entrégala`,
         creadaEn: ahora,
       });
     }
@@ -219,10 +229,10 @@ export function traducirChoqueCuenta(err: unknown, conCorreoPropio: boolean): un
 }
 
 /**
- * Crea una cuenta. SIN registro abierto: la crea el administrador o la supervisora general. Si la crea el administrador,
- * la contrasena temporal se genera aqui, se guarda solo su hash y vuelve en la respuesta para mostrarla una vez. Si la
- * crea la supervisora no se genera ninguna: la cuenta queda sin credencial (no puede entrar), todos los administradores
- * activos reciben el aviso `cuenta_creada` y uno de ellos la genera con `restablecerClave`.
+ * Crea una cuenta. SIN registro abierto: la crea el administrador o la supervisora general. La contrasena temporal se genera
+ * SIEMPRE aqui: se guarda su hash (la credencial) y una copia cifrada que solo el administrador puede volver a ver. Si la crea el
+ * administrador, vuelve en la respuesta para mostrarla una vez; si la crea la supervisora no la recibe (`null`) y todos los
+ * administradores activos reciben el aviso `cuenta_creada`: abren la cuenta, ven su usuario y contrasena y se la entregan.
  */
 export async function crearCuenta(ctx: Contexto, entrada: unknown): Promise<ResultadoCrearCuenta> {
   exigir(ctx.actor, 'supervisar');
@@ -238,11 +248,12 @@ export async function crearCuenta(ctx: Contexto, entrada: unknown): Promise<Resu
     throw new ErrorAccion('VALIDACION', 'Revisa los datos marcados.', { problemas: [{ ruta: 'area', mensaje: MENSAJE_AREA_OBLIGATORIA }] });
   }
 
-  const claveTemporal = puede(ctx.actor, 'administrar') ? generarClave() : null;
-  const hash = claveTemporal ? await hashearClave(claveTemporal) : null;
+  const generada = generarClave();
+  const hash = await hashearClave(generada);
+  const claveTemporal = puede(ctx.actor, 'administrar') ? generada : null;
   try {
     return await ctx.db.transaction(async (tx) => {
-      const id = await insertarCuenta(ctx, tx, { ...e, organizacion: { id: org.id, nombre: org.nombre, tipo } }, hash, ahora);
+      const id = await insertarCuenta(ctx, tx, { ...e, organizacion: { id: org.id, nombre: org.nombre, tipo } }, hash, ahora, generada);
       return { id, usuario: e.usuario, nombre: e.nombre, rol: e.rol, organizacionTipo: tipo, claveTemporal };
     });
   } catch (err) {
@@ -251,9 +262,8 @@ export async function crearCuenta(ctx: Contexto, entrada: unknown): Promise<Resu
 }
 
 /**
- * Restablece la contrasena de OTRA cuenta: genera una temporal, cierra todas sus sesiones y la devuelve para
- * entregarla a mano. Nadie puede leer la contrasena actual (solo existe su hash). Solo el administrador: es la unica
- * forma de dar una clave, incluida la de las cuentas que creo la supervisora.
+ * Restablece la contrasena de OTRA cuenta: genera una temporal, cierra todas sus sesiones, la devuelve para entregarla a mano y
+ * deja su copia cifrada para que el administrador pueda volver a verla (`verClaveEntrega`). Solo el administrador.
  */
 export async function restablecerClave(ctx: Contexto, entrada: unknown): Promise<{ usuario: string; nombre: string; claveTemporal: string; sesionesCerradas: number }> {
   exigir(ctx.actor, 'administrar');
@@ -276,6 +286,7 @@ export async function restablecerClave(ctx: Contexto, entrada: unknown): Promise
     } else {
       await tx.insert(account).values({ accountId: u.id, providerId: 'credential', userId: u.id, password: hash, createdAt: ahora, updatedAt: ahora });
     }
+    await guardarClaveEntrega(tx, u.id, claveTemporal, ahora);
     // Ya no se obliga a cambiarla; se apaga el indicador por si la cuenta lo traia activo de antes de esta politica.
     await tx.update(usuario).set({ debeCambiarClave: false, actualizadoEn: ahora }).where(eq(usuario.id, u.id));
     const sesionesCerradas = await revocarSesionesDeUsuario(tx, u.id);
@@ -294,6 +305,49 @@ export async function restablecerClave(ctx: Contexto, entrada: unknown): Promise
       creadoEn: ahora,
     });
     return { usuario: u.username ?? u.email, nombre: u.nombre, claveTemporal, sesionesCerradas };
+  });
+}
+
+export interface ClaveEntregada {
+  usuario: string;
+  nombre: string;
+  /** La contrasena que se le entrego, o `null` si ya no esta disponible (la cambio la persona, o la cuenta se creo fuera de la plataforma). */
+  clave: string | null;
+  /** Desde cuando es la de entrega. */
+  desde: string | null;
+}
+
+/**
+ * El administrador vuelve a ver la contrasena que se le entrego a una cuenta (usuario + contrasena). Solo la de entrega: si la
+ * persona ya la cambio, o la cuenta se creo fuera de la plataforma, no hay copia y se restablece para generar una nueva. Cada vez que
+ * se mira queda una fila en la auditoria, y el aviso de «cuenta creada» de esa cuenta se da por atendido.
+ */
+export async function verClaveEntrega(ctx: Contexto, entrada: unknown): Promise<ClaveEntregada> {
+  exigir(ctx.actor, 'administrar');
+  const { usuarioId } = parsear(z.object({ usuarioId: z.uuid() }), entrada);
+  const ahora = ahoraDe(ctx);
+  return ctx.db.transaction(async (tx) => {
+    const [u] = await tx.select().from(usuario).where(eq(usuario.id, usuarioId)).limit(1);
+    if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
+    exigirCuentaTocable(ctx.actor, u.rol);
+    const [fila] = await tx.select().from(claveEntrega).where(eq(claveEntrega.usuarioId, u.id)).limit(1);
+    const clave = fila ? descifrarClave(fila.cifrada, u.id) : null;
+    if (clave) {
+      await tx
+        .update(notificacion)
+        .set({ leidaEn: ahora })
+        .where(and(eq(notificacion.tipo, 'cuenta_creada'), eq(notificacion.cuentaId, u.id), isNull(notificacion.leidaEn)));
+    }
+    await auditar(tx, {
+      usuarioId: ctx.actor.usuarioId,
+      accion: 'ver_clave',
+      entidad: 'usuario',
+      entidadId: u.id,
+      detalle: { disponible: clave !== null },
+      ip: ctx.ip,
+      creadoEn: ahora,
+    });
+    return { usuario: u.username ?? u.email, nombre: u.nombre, clave, desde: clave && fila ? fila.creadaEn.toISOString() : null };
   });
 }
 
@@ -480,4 +534,93 @@ export async function cambiarOrganizacion(ctx: Contexto, entrada: unknown): Prom
     });
   });
   return { ok: true };
+}
+
+// ---- Eliminar una cuenta ----------------------------------------------------------------------------
+
+/** Lo que se sabe de una cuenta antes de borrarla: lo que se llevaria y lo que lo impide. La usa la pagina de la cuenta y el nucleo. */
+export interface DiagnosticoBorradoCuenta {
+  /** Dejo trabajo propio (historial, comentarios, fotos, fichas creadas o cerradas): borrarla perderia quien lo hizo. */
+  conTrabajo: boolean;
+  /** Referencias que tiene pendientes ahora; al borrarla se le quitan. */
+  pendientes: number;
+  /** Es la unica cuenta de su agencia: borrarla borra tambien la agencia. */
+  borraLaAgencia: boolean;
+}
+
+export async function diagnosticoBorradoCuenta(ej: Ejecutor, usuarioId: string): Promise<DiagnosticoBorradoCuenta> {
+  const [f] = filasDe<{ con_trabajo: boolean; pendientes: number; otros: number; tipo: string }>(
+    await ej.execute(sql`
+      select public.usuario_tiene_trabajo(u.id) as con_trabajo,
+             (select count(*)::int from asignacion a where a.a_usuario_id = u.id and a.estado in ('pendiente','en_curso')) as pendientes,
+             (select count(*)::int from usuario o where o.organizacion_id = u.organizacion_id and o.id <> u.id) as otros,
+             u.organizacion_tipo as tipo
+        from usuario u where u.id = ${usuarioId}::uuid`),
+  );
+  if (!f) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
+  return { conTrabajo: f.con_trabajo, pendientes: Number(f.pendientes), borraLaAgencia: f.tipo === 'agencia' && Number(f.otros) === 0 };
+}
+
+/**
+ * Elimina una cuenta (reunion 2026-11-10). Solo si NO dejo trabajo propio: el historial, los comentarios y las fichas la
+ * referencian y borrarla los dejaria sin saber de quien eran; ahi se desactiva. Lo operativo (pendientes, avisos, sesiones,
+ * clave) se va con ella y sus filas de auditoria se conservan con el usuario anotado. Si es la unica cuenta de una agencia,
+ * la agencia se borra tambien. No se borra a uno mismo, ni al unico administrador activo, y la supervisora no toca cuentas de
+ * administrador ni de supervisora.
+ */
+export async function eliminarCuenta(ctx: Contexto, entrada: unknown): Promise<{ ok: true; nombre: string; usuario: string; agenciaEliminada: boolean }> {
+  exigir(ctx.actor, 'supervisar');
+  const { usuarioId } = parsear(z.object({ usuarioId: z.uuid() }), entrada);
+  const ahora = ahoraDe(ctx);
+  return ctx.db.transaction(async (tx) => {
+    await serializarGuardaUltimoAdmin(tx);
+    const [u] = await tx.select().from(usuario).where(eq(usuario.id, usuarioId)).for('update').limit(1);
+    if (!u) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos ese usuario.');
+    exigirCuentaTocable(ctx.actor, u.rol);
+    if (u.id === ctx.actor.usuarioId) throw new ErrorAccion('VALIDACION', 'No puedes eliminar tu propia cuenta. Pídele a otro administrador que lo haga.');
+    if (u.rol === 'admin' && u.activo) {
+      const otros = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(usuario)
+        .where(and(eq(usuario.rol, 'admin'), eq(usuario.activo, true), sql`${usuario.id} <> ${u.id}`));
+      if ((otros[0]?.n ?? 0) === 0) throw new ErrorAccion('VALIDACION', 'No puedes eliminar al único administrador activo.');
+    }
+    const [org] = await tx.select().from(organizacion).where(eq(organizacion.id, u.organizacionId)).limit(1);
+    const d = await diagnosticoBorradoCuenta(tx, u.id);
+    const nombreCuenta = u.username ?? u.email;
+    if (d.conTrabajo) {
+      throw new ErrorAccion(
+        'VALIDACION',
+        `${nombreCuenta} ya trabajó en referencias (historial, comentarios o fichas que creó o cerró): borrarla perdería quién lo hizo. Desactívala en su lugar.`,
+        { conTrabajo: true },
+      );
+    }
+    try {
+      // La unica cuenta de una agencia se va con la agencia (la funcion de la organizacion borra sus cuentas y la organizacion).
+      if (d.borraLaAgencia && org) await llamarBorrado(tx, 'eliminar_organizacion', org.id);
+      else await llamarBorrado(tx, 'eliminar_usuario', u.id);
+    } catch (err) {
+      if (mensajeDeBase(err).includes('usuario_con_trabajo') || mensajeDeBase(err).includes('organizacion_con_historial')) {
+        throw new ErrorAccion('VALIDACION', `${nombreCuenta} ya trabajó en referencias: borrarla perdería quién lo hizo. Desactívala en su lugar.`);
+      }
+      throw err;
+    }
+    await auditar(tx, {
+      usuarioId: ctx.actor.usuarioId,
+      accion: 'eliminar_cuenta',
+      entidad: 'usuario',
+      entidadId: u.id,
+      detalle: {
+        usuario: nombreCuenta,
+        nombre: u.nombre,
+        rol: u.rol,
+        organizacion: org?.nombre ?? null,
+        agenciaEliminada: d.borraLaAgencia,
+        pendientesQuitados: d.pendientes,
+      },
+      ip: ctx.ip,
+      creadoEn: ahora,
+    });
+    return { ok: true as const, nombre: u.nombre, usuario: nombreCuenta, agenciaEliminada: d.borraLaAgencia };
+  });
 }

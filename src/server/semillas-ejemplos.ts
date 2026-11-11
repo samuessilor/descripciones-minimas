@@ -324,9 +324,11 @@ async function pedirInformacion(db: Db, aduana: Actor, id: string, solicitud: st
   await guardar(db, aduana, id, 'descripciones_minimas', solicitud);
 }
 
-/** La aduana no necesita nada mas: marca «No es necesario por ahora / no aplica», escribe la restriccion y cierra. */
+/** La aduana no necesita nada mas: elige arancel e IVA, marca «No es necesario por ahora / no aplica», escribe la restriccion y cierra. */
 async function cerrar(db: Db, aduana: Actor, id: string, partidaCodigo: string): Promise<void> {
   await partida(db, aduana, id, partidaCodigo);
+  await guardar(db, aduana, id, 'arancel', '5%');
+  await guardar(db, aduana, id, 'iva', '19%');
   await guardar(db, aduana, id, 'descripciones_minimas', { no_aplica: true });
   await guardar(db, aduana, id, 'restricciones', 'Sin restricciones (siempre que la mercancía sea nueva).');
   await guardar(db, aduana, id, 'observaciones_aduana', { no_aplica: true });

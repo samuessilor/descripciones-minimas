@@ -24,9 +24,9 @@ export const COLUMNAS_BASE: readonly ColumnaBase[] = [
   { clave: 'dias', encabezado: 'Días en gestión', ancho: 12, tipo: 'numero' },
   { clave: 'creada_por', encabezado: 'Creada por', ancho: 24, tipo: 'texto' },
   { clave: 'descripcion_factura', encabezado: 'Nombre comercial', ancho: 40, tipo: 'texto_largo' },
-  { clave: 'uso', encabezado: 'Uso del producto', ancho: 40, tipo: 'texto_largo' },
+  { clave: 'uso', encabezado: 'Uso/Función específica del producto', ancho: 40, tipo: 'texto_largo' },
   { clave: 'funciones', encabezado: 'Función de la máquina', ancho: 40, tipo: 'texto_largo' },
-  { clave: 'unidad_medida', encabezado: 'Unidad de medida', ancho: 16, tipo: 'texto' },
+  { clave: 'unidad_medida', encabezado: 'Unidad de medida según factura', ancho: 16, tipo: 'texto' },
   { clave: 'pais_origen', encabezado: 'País de origen', ancho: 18, tipo: 'texto' },
   { clave: 'fabricante', encabezado: 'Fabricante', ancho: 24, tipo: 'texto' },
   { clave: 'proveedor', encabezado: 'Proveedor', ancho: 24, tipo: 'texto' },
@@ -44,6 +44,8 @@ export const COLUMNAS_BASE: readonly ColumnaBase[] = [
   // Partida, descripciones minimas y restricciones en el orden del F-ADI-30.
   // Solo la partida FINAL (ficha clasificada), igual que el listado (L1); en las pendientes queda en blanco.
   { clave: 'partida', encabezado: 'Partida arancelaria final', ancho: 18, tipo: 'texto' },
+  { clave: 'arancel', encabezado: 'Arancel', ancho: 10, tipo: 'texto' },
+  { clave: 'iva', encabezado: 'IVA', ancho: 10, tipo: 'texto' },
   { clave: 'descripciones_minimas', encabezado: 'Descripciones mínimas adicionales', ancho: 60, tipo: 'texto_largo' },
   { clave: 'respuesta_area', encabezado: 'Respuesta del área', ancho: 50, tipo: 'texto_largo' },
   { clave: 'restricciones', encabezado: 'Restricciones', ancho: 50, tipo: 'texto_largo' },

@@ -221,6 +221,8 @@ function construirFila(
     fotos: c.fotos > 0 ? `Sí (${c.fotos})` : 'No',
     informacion_adicional: texto('informacion_adicional'),
     partida: estado === 'CLASIFICADA' ? f.partida : null,
+    arancel: texto('arancel'),
+    iva: texto('iva'),
     descripciones_minimas: texto('descripciones_minimas'),
     respuesta_area: texto('respuesta_area'),
     restricciones: texto('restricciones'),

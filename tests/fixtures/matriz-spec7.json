@@ -1,5 +1,5 @@
 {
-  "_nota": "Transcripcion independiente de la tabla de la seccion 7 del SPEC (columnas Insumo, Repuesto, Equipo/Maq., Accesorio, Montura) con los cambios de la reunion con el area del 2026-10-29: Montura como Accesorio salvo la maquina donde se instala; descripcion, uso, funciones y unidad de medida obligatorios en todos los tipos; aspecto fisico, fabricante, proveedor y tipo de empaque obligatorios; maquina donde se instala obligatoria donde aplica; RIM (fila 30) en lugar de valor unitario y cantidad a radicar; observaciones obligatorias con «No aplica»; respuesta del area (fila 32, regla propia); clasificadores retirados. Reunion 2026-11: tipo de empaque es lista fija (Bidon, Paquete, Unidad) sin «No aplica»; cantidad_empaque (fila 34, obligatoria solo con Bidon o Paquete, por soloSi); requiere_rim pasa a la aduana (grupo A); cantidad_rim retirada (esta en retiradas); fecha_fabricacion pasa a detalle y es P solo en EQUIPO. O=obligatorio para verde, P=opcional visible, -=oculto. Las filas 'auto'/'calc' se tratan como P y la fila 5 (tipo) como O porque se pide al crear. Reunion 2026-11-09: pais_origen, fabricante y proveedor pasan a producto (fabricante antes que proveedor); reembolsable (fila 35) es lista fija obligatoria en todos los tipos, despues de proveedor; descripcion_factura queda inmediatamente despues de nombre_producto en la pantalla. Sirve de tabla de pruebas contra src/dominio/campos.ts (riesgo R-06).",
+  "_nota": "Transcripcion independiente de la tabla de la seccion 7 del SPEC (columnas Insumo, Repuesto, Equipo/Maq., Accesorio, Montura) con los cambios de la reunion con el area del 2026-10-29: Montura como Accesorio salvo la maquina donde se instala; descripcion, uso, funciones y unidad de medida obligatorios en todos los tipos; aspecto fisico, fabricante, proveedor y tipo de empaque obligatorios; maquina donde se instala obligatoria donde aplica; RIM (fila 30) en lugar de valor unitario y cantidad a radicar; observaciones obligatorias con «No aplica»; respuesta del area (fila 32, regla propia); clasificadores retirados. Reunion 2026-11: tipo de empaque es lista fija (Bidon, Paquete, Unidad) sin «No aplica»; cantidad_empaque (fila 34, obligatoria solo con Bidon o Paquete, por soloSi); requiere_rim pasa a la aduana (grupo A); cantidad_rim retirada (esta en retiradas); fecha_fabricacion pasa a detalle y es P solo en EQUIPO. O=obligatorio para verde, P=opcional visible, -=oculto. Las filas 'auto'/'calc' se tratan como P y la fila 5 (tipo) como O porque se pide al crear. Reunion 2026-11-09: pais_origen, fabricante y proveedor pasan a producto (fabricante antes que proveedor); reembolsable (fila 35) es lista fija obligatoria en todos los tipos, despues de proveedor; descripcion_factura queda inmediatamente despues de nombre_producto en la pantalla. Reunion 2026-11-10: Producto = codigo, descripcion segun factura, tipo, area, pais, unidad, proveedor, reembolsable; Detalle = nombre comercial, uso, maquina de destino, funciones, fabricante y el resto; la aduana agrega arancel (fila 36) e iva (fila 37) despues de la partida. Sirve de tabla de pruebas contra src/dominio/campos.ts (riesgo R-06).",
   "filas": [
     { "fila": 1,  "clave": "codigo",                   "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
     { "fila": 2,  "clave": "nombre_producto",          "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
@@ -7,12 +7,12 @@
     { "fila": 4,  "clave": "dias_gestion",             "seccion": "producto",         "obl": ["P","P","P","P","P"], "grupo": "S", "conf": "F" },
     { "fila": 5,  "clave": "tipo_producto",            "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
     { "fila": 33, "clave": "area_responsable",         "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
-    { "fila": 6,  "clave": "descripcion_factura",      "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
-    { "fila": 7,  "clave": "uso",                      "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
-    { "fila": 8,  "clave": "funciones",                "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 6,  "clave": "descripcion_factura",      "seccion": "detalle",          "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 7,  "clave": "uso",                      "seccion": "detalle",          "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 8,  "clave": "funciones",                "seccion": "detalle",          "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
     { "fila": 9,  "clave": "unidad_medida",            "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
     { "fila": 13, "clave": "pais_origen",              "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
-    { "fila": 14, "clave": "fabricante",               "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
+    { "fila": 14, "clave": "fabricante",               "seccion": "detalle",          "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
     { "fila": 15, "clave": "proveedor",                "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "F" },
     { "fila": 35, "clave": "reembolsable",             "seccion": "producto",         "obl": ["O","O","O","O","O"], "grupo": "C", "conf": "S" },
     { "fila": 10, "clave": "materia_constitutiva",     "seccion": "detalle",          "obl": ["O","O","P","O","O"], "grupo": "C", "conf": "S" },
@@ -26,6 +26,8 @@
     { "fila": 21, "clave": "adjuntos",                 "seccion": "especificaciones", "obl": ["P","P","P","P","P"], "grupo": "C", "conf": "F" },
     { "fila": 22, "clave": "informacion_adicional",    "seccion": "especificaciones", "obl": ["P","P","P","P","P"], "grupo": "C", "conf": "F" },
     { "fila": 23, "clave": "partida_arancelaria",      "seccion": "especificaciones", "obl": ["O","O","O","O","O"], "grupo": "A", "conf": "F" },
+    { "fila": 36, "clave": "arancel",                  "seccion": "especificaciones", "obl": ["O","O","O","O","O"], "grupo": "A", "conf": "F" },
+    { "fila": 37, "clave": "iva",                      "seccion": "especificaciones", "obl": ["O","O","O","O","O"], "grupo": "A", "conf": "F" },
     { "fila": 24, "clave": "descripciones_minimas",    "seccion": "especificaciones", "obl": ["O","O","O","O","O"], "grupo": "A", "conf": "F" },
     { "fila": 25, "clave": "restricciones",            "seccion": "especificaciones", "obl": ["O","O","O","O","O"], "grupo": "A", "conf": "F" },
     { "fila": 26, "clave": "observaciones_aduana",     "seccion": "especificaciones", "obl": ["O","O","O","O","O"], "grupo": "A", "conf": "F" },
@@ -35,9 +37,9 @@
   "retiradas": ["cantidad_rim", "valor_unitario", "cantidad_a_radicar", "primer_clasificador", "segundo_clasificador"],
   "no_aplica": ["aspecto_fisico", "descripciones_minimas", "restricciones", "observaciones_aduana"],
   "orden_pantalla": {
-    "producto": ["codigo", "nombre_producto", "descripcion_factura", "fecha_solicitud", "dias_gestion", "tipo_producto", "area_responsable", "uso", "funciones", "unidad_medida", "pais_origen", "fabricante", "proveedor", "reembolsable"],
-    "detalle": ["materia_constitutiva", "aspecto_fisico", "marca", "tipo_empaque", "cantidad_empaque", "maquina_destino", "fecha_fabricacion"],
-    "especificaciones": ["requiere_rim", "adjuntos", "partida_arancelaria", "descripciones_minimas", "informacion_adicional", "restricciones", "clasificacion_finalizada"],
+    "producto": ["codigo", "nombre_producto", "tipo_producto", "area_responsable", "pais_origen", "unidad_medida", "proveedor", "reembolsable", "fecha_solicitud", "dias_gestion"],
+    "detalle": ["descripcion_factura", "uso", "maquina_destino", "funciones", "fabricante", "materia_constitutiva", "aspecto_fisico", "marca", "tipo_empaque", "cantidad_empaque", "fecha_fabricacion"],
+    "especificaciones": ["requiere_rim", "adjuntos", "partida_arancelaria", "arancel", "iva", "descripciones_minimas", "informacion_adicional", "restricciones", "clasificacion_finalizada"],
     "complementos_aduana": ["observaciones_aduana", "respuesta_area"]
   }
 }

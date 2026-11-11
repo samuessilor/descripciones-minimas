@@ -8,9 +8,9 @@
 import { revalidatePath } from 'next/cache';
 import { activarItemCatalogo, guardarItemCatalogo, guardarPartida, guardarRestriccion, moverItemCatalogo } from '@/server/acciones/catalogos-admin';
 import { cambiarEstadoOrganizacion, crearAgencia, crearOrganizacion, editarOrganizacion, eliminarOrganizacion, retirarAccesoAgencia } from '@/server/acciones/organizaciones';
-import { comoResultado } from '@/server/acciones/resultado';
-import { cambiarOrganizacion, cambiarRol, crearCuenta, desactivarUsuario, reactivarUsuario, restablecerClave } from '@/server/acciones/usuarios';
-import { cerrarSesionesDeUsuario, editarUsuario } from '@/server/acciones/usuarios-admin';
+import { comoResultado, type Resultado } from '@/server/acciones/resultado';
+import { cambiarOrganizacion, cambiarRol, crearCuenta, desactivarUsuario, eliminarCuenta, reactivarUsuario, restablecerClave, verClaveEntrega, type ClaveEntregada } from '@/server/acciones/usuarios';
+import { editarUsuario } from '@/server/acciones/usuarios-admin';
 import type { Contexto } from '@/server/politicas/actor';
 import { contextoDeAccion } from '@/server/sesion';
 
@@ -116,7 +116,7 @@ export async function crearCuentaAccion(_previo: EstadoAdmin, datos: FormData): 
   revalidatePath('/admin/usuarios');
   revalidatePath('/admin');
   const cuenta = { id: r.data.id, nombre: r.data.nombre, usuario: r.data.usuario };
-  // La clave solo viaja al navegador del administrador; con la supervisora la cuenta queda pendiente de entrega.
+  // La clave solo viaja al navegador del administrador; con la supervisora la cuenta nace igual con su clave, que solo ve el administrador.
   if (r.data.claveTemporal) {
     return {
       estado: 'ok',
@@ -127,7 +127,7 @@ export async function crearCuentaAccion(_previo: EstadoAdmin, datos: FormData): 
   }
   return {
     estado: 'ok',
-    mensaje: `Creamos la cuenta de ${r.data.nombre}. Está pendiente de entrega: el administrador genera y entrega la clave.`,
+    mensaje: `Creamos la cuenta de ${r.data.nombre}. Le avisamos al administrador: él ve el usuario y la contraseña y se la entrega.`,
     pendiente: cuenta,
     marca: Date.now(),
   };
@@ -135,7 +135,7 @@ export async function crearCuentaAccion(_previo: EstadoAdmin, datos: FormData): 
 
 /**
  * Agencia de aduana en un solo paso (organizacion + su cuenta). La clave solo viaja al navegador del administrador; con la
- * supervisora la respuesta no lleva ninguna y la cuenta queda `pendiente` de entrega.
+ * supervisora la respuesta no lleva ninguna: la cuenta nace con su clave y el administrador la ve en la ficha de la cuenta.
  */
 export async function crearAgenciaAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
   const r = await comoResultado(async () =>
@@ -154,7 +154,7 @@ export async function crearAgenciaAccion(_previo: EstadoAdmin, datos: FormData):
   }
   return {
     estado: 'ok',
-    mensaje: `Creamos la agencia ${r.data.nombre} y su cuenta. Está pendiente de entrega: el administrador genera y entrega la clave.`,
+    mensaje: `Creamos la agencia ${r.data.nombre} y su cuenta. Le avisamos al administrador: él ve el usuario y la contraseña y se la entrega.`,
     pendiente: cuenta,
     marca: Date.now(),
   };
@@ -223,13 +223,18 @@ export async function reactivarUsuarioAccion(_previo: EstadoAdmin, datos: FormDa
   );
 }
 
-export async function cerrarSesionesUsuarioAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
-  const sesionId = textoOpcional(datos, 'sesionId');
+/** Elimina una cuenta (y su agencia si era la unica). Solo si no dejo trabajo propio; si no, se desactiva. */
+export async function eliminarCuentaAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
   return correr(
-    (ctx) => cerrarSesionesDeUsuario(ctx, { usuarioId: texto(datos, 'usuarioId'), ...(sesionId ? { sesionId } : {}) }),
-    (r) => ({ mensaje: r.cerradas === 0 ? 'No tenía sesiones abiertas.' : `Cerramos ${r.cerradas} ${r.cerradas === 1 ? 'sesión' : 'sesiones'}. Tendrá que volver a entrar.` }),
-    ['/admin/usuarios'],
+    (ctx) => eliminarCuenta(ctx, { usuarioId: texto(datos, 'usuarioId') }),
+    (r) => ({ mensaje: r.agenciaEliminada ? `Eliminamos la cuenta ${r.usuario} y su agencia.` : `Eliminamos la cuenta ${r.usuario}.`, irA: '/admin/usuarios' }),
+    ['/admin/usuarios', '/admin/organizaciones', '/admin'],
   );
+}
+
+/** El administrador vuelve a ver la contrasena de entrega de una cuenta. Queda en la auditoria. */
+export async function verClaveEntregaAccion(entrada: { usuarioId: string }): Promise<Resultado<ClaveEntregada>> {
+  return comoResultado(async () => verClaveEntrega(await contextoDeAccion(), { usuarioId: String(entrada.usuarioId ?? '') }));
 }
 
 // ---- Organizaciones -----------------------------------------------------------------------------
@@ -262,7 +267,10 @@ export async function cambiarEstadoOrganizacionAccion(_previo: EstadoAdmin, dato
 export async function eliminarOrganizacionAccion(_previo: EstadoAdmin, datos: FormData): Promise<EstadoAdmin> {
   return correr(
     (ctx) => eliminarOrganizacion(ctx, { organizacionId: texto(datos, 'organizacionId') }),
-    (r) => ({ mensaje: `Borramos la organización ${r.nombre}.`, irA: '/admin/organizaciones' }),
+    (r) => ({
+      mensaje: r.cuentasEliminadas > 0 ? `Borramos ${r.nombre} y ${r.cuentasEliminadas === 1 ? 'su cuenta' : `sus ${r.cuentasEliminadas} cuentas`}.` : `Borramos la organización ${r.nombre}.`,
+      irA: '/admin/organizaciones',
+    }),
     ['/admin/organizaciones', '/admin/usuarios', '/admin'],
   );
 }

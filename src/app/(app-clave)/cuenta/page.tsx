@@ -1,30 +1,28 @@
-import { LogOut, Monitor, Smartphone } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import type { Metadata } from 'next';
-import { actualizarPreferenciasAccion, cambiarMiClaveAccion, cerrarOtrasSesionesAccion, cerrarSesionPropiaAccion } from '@/app/acciones/cuenta';
+import { actualizarPreferenciasAccion, cambiarMiClaveAccion } from '@/app/acciones/cuenta';
 import { cerrarSesionAccion, cerrarTodasLasSesionesAccion } from '@/app/acciones/sesion';
-import { BotonAccion, FormularioAccion } from '@/componentes/admin/acciones';
+import { FormularioAccion } from '@/componentes/admin/acciones';
 import { CampoAdmin } from '@/componentes/admin/campos';
-import { describirNavegador, fechaHora, formatearIp, hace } from '@/componentes/admin/formato';
+import { fechaHora, hace } from '@/componentes/admin/formato';
 import { Dato, Datos, InsigniaRol, InsigniaTipoOrg, Seccion } from '@/componentes/admin/piezas';
 import { Avatar, nombreVisible } from '@/componentes/ui/avatar';
 import { Boton } from '@/componentes/ui/button';
 import { Interruptor } from '@/componentes/ui/casilla';
-import { Insignia } from '@/componentes/ui/insignia';
 import { ContenedorLectura, EncabezadoPagina } from '@/componentes/ui/pagina';
-import { misPreferencias, misSesiones } from '@/server/politicas/cuenta';
+import { misPreferencias } from '@/server/politicas/cuenta';
 import { exigirContexto } from '@/server/sesion';
 
 export const metadata: Metadata = { title: 'Mi cuenta · Descripciones mínimas' };
 
 export default async function Cuenta() {
   const { db, actor } = await exigirContexto({ claveInicial: true });
-  const [prefs, sesiones] = await Promise.all([misPreferencias(db, actor), misSesiones(db, actor)]);
+  const prefs = await misPreferencias(db, actor);
   const ahora = new Date();
-  const otras = sesiones.filter((s) => !s.esActual);
 
   return (
     <ContenedorLectura>
-      <EncabezadoPagina titulo="Mi cuenta" descripcion="Tus datos, tu contraseña y dónde tienes abierta la plataforma." />
+      <EncabezadoPagina titulo="Mi cuenta" descripcion="Tus datos y tu contraseña." />
 
       <div className="space-y-6">
         <Seccion id="datos" titulo="Tus datos" descripcion="Si algo está mal, pídele el cambio a un administrador.">
@@ -73,58 +71,7 @@ export default async function Cuenta() {
           </FormularioAccion>
         </Seccion>
 
-        <Seccion
-          id="sesiones"
-          titulo="Sesiones abiertas"
-          descripcion="Cada navegador donde entraste. Si no reconoces alguna, ciérrala."
-          acciones={
-            otras.length > 0 ? (
-              <BotonAccion
-                accion={cerrarOtrasSesionesAccion}
-                campos={{}}
-                confirmar={{
-                  titulo: 'Cerrar las otras sesiones',
-                  descripcion: 'Esta sesión sigue abierta. En los demás dispositivos tendrás que volver a entrar con tu contraseña.',
-                  confirmar: 'Cerrar las otras',
-                  cancelar: 'Todavía no',
-                  peligro: true,
-                }}
-              >
-                Cerrar las otras ({otras.length})
-              </BotonAccion>
-            ) : undefined
-          }
-          sinPadding
-        >
-          <ul className="divide-y divide-borde-suave">
-            {sesiones.map((s) => {
-              const Icono = /iPhone|Android|iPad|Mobile/i.test(s.agente ?? '') ? Smartphone : Monitor;
-              return (
-                <li key={s.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3.5">
-                  <Icono aria-hidden className="size-5 shrink-0 text-tinta-suave" strokeWidth={1.75} />
-                  <div className="min-w-0 flex-1 basis-52">
-                    <p className="flex flex-wrap items-center gap-2 text-base font-semibold text-tinta">
-                      {describirNavegador(s.agente)}
-                      {s.esActual ? <Insignia variante="oscura">Esta sesión</Insignia> : null}
-                    </p>
-                    <p className="text-sm text-tinta-suave">
-                      {s.esActual ? 'En uso ahora' : `Activa ${hace(s.ultimaActividad, ahora)}`} · entró {fechaHora(s.creadaEn)}
-                      {formatearIp(s.ip) ? ` · ${formatearIp(s.ip)}` : ''}
-                    </p>
-                  </div>
-                  {!s.esActual ? (
-                    <BotonAccion accion={cerrarSesionPropiaAccion} campos={{ sesionId: s.id }} etiquetaAria={`Cerrar sesión de ${describirNavegador(s.agente)}`}>
-                      Cerrar sesión
-                    </BotonAccion>
-                  ) : null}
-                </li>
-              );
-            })}
-            {sesiones.length === 0 ? <li className="px-5 py-4 text-base text-tinta-suave">No encontramos sesiones abiertas.</li> : null}
-          </ul>
-        </Seccion>
-
-        <Seccion id="salir" titulo="Salir" descripcion="Cierra solo esta sesión, o todas, incluida esta.">
+        <Seccion id="salir" titulo="Salir" descripcion="Cierra solo esta sesión, o todas las que tengas abiertas, incluida esta.">
           <div className="flex flex-wrap gap-3">
             <form action={cerrarSesionAccion}>
               <Boton type="submit" variante="primario">

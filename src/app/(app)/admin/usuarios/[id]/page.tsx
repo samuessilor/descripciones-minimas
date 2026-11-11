@@ -1,19 +1,15 @@
-import { Monitor, RotateCcw, Smartphone } from 'lucide-react';
+import { RotateCcw, Trash2 } from 'lucide-react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import {
-  cambiarRolAccion,
-  cerrarSesionesUsuarioAccion,
-  editarUsuarioAccion,
-  reactivarUsuarioAccion,
-} from '@/app/acciones/admin';
+import { cambiarRolAccion, editarUsuarioAccion, eliminarCuentaAccion, reactivarUsuarioAccion } from '@/app/acciones/admin';
 import { BotonAccion, FormularioAccion } from '@/componentes/admin/acciones';
 import { CampoAdmin, RadiosAdmin } from '@/componentes/admin/campos';
-import { describirNavegador, fechaHora, formatearIp, hace, plural, ROL_DESCRIPCION, ROL_ETIQUETA } from '@/componentes/admin/formato';
+import { fechaHora, hace, plural, ROL_DESCRIPCION, ROL_ETIQUETA } from '@/componentes/admin/formato';
 import { Dato, Datos, EstadosUsuario, InsigniaRol, InsigniaTipoOrg, Seccion } from '@/componentes/admin/piezas';
 import { PanelCambiarOrganizacion, PanelDesactivar } from '@/componentes/admin/ReasignacionUsuario';
 import { TextoCopiable } from '@/componentes/admin/TextoCopiable';
 import { RestablecerClave } from '@/componentes/admin/RestablecerClave';
+import { VerClave } from '@/componentes/admin/VerClave';
 import { Aviso } from '@/componentes/ui/aviso';
 import { Avatar, nombreVisible } from '@/componentes/ui/avatar';
 import { EncabezadoPagina } from '@/componentes/ui/pagina';
@@ -23,11 +19,11 @@ import {
   candidatosReasignacion,
   contarAdminsActivos,
   listarOrganizacionesAdmin,
-  listarSesionesDeUsuario,
   obtenerUsuarioAdmin,
   pendientesDeUsuario,
 } from '@/server/politicas/administracion';
 import { SinPermiso } from '@/componentes/ui/pantallas';
+import { diagnosticoBorradoCuenta } from '@/server/acciones/usuarios';
 import { contextoAdmin } from '../../_contexto';
 
 export const metadata: Metadata = { title: 'Persona · Descripciones mínimas' };
@@ -84,12 +80,12 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
     );
   }
 
-  const [organizaciones, pendientes, candidatos, sesiones, admins] = await Promise.all([
+  const [organizaciones, pendientes, candidatos, admins, borrado] = await Promise.all([
     listarOrganizacionesAdmin(ctx.db, ctx.actor),
     pendientesDeUsuario(ctx.db, ctx.actor, u.id),
     candidatosReasignacion(ctx.db, ctx.actor, u.id),
-    listarSesionesDeUsuario(ctx.db, ctx.actor, u.id),
     contarAdminsActivos(ctx.db, ctx.actor),
+    diagnosticoBorradoCuenta(ctx.db, u.id),
   ]);
 
   const entregaClaves = puede(ctx.actor, 'administrar');
@@ -186,62 +182,6 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
               candidatos={candidatosVista}
             />
           </Seccion>
-
-          <Seccion
-            id="sesiones"
-            titulo="Sesiones abiertas"
-            descripcion={esYo ? 'Estas son tus sesiones. Para cerrarlas usa tu cuenta.' : 'Dónde tiene la plataforma abierta ahora. Cerrar una es inmediato.'}
-            acciones={
-              !esYo && sesiones.length > 0 ? (
-                <BotonAccion
-                  accion={cerrarSesionesUsuarioAccion}
-                  campos={{ usuarioId: u.id }}
-                  confirmar={{
-                    titulo: 'Cerrar todas sus sesiones',
-                    descripcion: `${nombreVisible(u.nombre)} tendrá que volver a entrar con su contraseña. Lo que ya llenó se conserva.`,
-                    confirmar: 'Cerrar sesiones',
-                    cancelar: 'Todavía no',
-                    peligro: true,
-                  }}
-                >
-                  Cerrar todas
-                </BotonAccion>
-              ) : undefined
-            }
-            sinPadding
-          >
-            {sesiones.length === 0 ? (
-              <p className="px-5 py-4 text-base text-tinta-suave">No tiene sesiones abiertas.</p>
-            ) : (
-              <ul className="divide-y divide-borde-suave">
-                {sesiones.map((s) => {
-                  const movil = /iPhone|Android|iPad|Mobile/i.test(s.agente ?? '');
-                  const Icono = movil ? Smartphone : Monitor;
-                  return (
-                    <li key={s.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3.5">
-                      <Icono aria-hidden className="size-5 shrink-0 text-tinta-suave" strokeWidth={1.75} />
-                      <div className="min-w-0 flex-1 basis-56">
-                        <p className="text-base font-semibold text-tinta">{describirNavegador(s.agente)}</p>
-                        <p className="text-sm text-tinta-suave">
-                          Activa {hace(s.ultimaActividad, ahora)} · entró {fechaHora(s.creadaEn)}
-                          {formatearIp(s.ip) ? ` · ${formatearIp(s.ip)}` : ''}
-                        </p>
-                      </div>
-                      {!esYo ? (
-                        <BotonAccion
-                          accion={cerrarSesionesUsuarioAccion}
-                          campos={{ usuarioId: u.id, sesionId: s.id }}
-                          etiquetaAria={`Cerrar sesión de ${describirNavegador(s.agente)}`}
-                        >
-                          Cerrar sesión
-                        </BotonAccion>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Seccion>
         </div>
 
         <aside aria-label="Acceso y estado" className="space-y-6 lg:sticky lg:top-[calc(var(--alto-barra-superior)+1.5rem)]">
@@ -249,22 +189,22 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
             <div className="space-y-4">
               <Datos className="sm:grid-cols-[minmax(0,7rem)_minmax(0,1fr)]">
                 <Dato etiqueta="Pendientes">{pendientes.length === 0 ? 'Ninguno' : plural(pendientes.length, 'referencia', 'referencias')}</Dato>
-                <Dato etiqueta="Sesiones">{plural(sesiones.length, 'abierta', 'abiertas')}</Dato>
               </Datos>
+              {entregaClaves && u.username ? <VerClave usuarioId={u.id} usuario={u.username} /> : null}
               {u.activo && entregaClaves ? (
                 <div className="flex flex-col items-stretch gap-2">
                   <RestablecerClave usuarioId={u.id} nombre={nombreVisible(u.nombre)} variante={sinIngresar || u.sinClave ? 'primario' : 'secundario'} />
                   <p className="text-sm text-tinta-suave">
                     {u.sinClave
-                      ? 'Pendiente de entrega: la cuenta todavía no tiene contraseña y no puede entrar. Genera una temporal para entregársela.'
+                      ? 'La cuenta no tiene contraseña y no puede entrar. Genera una temporal para entregársela.'
                       : sinIngresar
-                      ? 'Nunca ha entrado. Genera una contraseña temporal para entregársela.'
-                      : 'Genera una contraseña nueva, cierra sus sesiones y te la muestra una vez. La anterior deja de servir.'}
+                      ? 'Nunca ha entrado. Entrégale el usuario y la contraseña de arriba, o genera una nueva.'
+                      : 'Genera una contraseña nueva, cierra sus sesiones y te la muestra. La anterior deja de servir y la nueva queda guardada para volver a verla.'}
                   </p>
                 </div>
               ) : null}
               {u.activo && !entregaClaves && u.sinClave ? (
-                <p className="text-sm text-tinta-suave">Pendiente de entrega: la cuenta todavía no tiene contraseña y no puede entrar. El administrador la genera y la entrega.</p>
+                <p className="text-sm text-tinta-suave">La cuenta todavía no tiene contraseña y no puede entrar. El administrador la genera y la entrega.</p>
               ) : null}
             </div>
           </Seccion>
@@ -311,6 +251,48 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
           </Seccion>
         </div>
       ) : null}
+
+      <div className="mt-6">
+        <Seccion id="eliminar" titulo="Eliminar" descripcion="Para una cuenta creada por error o que nunca se usó. Desactivar es lo normal: conserva lo que la persona hizo.">
+          {esYo ? (
+            <Aviso tipo="aviso" titulo="No puedes eliminarte a ti mismo">
+              Pídele a otro administrador que lo haga.
+            </Aviso>
+          ) : unicoAdmin ? (
+            <Aviso tipo="aviso" titulo="Es el único administrador activo">
+              Para eliminarlo, primero dale el rol a otra persona.
+            </Aviso>
+          ) : borrado.conTrabajo ? (
+            <Aviso tipo="info" titulo="No se puede eliminar">
+              Ya trabajó en referencias (historial, comentarios o fichas que creó o cerró): borrarla perdería quién lo hizo. Desactívala en su lugar.
+            </Aviso>
+          ) : (
+            <div className="space-y-3">
+              <p className="max-w-[65ch] text-base text-tinta-suave">
+                {borrado.borraLaAgencia ? `Es la única cuenta de ${nombreVisible(u.organizacion)}: se elimina también la agencia. ` : ''}
+                {borrado.pendientes > 0 ? `Tiene ${plural(borrado.pendientes, 'referencia pendiente', 'referencias pendientes')}: se le quitan y quedan sin esa responsable. ` : ''}
+                Se van también sus avisos, sesiones y contraseña. En la auditoría se conserva lo que hizo, con su usuario anotado. No se puede deshacer.
+              </p>
+              <BotonAccion
+                accion={eliminarCuentaAccion}
+                campos={{ usuarioId: u.id }}
+                variante="peligro"
+                tamano="md"
+                confirmar={{
+                  titulo: `Eliminar la cuenta ${u.username ?? nombreVisible(u.nombre)}`,
+                  descripcion: `${borrado.borraLaAgencia ? `Se elimina también la agencia ${nombreVisible(u.organizacion)}. ` : ''}Esta cuenta deja de existir para siempre. No se puede deshacer.`,
+                  confirmar: 'Eliminar cuenta',
+                  cancelar: 'Todavía no',
+                  peligro: true,
+                }}
+              >
+                <Trash2 aria-hidden className="size-4" />
+                Eliminar cuenta
+              </BotonAccion>
+            </div>
+          )}
+        </Seccion>
+      </div>
     </>
   );
 }

@@ -142,7 +142,7 @@ describe('texto legible de un valor (historial)', () => {
 
 describe('describirFalta: la frase de «Para mí» para la aduana', () => {
   it('con RIM, partida, descripciones, restricciones y observaciones solo falta cerrar; una solicitud sin respuesta espera al area', () => {
-    const completa = { requiere_rim: 'NO', partida_arancelaria: '8501.31.20.00', descripciones_minimas: { no_aplica: true }, restricciones: 'Ninguna', observaciones_aduana: { no_aplica: true } };
+    const completa = { requiere_rim: 'NO', partida_arancelaria: '8501.31.20.00', arancel: '5%', iva: '19%', descripciones_minimas: { no_aplica: true }, restricciones: 'Ninguna', observaciones_aduana: { no_aplica: true } };
     const c = calcularCompletitud({ tipo: 'INSUMO', valores: completa });
     expect(describirFalta(c, 'clasificar', 'EN_GESTION')).toBe('Falta cerrar la clasificación');
     const sinPartida = calcularCompletitud({ tipo: 'INSUMO', valores: { ...completa, partida_arancelaria: null } });
@@ -159,7 +159,8 @@ describe('partesDeAsignacion: asignaciones de Detalle tras mover pais, fabricant
   it('una asignacion anterior al corte que solo dice «detalle» tambien cubre Producto; el resto queda igual', () => {
     expect(partesDeAsignacion('detalle', 'solicitante', antes)).toEqual(['producto', 'detalle']);
     expect(partesDeAsignacion('producto,detalle', 'solicitante', antes)).toEqual(['producto', 'detalle']);
-    expect(partesDeAsignacion('producto', 'solicitante', antes)).toEqual(['producto']);
+    // Y desde la reunion 2026-11-10 quien tenia Producto antes del reparto nuevo tambien cubre Detalle.
+    expect(partesDeAsignacion('producto', 'solicitante', antes)).toEqual(['producto', 'detalle']);
     expect(partesDeAsignacion('especificaciones', 'solicitante', antes)).toEqual(['especificaciones']);
     expect(partesDeAsignacion(null, 'solicitante', antes)).toEqual(['producto', 'detalle', 'especificaciones']);
     expect(partesDeAsignacion('detalle', 'aduana', antes)).toEqual(['aduana']);
@@ -168,5 +169,16 @@ describe('partesDeAsignacion: asignaciones de Detalle tras mover pais, fabricant
   it('una asignacion posterior al corte se lee tal cual: Detalle no incluye Producto', () => {
     expect(partesDeAsignacion('detalle', 'solicitante', despues)).toEqual(['detalle']);
     expect(partesDeAsignacion('detalle,especificaciones', 'solicitante', despues)).toEqual(['detalle', 'especificaciones']);
+    expect(partesDeAsignacion('producto', 'solicitante', despues)).toEqual(['producto']);
+  });
+
+  it('reparto del 2026-11-10: una asignacion de entre los dos cortes que dice «producto» cubre tambien Detalle; una de Detalle no cubre Producto', () => {
+    const entre = new Date('2026-11-10T15:00:00.000Z');
+    expect(partesDeAsignacion('producto', 'solicitante', entre)).toEqual(['producto', 'detalle']);
+    expect(partesDeAsignacion('producto,especificaciones', 'solicitante', entre)).toEqual(['producto', 'detalle', 'especificaciones']);
+    expect(partesDeAsignacion('detalle', 'solicitante', entre)).toEqual(['detalle']);
+    expect(partesDeAsignacion('producto', 'aduana', entre)).toEqual(['aduana']);
+    // Sin fecha (no deberia pasar) se lee tal cual.
+    expect(partesDeAsignacion('producto', 'solicitante')).toEqual(['producto']);
   });
 });

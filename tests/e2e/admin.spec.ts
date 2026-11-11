@@ -194,8 +194,7 @@ test('desactivar con pendientes obliga a reasignar y cierra la sesion al instant
   await page.goto('/admin/usuarios');
   await page.getByRole('link', { name: `Abrir a ${ANDRES}` }).click();
   await expect(page.getByRole('heading', { level: 1, name: /Andrés Aduana A/ })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Sesiones abiertas' })).toBeVisible();
-  await expect(page.getByText(/Chrome en Windows|Chrome en Mac|Chrome en Linux|Chrome/).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Sesiones abiertas' })).toHaveCount(0); // la lista de sesiones se quito (2026-11-10)
 
   const desactivar = page.locator('#desactivar');
   await expect(desactivar.getByText(/tiene 1 referencia pendiente\. ¿A quién la reasignas\?/)).toBeVisible();
@@ -355,11 +354,11 @@ test('auditoria: filtros, detalle y CSV; parametros', async ({ page, request }) 
   await expect(page.getByRole('textbox')).toHaveCount(0); // nada que editar
 });
 
-test('mi cuenta: cambio de contrasena, preferencias que persisten y cierre de las otras sesiones', async ({ browser, request, page }) => {
+test('mi cuenta: cambio de contrasena, preferencias que persisten y cierre de todas las sesiones', async ({ browser, request, page }) => {
   await entrarComo(page, request, ADMIN);
   await page.goto('/cuenta');
   await expect(page.getByRole('heading', { level: 1, name: 'Mi cuenta' })).toBeVisible();
-  await expect(page.getByText('Esta sesión', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Sesiones abiertas' })).toHaveCount(0);
 
   // Contrasena: pide la actual, valida la nueva y no deja la sesion sin acceso.
   await page.getByLabel('Contraseña actual').fill('no-es-la-actual');
@@ -382,17 +381,14 @@ test('mi cuenta: cambio de contrasena, preferencias que persisten y cierre de la
   await pulsar(page.getByRole('button', { name: 'Guardar preferencias' }));
   await expect(aviso(page, 'Guardamos tus preferencias.')).toBeVisible();
 
-  // Otra sesion del mismo usuario: se cierra desde esta, y ella vuelve a /entrar.
+  // Otra sesion del mismo usuario: «Cerrar todas mis sesiones» las cierra todas y las dos vuelven a /entrar.
   const otra = await contextoAutenticado(browser, request, ADMIN);
   await page.reload();
-  await pulsar(page.getByRole('button', { name: /Cerrar las otras \(\d+\)/ }));
-  await pulsar(page.getByRole('dialog').getByRole('button', { name: 'Cerrar las otras' }));
-  await expect(aviso(page, /Cerramos \d+ sesi.*Esta sigue abierta\./)).toBeVisible();
+  await pulsar(page.getByRole('button', { name: 'Cerrar todas mis sesiones' }));
+  await expect(page).toHaveURL(/\/entrar/);
   await otra.page.goto('/cuenta');
   await expect(otra.page).toHaveURL(/\/entrar/);
   await otra.contexto.close();
-  await page.reload();
-  await expect(page.getByRole('heading', { level: 1, name: 'Mi cuenta' })).toBeVisible(); // la actual sigue viva
 });
 
 const PAGINAS = [

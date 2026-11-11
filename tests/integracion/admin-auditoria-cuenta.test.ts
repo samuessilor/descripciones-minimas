@@ -1,9 +1,9 @@
 /** Visor de auditoria y «Mi cuenta» (H5). */
 import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { auditoria, session, usuario } from '@/db/esquema';
+import { auditoria, usuario } from '@/db/esquema';
 import { ErrorAccion } from '@/server/acciones/resultado';
-import { actualizarPreferencias, cerrarOtrasSesiones, cerrarSesionPropia } from '@/server/acciones/cuenta';
+import { actualizarPreferencias } from '@/server/acciones/cuenta';
 import { auditar } from '@/server/auditoria';
 import { aCsv } from '@/server/csv';
 import {
@@ -13,7 +13,7 @@ import {
   opcionesFiltroAuditoria,
   POR_PAGINA_AUDITORIA,
 } from '@/server/politicas/administracion-auditoria';
-import { misPreferencias, misSesiones } from '@/server/politicas/cuenta';
+import { misPreferencias } from '@/server/politicas/cuenta';
 import { crearOrganizacion } from '@/server/acciones/organizaciones';
 import { nuevaFicha, nuevoEscenario, type Escenario } from './ayudas';
 
@@ -153,11 +153,6 @@ describe('visor de auditoria (solo lectura, solo admin)', () => {
 });
 
 describe('mi cuenta', () => {
-  async function sesion(userId: string, token: string, agente = 'Mozilla/5.0 (Windows NT 10.0) Chrome/120') {
-    const [s] = await e.db.insert(session).values({ userId, token, expiresAt: new Date(Date.now() + 3_600_000), userAgent: agente }).returning();
-    return s!.id;
-  }
-
   it('cada quien cambia SUS preferencias, con auditoria; sin cambio no audita', async () => {
     await actualizarPreferencias(e.ctx(e.lector), { atajosTeclado: false });
     expect(await misPreferencias(e.db, e.lector)).toMatchObject({ atajosTeclado: false });
@@ -170,26 +165,4 @@ describe('mi cuenta', () => {
     expect(await codigoDe(actualizarPreferencias(e.ctx(e.lector), {}))).toBe('VALIDACION');
   });
 
-  it('lista mis sesiones marcando la actual y cierra las otras sin tocar la actual ni las de nadie mas', async () => {
-    const actual = await sesion(e.edward.usuarioId, 't-actual');
-    const otra = await sesion(e.edward.usuarioId, 't-otra');
-    const ajena = await sesion(e.charles.usuarioId, 't-ajena');
-    const yo = { ...e.edward, sesionId: actual };
-
-    const mias = await misSesiones(e.db, yo);
-    expect(mias.map((s) => [s.id, s.esActual]).sort()).toEqual([[actual, true], [otra, false]].sort());
-
-    expect(await codigoDe(cerrarSesionPropia(e.ctx(yo), { sesionId: actual }))).toBe('VALIDACION'); // la actual se cierra saliendo
-    expect(await codigoDe(cerrarSesionPropia(e.ctx(yo), { sesionId: ajena }))).toBe('NO_ENCONTRADO'); // no se cierra la de otra persona
-    await cerrarSesionPropia(e.ctx(yo), { sesionId: otra });
-    expect((await misSesiones(e.db, yo)).map((s) => s.id)).toEqual([actual]);
-
-    await sesion(e.edward.usuarioId, 't-otra-2');
-    await sesion(e.edward.usuarioId, 't-otra-3');
-    expect(await cerrarOtrasSesiones(e.ctx(yo))).toEqual({ cerradas: 2 });
-    expect((await misSesiones(e.db, yo)).map((s) => s.id)).toEqual([actual]);
-    expect((await misSesiones(e.db, { ...e.charles, sesionId: ajena })).map((s) => s.id)).toEqual([ajena]);
-    expect(await cerrarOtrasSesiones(e.ctx(yo))).toEqual({ cerradas: 0 });
-    expect(await codigoDe(cerrarOtrasSesiones(e.ctx(e.edward)))).toBe('VALIDACION'); // sin sesion identificada no se arriesga a cerrar la propia
-  });
 });

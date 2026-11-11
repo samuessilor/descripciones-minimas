@@ -1,7 +1,7 @@
 /** CSV seguro (13.4) y formato de las pantallas de administracion. */
 import { describe, expect, it } from 'vitest';
 import { aCsv, celdaCsv, neutralizarFormula } from '@/server/csv';
-import { dentroDe, describirNavegador, etiquetaAccion, fechaHora, formatearIp, hace, plural } from '@/componentes/admin/formato';
+import { dentroDe, etiquetaAccion, fechaHora, hace, plural } from '@/componentes/admin/formato';
 import { inicioDia } from '@/server/politicas/administracion-auditoria';
 
 describe('CSV: neutralizar formulas (13.4)', () => {
@@ -63,12 +63,6 @@ describe('formato', () => {
     expect(fechaHora(null)).toBe('—');
   });
 
-  it('describirNavegador', () => {
-    expect(describirNavegador('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36')).toBe('Chrome en Windows');
-    expect(describirNavegador('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit Version/17 Safari/604.1')).toBe('Safari en iPhone o iPad');
-    expect(describirNavegador('Mozilla/5.0 (Windows NT 10.0) Edg/120 Chrome/120 Safari/537')).toBe('Edge en Windows');
-    expect(describirNavegador(null)).toBe('Dispositivo desconocido');
-  });
 
   it('etiquetaAccion cae a texto legible si no la conoce', () => {
     expect(etiquetaAccion('crear_cuenta')).toBe('Creó una cuenta');
@@ -81,18 +75,5 @@ describe('fechas de auditoria', () => {
     expect(inicioDia('2026-10-21')?.toISOString()).toBe('2026-10-21T05:00:00.000Z');
     expect(inicioDia('21/10/2026')).toBeNull();
     expect(inicioDia('2026-13-45')).toBeNull();
-  });
-});
-
-describe('formatearIp', () => {
-  it('muestra el equipo local y oculta la direccion vacia de IPv6', () => {
-    expect(formatearIp('0000:0000:0000:0000:0000:0000:0000:0000')).toBeNull();
-    expect(formatearIp('::')).toBeNull();
-    expect(formatearIp('0000:0000:0000:0000:0000:0000:0000:0001')).toBe('este equipo');
-    expect(formatearIp('::1')).toBe('este equipo');
-    expect(formatearIp('127.0.0.1')).toBe('este equipo');
-    expect(formatearIp('190.25.10.7')).toBe('190.25.10.7');
-    expect(formatearIp(null)).toBeNull();
-    expect(formatearIp('')).toBeNull();
   });
 });

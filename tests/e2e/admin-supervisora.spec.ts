@@ -75,7 +75,7 @@ test('la ficha de una persona tiene todos los controles de gestión, menos «Res
   await expect(page.getByRole('heading', { level: 1, name: /Edgar Solicitante/ })).toBeVisible();
 
   // Datos, rol, organizacion, sesiones y desactivar: igual que el administrador.
-  for (const seccion of ['Datos', 'Rol', 'Organización', 'Sesiones abiertas', 'Desactivar']) {
+  for (const seccion of ['Datos', 'Rol', 'Organización', 'Desactivar']) {
     await expect(page.getByRole('heading', { name: seccion, exact: true })).toBeVisible();
   }
   await expect(page.getByRole('button', { name: 'Guardar datos' })).toBeVisible();
@@ -105,13 +105,13 @@ test('la ficha del administrador es solo lectura para la supervisora', async ({ 
   await expect(page.getByRole('heading', { name: 'Sesiones abiertas' })).toHaveCount(0);
 });
 
-test('la supervisora crea una cuenta suelta: no ve ninguna clave y la cuenta queda pendiente de entrega', async ({ page, request }) => {
+test('la supervisora crea una cuenta suelta: no ve ninguna clave y la cuenta nace con su clave, que solo ve el administrador', async ({ page, request }) => {
   await entrarComo(page, request, SUPERVISORA);
   await page.goto('/admin/usuarios/nueva');
   await expect(page.getByRole('heading', { level: 1, name: 'Crear cuenta' })).toBeVisible();
 
   // El formulario explica lo que va a pasar y no ofrece roles que ella no puede dar.
-  await expect(page.getByText('La contraseña la genera el administrador')).toBeVisible();
+  await expect(page.getByText('La contraseña la entrega el administrador')).toBeVisible();
   await expect(page.getByRole('radio', { name: /^Administrador/ })).toHaveCount(0);
   await expect(page.getByRole('radio', { name: /^Supervisora general/ })).toHaveCount(0);
   await expect(page.getByRole('radio', { name: /^Solicitante/ })).toBeVisible();
@@ -122,7 +122,7 @@ test('la supervisora crea una cuenta suelta: no ve ninguna clave y la cuenta que
   await pulsarHidratado(page.getByRole('button', { name: 'Crear la cuenta' }));
 
   await expect(page.getByRole('heading', { name: `Cuenta creada: ${CUENTA}` })).toBeVisible();
-  await expect(page.getByText('Cuenta pendiente de entrega')).toBeVisible();
+  await expect(page.getByText('Cuenta lista: el administrador entrega la contraseña')).toBeVisible();
   await expect(page.getByTestId('credenciales-entrega')).toHaveCount(0);
   await expect(page.getByTestId('credencial-contraseña')).toHaveCount(0);
   await expect(page.getByText('Cópialas ahora: no se vuelven a mostrar')).toHaveCount(0);
@@ -130,13 +130,12 @@ test('la supervisora crea una cuenta suelta: no ve ninguna clave y la cuenta que
   // La ficha la marca «Pendiente de entrega» y no ofrece generar la clave.
   await page.getByRole('link', { name: 'Ver la cuenta' }).click();
   await expect(page.getByRole('heading', { level: 1, name: CUENTA })).toBeVisible();
-  await expect(page.getByText('Pendiente de entrega').first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Restablecer contraseña' })).toHaveCount(0);
   creadas.cuenta.cuentaId = idDeLaCuenta(page);
   expect(creadas.cuenta.cuentaId).toMatch(/^[0-9a-f-]{36}$/);
 });
 
-test('la supervisora crea una agencia: no ve ninguna clave y la cuenta queda pendiente de entrega', async ({ page, request }) => {
+test('la supervisora crea una agencia: no ve ninguna clave y la cuenta nace con su clave, que solo ve el administrador', async ({ page, request }) => {
   await entrarComo(page, request, SUPERVISORA);
   await page.goto('/admin/organizaciones');
   await page.getByLabel('Nombre de la empresa').fill(AGENCIA);
@@ -146,21 +145,20 @@ test('la supervisora crea una agencia: no ve ninguna clave y la cuenta queda pen
   await pulsarHidratado(page.getByRole('button', { name: 'Crear agencia' }));
 
   await expect(page.getByRole('heading', { name: `Agencia creada: ${AGENCIA}` })).toBeVisible();
-  await expect(page.getByText('Cuenta pendiente de entrega')).toBeVisible();
+  await expect(page.getByText('Cuenta lista: el administrador entrega la contraseña')).toBeVisible();
   await expect(page.getByTestId('credenciales-entrega')).toHaveCount(0);
   await expect(page.getByTestId('credencial-contraseña')).toHaveCount(0);
   await expect(page.getByText('Cópialas ahora: no se vuelven a mostrar')).toHaveCount(0);
 
   await page.getByRole('link', { name: 'Ver la cuenta' }).click();
   await expect(page.getByRole('heading', { level: 1, name: AGENCIA })).toBeVisible();
-  await expect(page.getByText('Pendiente de entrega').first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Restablecer contraseña' })).toHaveCount(0);
   creadas.agencia.cuentaId = idDeLaCuenta(page);
   expect(creadas.agencia.cuentaId).toMatch(/^[0-9a-f-]{36}$/);
 });
 
 for (const clave of ['cuenta', 'agencia'] as const) {
-  test(`el administrador recibe el aviso de la ${clave === 'cuenta' ? 'cuenta suelta' : 'agencia'} y la entrega con Restablecer contraseña: ahora sí ve la clave`, async ({ browser, request }) => {
+  test(`el administrador recibe el aviso de la ${clave === 'cuenta' ? 'cuenta suelta' : 'agencia'}, ve su usuario y contraseña y esa contraseña entra`, async ({ browser, request }) => {
     const { nombre, usuario, cuentaId } = creadas[clave];
     const admin = await contextoAutenticado(browser, request, ADMIN);
     const page = admin.page;
@@ -170,35 +168,26 @@ for (const clave of ['cuenta', 'agencia'] as const) {
     const fila = page.getByTestId('fila-notificacion').filter({ hasText: usuario });
     await expect(fila).toHaveCount(1);
     await expect(fila).toContainText('Cuenta nueva');
-    await expect(fila).toContainText('genera y entrega su clave');
+    await expect(fila).toContainText('revisa su clave y entrégala');
     await expect(fila).toHaveAttribute('data-leida', 'no');
     const destino = await fila.getAttribute('href');
     expect(destino).toBe(`/admin/usuarios/${cuentaId}`);
 
-    // Se abre la cuenta (por su direccion, para no marcar el aviso como leido con el clic): sigue pendiente.
+    // La ficha muestra el usuario; la contraseña se ve al pedirla (no viaja con la pagina).
     await page.goto(destino!);
     await expect(page.getByRole('heading', { level: 1, name: nombre })).toBeVisible();
-    await expect(page.getByText('Pendiente de entrega').first()).toBeVisible();
+    await expect(page.getByText('Contraseña de entrega')).toHaveCount(0);
+    await pulsarHidratado(page.getByTestId('ver-clave-boton'));
+    await expect(page.getByText('Contraseña de entrega')).toBeVisible();
+    const claveVista = (await page.getByTestId('ver-clave').getByTestId('texto-copiable').last().innerText()).trim();
+    expect(claveVista).toMatch(FORMATO_CLAVE);
 
-    // Restablecer contraseña: ahora si hay clave, y se muestra una sola vez.
-    await pulsarHidratado(page.getByRole('button', { name: 'Restablecer contraseña' }));
-    await pulsarHidratado(page.getByRole('dialog').getByRole('button', { name: 'Restablecer', exact: true }));
-    const dialogo = page.getByRole('dialog', { name: /Contraseña nueva de/ });
-    await expect(dialogo.getByText('Cópialas ahora: no se vuelven a mostrar')).toBeVisible();
-    const claveNueva = (await dialogo.getByTestId('credencial-contraseña').innerText()).trim();
-    expect(claveNueva).toMatch(FORMATO_CLAVE);
-    await pulsarHidratado(page.getByRole('button', { name: 'Listo, ya la copié' }));
-
-    // La clave no vuelve a aparecer, la cuenta ya no esta pendiente y el aviso quedo resuelto.
-    await page.reload();
-    await expect(page.getByRole('heading', { level: 1, name: nombre })).toBeVisible();
-    await expect(page.getByText(claveNueva)).toHaveCount(0);
-    await expect(page.getByText('Pendiente de entrega')).toHaveCount(0);
+    // Verla da el aviso por atendido.
     await page.goto('/notificaciones');
     await expect(page.getByTestId('fila-notificacion').filter({ hasText: usuario })).toHaveAttribute('data-leida', 'si');
 
-    // La cuenta ya puede entrar con esa clave.
-    const cuenta = await contextoAutenticado(browser, request, usuario, claveNueva);
+    // La cuenta entra con esa contraseña, tal como estaba guardada.
+    const cuenta = await contextoAutenticado(browser, request, usuario, claveVista);
     await expect(cuenta.page).not.toHaveURL(/\/entrar/);
     await cuenta.contexto.close();
     await admin.contexto.close();

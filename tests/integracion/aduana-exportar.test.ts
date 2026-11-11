@@ -114,7 +114,7 @@ describe('estructura del libro (P-06)', () => {
     expect(encabezados).not.toContain('Valor unitario (USD)');
     // Las columnas del SPEC 15.1 con los cambios de la reunion (sin valor, cantidad a radicar ni clasificadores; con el area
     // responsable) mas la autoria por seccion (6).
-    expect(COLUMNAS_BASE.length).toBe(42);
+    expect(COLUMNAS_BASE.length).toBe(44);
   });
 
   it('congela la fila 1 y la primera columna, y deja autofiltro sobre todos los encabezados', async () => {
@@ -200,7 +200,7 @@ describe('contenido', () => {
     const base = libro.getWorksheet('Base')!;
     const encabezados = (base.getRow(1).values as string[]).slice(1);
     const enPartida = encabezados.indexOf('Partida arancelaria final');
-    expect(encabezados.slice(enPartida, enPartida + 4)).toEqual(['Partida arancelaria final','Descripciones mínimas adicionales', 'Respuesta del área', 'Restricciones']);
+    expect(encabezados.slice(enPartida, enPartida + 6)).toEqual(['Partida arancelaria final', 'Arancel', 'IVA', 'Descripciones mínimas adicionales', 'Respuesta del área', 'Restricciones']);
 
     const p = filaDe(base, '00123-AB')!;
     const celda = p.getCell(col('descripciones_minimas'));
@@ -309,7 +309,7 @@ describe('hoja «Historial»', () => {
     expect(hoja.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
 
     // «Uso» se lleno y luego se reescribio: el mas reciente trae el valor anterior; el primero, no.
-    const [uso, usoPrimero] = cambio(hoja, '00123-AB', 'Uso del producto');
+    const [uso, usoPrimero] = cambio(hoja, '00123-AB', 'Uso/Función específica del producto');
     expect(uso).toBeDefined();
     expect(uso!.getCell(colHist('nombre')).text).toBe('=1+1');
     expect(uso!.getCell(colHist('evento')).text).toBe('Cambio');
@@ -362,7 +362,7 @@ describe('hoja «Historial»', () => {
     expect(new Set(filas(hojaA).map((f) => f.getCell(1).text))).toEqual(new Set(['00123-AB', 'TEST-CLAS-1']));
     // Lo que escribe el area (con su motivo, PA-38) no llega: ni el cambio de «Información adicional» ni su motivo.
     expect(cambio(hojaA, '00123-AB', 'Información adicional')).toHaveLength(0);
-    expect(cambio(hojaA, '00123-AB', 'Uso del producto')).toHaveLength(0);
+    expect(cambio(hojaA, '00123-AB', 'Uso/Función específica del producto')).toHaveLength(0);
     const texto = JSON.stringify(hojaA.getSheetValues());
     expect(texto).not.toContain('Así lo dice la ficha técnica');
     expect(texto).not.toContain('Versión corregida');

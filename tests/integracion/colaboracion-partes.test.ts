@@ -115,10 +115,12 @@ describe('tablero: quien falta', () => {
   it('cuenta, dice de quien esta cada parte y marca lo detenido', async () => {
     const solo = await nuevaFicha(e, { codigo: 'TAB-0001', nombre: 'Sin dueno' });
     const repartida = await nuevaFicha(e, { codigo: 'TAB-0002', nombre: 'Repartida' });
-    await enviarA(e.ctx(e.admin, T0), { referenciaId: repartida, destinatarios: [{ usuarioId: e.edward.usuarioId, secciones: ['producto'] }] });
-    await e.db.update(asignacion).set({ creadaEn: new Date(T0.getTime() - 6 * DIAS) }).where(eq(asignacion.referenciaId, repartida));
+    // Posterior al corte del 2026-11-11 (desde entonces «producto» ya no cubre Detalle).
+    const D0 = new Date('2026-11-25T15:00:00.000Z');
+    await enviarA(e.ctx(e.admin, D0), { referenciaId: repartida, destinatarios: [{ usuarioId: e.edward.usuarioId, secciones: ['producto'] }] });
+    await e.db.update(asignacion).set({ creadaEn: new Date(D0.getTime() - 6 * DIAS) }).where(eq(asignacion.referenciaId, repartida));
 
-    const t = await tableroDe(e.db, e.admin, T0);
+    const t = await tableroDe(e.db, e.admin, D0);
     const filaSolo = t.abiertas.find((f) => f.id === solo);
     const filaRep = t.abiertas.find((f) => f.id === repartida);
     // Un borrador que nadie ha enviado dice lo mismo que el listado, no «Sin responsable».

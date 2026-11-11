@@ -20,7 +20,7 @@ export default async function CrearCuenta({ searchParams }: { searchParams: Prom
         descripcion={
           puede(ctx.actor, 'administrar')
             ? 'No hay registro abierto: entra solo quien tiene una cuenta creada aquí. Una cuenta por área; las agencias de aduana se crean completas desde Organizaciones. Se crea con un usuario y una contraseña temporal que tú entregas.'
-            : 'No hay registro abierto: entra solo quien tiene una cuenta creada aquí. Una cuenta por área; las agencias de aduana se crean completas desde Organizaciones. La cuenta queda pendiente de entrega y el administrador genera la contraseña.'
+            : 'No hay registro abierto: entra solo quien tiene una cuenta creada aquí. Una cuenta por área; las agencias de aduana se crean completas desde Organizaciones. La contraseña se genera sola y solo la ve el administrador, que la entrega.'
         }
         migas={[{ etiqueta: 'Usuarios', href: '/admin/usuarios' }, { etiqueta: 'Crear cuenta' }]}
       />

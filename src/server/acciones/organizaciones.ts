@@ -1,6 +1,6 @@
 /**
  * Organizaciones (M1, 10.4): areas internas y agencias de aduana. Crear, renombrar, activar o desactivar,
- * y «Retirar acceso» de una agencia a una ficha (8.3 regla 10). Solo se borra una organizacion sin cuentas ni historial.
+ * y «Retirar acceso» de una agencia a una ficha (8.3 regla 10). Una agencia se borra con sus cuentas si ninguna dejo trabajo propio.
  */
 import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -14,6 +14,7 @@ import { ahoraDe, type Contexto } from '../politicas/actor';
 import { exigir } from '../politicas/exigir';
 import { ErrorAccion, esViolacionUnica } from './resultado';
 import { insertarCuenta, traducirChoqueCuenta } from './usuarios';
+import { filasDe, llamarBorrado, mensajeDeBase } from '../sql';
 import { parsear, textoLimpio } from './validacion';
 
 /**
@@ -77,15 +78,14 @@ export interface ResultadoCrearAgencia {
   cuentaId: string;
   nombre: string;
   usuario: string;
-  /** Solo si la crea el administrador. Con la supervisora es `null`: la cuenta queda pendiente de entrega. */
+  /** Solo si la crea el administrador. Con la supervisora es `null`: la cuenta nace con su clave y el administrador la ve y la entrega. */
   claveTemporal: string | null;
 }
 
 /**
  * Una agencia de aduana en UN solo paso: la organizacion y su unica cuenta (rol aduana, nombre = el de la empresa) en una
- * misma transaccion; si falla la cuenta no queda la organizacion. La clave la ve solo el administrador: si actua la
- * supervisora, el servidor no genera ninguna, la cuenta queda sin credencial (no puede entrar) y el administrador recibe
- * el aviso para generarla con «Restablecer contraseña».
+ * misma transaccion; si falla la cuenta no queda la organizacion. La clave se genera siempre; la ve en pantalla solo el
+ * administrador. Si actua la supervisora, el administrador recibe el aviso y la ve (cifrada, `verClaveEntrega`) en la ficha de la cuenta.
  */
 export async function crearAgencia(ctx: Contexto, entrada: unknown): Promise<ResultadoCrearAgencia> {
   exigir(ctx.actor, 'supervisar');
@@ -95,8 +95,9 @@ export async function crearAgencia(ctx: Contexto, entrada: unknown): Promise<Res
   if (problema) throw new ErrorAccion('VALIDACION', 'Revisa los datos marcados.', { problemas: [{ ruta: 'usuario', mensaje: problema }] });
   const ahora = ahoraDe(ctx);
 
-  const claveTemporal = puede(ctx.actor, 'administrar') ? generarClave() : null;
-  const hash = claveTemporal ? await hashearClave(claveTemporal) : null;
+  const generada = generarClave();
+  const hash = await hashearClave(generada);
+  const claveTemporal = puede(ctx.actor, 'administrar') ? generada : null;
   try {
     return await ctx.db.transaction(async (tx) => {
       const organizacionId = await insertarOrganizacion(ctx, tx, e.nombre, 'agencia', ahora);
@@ -106,6 +107,7 @@ export async function crearAgencia(ctx: Contexto, entrada: unknown): Promise<Res
         { nombre: e.nombre, usuario: usuarioCuenta, organizacion: { id: organizacionId, nombre: e.nombre, tipo: 'agencia' }, rol: 'aduana' },
         hash,
         ahora,
+        generada,
       );
       return { organizacionId, cuentaId, nombre: e.nombre, usuario: usuarioCuenta, claveTemporal };
     });
@@ -187,13 +189,60 @@ export async function cambiarEstadoOrganizacion(ctx: Contexto, entrada: unknown)
   return { ok: true };
 }
 
+/** Una cuenta de una organizacion, vista desde «¿se puede borrar?». */
+export interface CuentaParaBorrar {
+  id: string;
+  nombre: string;
+  usuario: string | null;
+  rol: string;
+  /** Dejo trabajo propio (historial, comentarios, fotos, fichas creadas o cerradas): borrarla perderia quien lo hizo. */
+  conTrabajo: boolean;
+  /** Referencias que tiene pendientes ahora; al borrarla se le quitan. */
+  pendientes: number;
+}
+
+/** Que se llevaria consigo borrar una organizacion y si algo lo impide. Lo usa la pagina (boton y aviso) y el nucleo. */
+export interface DiagnosticoBorradoOrg {
+  tipo: string;
+  cuentas: CuentaParaBorrar[];
+  /** Hay cambios de campos registrados a nombre de la organizacion. */
+  conHistorial: boolean;
+  /** Texto del impedimento, o `null` si se puede borrar. */
+  impedimento: string | null;
+}
+
+export async function diagnosticoBorradoOrganizacion(ej: Ejecutor, organizacionId: string, nombre: string, tipo: string): Promise<DiagnosticoBorradoOrg> {
+  const filas = filasDe<{ id: string; nombre: string; username: string | null; rol: string; con_trabajo: boolean; pendientes: number }>(
+    await ej.execute(sql`
+      select u.id, u.nombre, u.username, u.rol, public.usuario_tiene_trabajo(u.id) as con_trabajo,
+             (select count(*)::int from asignacion a where a.a_usuario_id = u.id and a.estado in ('pendiente','en_curso')) as pendientes
+        from usuario u where u.organizacion_id = ${organizacionId}::uuid order by u.nombre`),
+  );
+  const cuentas: CuentaParaBorrar[] = filas.map((f) => ({ id: f.id, nombre: f.nombre, usuario: f.username, rol: f.rol, conTrabajo: f.con_trabajo, pendientes: Number(f.pendientes) }));
+  const [h] = await ej.select({ n: sql<number>`count(*)::int` }).from(campoHistorial).where(eq(campoHistorial.organizacionId, organizacionId));
+  const conHistorial = (h?.n ?? 0) > 0;
+  let impedimento: string | null = null;
+  if (tipo !== 'agencia' && cuentas.length > 0) {
+    impedimento = `${nombre} tiene ${cuentas.length} ${cuentas.length === 1 ? 'cuenta' : 'cuentas'} (activas o desactivadas) y no se puede borrar: se perdería quién hizo cada cambio. Desactívala en su lugar.`;
+  } else if (conHistorial) {
+    impedimento = `${nombre} tiene cambios registrados en las referencias y no se puede borrar. Desactívala en su lugar.`;
+  } else {
+    const con = cuentas.filter((c) => c.conTrabajo);
+    if (con.length > 0) {
+      impedimento = `${con.map((c) => c.usuario ?? c.nombre).join(', ')} ya ${con.length === 1 ? 'trabajó' : 'trabajaron'} en referencias (historial, comentarios o fichas): borrarla${con.length === 1 ? '' : 's'} perdería quién lo hizo. Desactívala en su lugar.`;
+    }
+  }
+  return { tipo, cuentas, conHistorial, impedimento };
+}
+
 /**
- * Borrar una organizacion creada por error o que ya no se usa. SOLO si no tiene ninguna cuenta (activa o no) ni cambios
- * registrados a su nombre: las cuentas y el historial de las fichas la referencian, y borrarla los dejaria sin saber de quien
- * eran. Si tiene gente, se desactiva (lo que ya existe). Supervisora y administrador pueden. Auditado con el nombre,
- * porque la fila deja de existir.
+ * Borrar una organizacion. Una INTERNA (creada por error) solo si no tiene ninguna cuenta. Una AGENCIA se va con sus cuentas
+ * (reunion 2026-11-10: «si se elimina la organizacion se eliminan sus cuentas»), siempre que ninguna haya dejado trabajo propio:
+ * el historial, los comentarios y las fichas que crearon o cerraron las referencian y borrarlas los dejaria sin saber de quien
+ * eran; ahi se desactiva. Lo operativo de las cuentas (pendientes, avisos, sesiones, clave) se va con ellas; sus filas de
+ * auditoria se conservan con el usuario anotado. Supervisora y administrador pueden. Auditado con el nombre, porque la fila deja de existir.
  */
-export async function eliminarOrganizacion(ctx: Contexto, entrada: unknown): Promise<{ ok: true; nombre: string }> {
+export async function eliminarOrganizacion(ctx: Contexto, entrada: unknown): Promise<{ ok: true; nombre: string; cuentasEliminadas: number }> {
   exigir(ctx.actor, 'supervisar');
   const e = parsear(z.object({ organizacionId: z.uuid() }), entrada);
   const ahora = ahoraDe(ctx);
@@ -201,30 +250,31 @@ export async function eliminarOrganizacion(ctx: Contexto, entrada: unknown): Pro
     // El bloqueo de la fila serializa con crear una cuenta en esta organizacion (su clave foranea toma el mismo candado).
     const [o] = await tx.select().from(organizacion).where(eq(organizacion.id, e.organizacionId)).for('update').limit(1);
     if (!o) throw new ErrorAccion('NO_ENCONTRADO', 'No encontramos esa organización.');
-    const [cuentas] = await tx.select({ n: sql<number>`count(*)::int` }).from(usuario).where(eq(usuario.organizacionId, o.id));
-    const nCuentas = cuentas?.n ?? 0;
-    if (nCuentas > 0) {
-      throw new ErrorAccion(
-        'VALIDACION',
-        `${o.nombre} tiene ${nCuentas} ${nCuentas === 1 ? 'cuenta' : 'cuentas'} (activas o desactivadas) y no se puede borrar: se perdería quién hizo cada cambio. Desactívala en su lugar.`,
-        { cuentas: nCuentas },
-      );
+    const d = await diagnosticoBorradoOrganizacion(tx, o.id, o.nombre, o.tipo);
+    if (d.impedimento) throw new ErrorAccion('VALIDACION', d.impedimento, { cuentas: d.cuentas.length });
+    // No se borran cuentas de administrador ni de supervisora desde aqui (solo las de area y de agencia).
+    if (d.cuentas.some((c) => c.rol === 'admin' || c.rol === 'supervisor')) {
+      throw new ErrorAccion('VALIDACION', `${o.nombre} tiene cuentas de administración y no se puede borrar.`);
     }
-    const [cambios] = await tx.select({ n: sql<number>`count(*)::int` }).from(campoHistorial).where(eq(campoHistorial.organizacionId, o.id));
-    if ((cambios?.n ?? 0) > 0) {
-      throw new ErrorAccion('VALIDACION', `${o.nombre} tiene cambios registrados en las referencias y no se puede borrar. Desactívala en su lugar.`);
+    try {
+      await llamarBorrado(tx, 'eliminar_organizacion', o.id);
+    } catch (err) {
+      const m = mensajeDeBase(err);
+      if (m.includes('usuario_con_trabajo') || m.includes('organizacion_con_historial') || m.includes('organizacion_interna_con_cuentas')) {
+        throw new ErrorAccion('VALIDACION', `${o.nombre} no se puede borrar: tiene cuentas que ya trabajaron en referencias. Desactívala en su lugar.`);
+      }
+      throw err;
     }
-    await tx.delete(organizacion).where(eq(organizacion.id, o.id));
     await auditar(tx, {
       usuarioId: ctx.actor.usuarioId,
       accion: 'eliminar_organizacion',
       entidad: 'organizacion',
       entidadId: o.id,
-      detalle: { nombre: o.nombre, tipo: o.tipo, activa: o.activa },
+      detalle: { nombre: o.nombre, tipo: o.tipo, activa: o.activa, cuentas: d.cuentas.map((c) => c.usuario ?? c.nombre), pendientesQuitados: d.cuentas.reduce((a, c) => a + c.pendientes, 0) },
       ip: ctx.ip,
       creadoEn: ahora,
     });
-    return { ok: true as const, nombre: o.nombre };
+    return { ok: true as const, nombre: o.nombre, cuentasEliminadas: d.cuentas.length };
   });
 }
 

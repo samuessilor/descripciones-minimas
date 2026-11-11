@@ -4,11 +4,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asignacion, auditoria, notificacion, session, usuario } from '@/db/esquema';
 import { ErrorAccion } from '@/server/acciones/resultado';
 import { cambiarOrganizacion, cambiarRol, crearCuenta, desactivarUsuario, restablecerClave } from '@/server/acciones/usuarios';
-import { cerrarSesionesDeUsuario, editarUsuario } from '@/server/acciones/usuarios-admin';
+import { editarUsuario } from '@/server/acciones/usuarios-admin';
 import {
   candidatosReasignacion,
   contarAdminsActivos,
-  listarSesionesDeUsuario,
   listarUsuariosAdmin,
   obtenerUsuarioAdmin,
   pendientesDeUsuario,
@@ -54,12 +53,10 @@ describe('permisos: solicitante, aduana y lector no administran personas', () =>
         ['crear cuenta', () => crearCuenta(ctx, { nombre: 'X', usuario: 'xxx', organizacionId: e.orgInterna, rol: 'lector' })],
         ['restablecer clave', () => restablecerClave(ctx, { usuarioId: objetivo })],
         ['editar', () => editarUsuario(ctx, { usuarioId: objetivo, nombre: 'X' })],
-        ['cerrar sesiones', () => cerrarSesionesDeUsuario(ctx, { usuarioId: objetivo })],
         ['listar', () => listarUsuariosAdmin(e.db, actor)],
         ['obtener', () => obtenerUsuarioAdmin(e.db, actor, objetivo)],
         ['pendientes', () => pendientesDeUsuario(e.db, actor, objetivo)],
         ['candidatos', () => candidatosReasignacion(e.db, actor, objetivo)],
-        ['sesiones', () => listarSesionesDeUsuario(e.db, actor, objetivo)],
         ['admins', () => contarAdminsActivos(e.db, actor)],
         ['resumen', () => resumenAdmin(e.db, actor)],
       ];
@@ -120,30 +117,6 @@ describe('editar datos', () => {
 
   it('valida el nombre', async () => {
     expect(await codigoDe(editarUsuario(e.ctx(e.admin), { usuarioId: e.charles.usuarioId, nombre: '   ' }))).toBe('VALIDACION');
-  });
-});
-
-describe('sesiones de otra persona', () => {
-  it('lista solo las vigentes, sin token, y las cierra todas o una sola', async () => {
-    const a = await abrirSesion(e.edward.usuarioId);
-    const b = await abrirSesion(e.edward.usuarioId, 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Safari/604.1');
-    const ajena = await abrirSesion(e.charles.usuarioId);
-    await e.db.insert(session).values({ userId: e.edward.usuarioId, token: 'vencida', expiresAt: new Date(Date.now() - 1000) });
-
-    const vistas = await listarSesionesDeUsuario(e.db, e.admin, e.edward.usuarioId);
-    expect(vistas.map((s) => s.id).sort()).toEqual([a, b].sort());
-    expect(JSON.stringify(vistas)).not.toMatch(/"token"/);
-
-    expect(await cerrarSesionesDeUsuario(e.ctx(e.admin), { usuarioId: e.edward.usuarioId, sesionId: a })).toEqual({ cerradas: 1 });
-    expect((await listarSesionesDeUsuario(e.db, e.admin, e.edward.usuarioId)).map((s) => s.id)).toEqual([b]);
-    expect(await codigoDe(cerrarSesionesDeUsuario(e.ctx(e.admin), { usuarioId: e.edward.usuarioId, sesionId: a }))).toBe('NO_ENCONTRADO');
-    // la sesion de otra persona no se puede cerrar diciendo que es de Edward
-    expect(await codigoDe(cerrarSesionesDeUsuario(e.ctx(e.admin), { usuarioId: e.edward.usuarioId, sesionId: ajena }))).toBe('NO_ENCONTRADO');
-    expect(await listarSesionesDeUsuario(e.db, e.admin, e.charles.usuarioId)).toHaveLength(1);
-
-    expect(await cerrarSesionesDeUsuario(e.ctx(e.admin), { usuarioId: e.edward.usuarioId })).toEqual({ cerradas: 2 }); // la vigente y la vencida
-    const a2 = await auditoriasDe('cerrar_sesion', e.edward.usuarioId);
-    expect(a2.some((x) => (x.detalle as { porAdmin?: boolean }).porAdmin === true)).toBe(true);
   });
 });
 
@@ -209,7 +182,7 @@ describe('pendientes y candidatos de reasignacion', () => {
     expect(r.sesionesCerradas).toBeGreaterThanOrEqual(1);
     expect(await pendientesDeUsuario(e.db, e.admin, e.brian.usuarioId)).toHaveLength(0);
     expect(await pendientesDeUsuario(e.db, e.admin, e.brianB.usuarioId)).toHaveLength(2);
-    expect(await listarSesionesDeUsuario(e.db, e.admin, e.brian.usuarioId)).toHaveLength(0);
+    expect(await e.db.select().from(session).where(eq(session.userId, e.brian.usuarioId))).toHaveLength(0);
     const viejas = await e.db.select().from(asignacion).where(and(eq(asignacion.aUsuarioId, e.brian.usuarioId), eq(asignacion.estado, 'reasignada')));
     expect(viejas).toHaveLength(2);
 

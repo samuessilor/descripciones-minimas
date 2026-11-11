@@ -8,6 +8,11 @@ export type AccionAuditada =
   | 'cerrar_sesion'
   | 'crear_cuenta'
   | 'restablecer_clave'
+  // El administrador volvio a ver la contrasena de entrega de una cuenta (no queda la contrasena en la auditoria).
+  | 'ver_clave'
+  // Eliminar una referencia, una cuenta o una agencia (reunion 2026-11-10): la fila deja de existir, asi que el detalle conserva quien era.
+  | 'eliminar_referencia'
+  | 'eliminar_cuenta'
   | 'cambiar_clave'
   | 'desactivar'
   | 'reactivar'

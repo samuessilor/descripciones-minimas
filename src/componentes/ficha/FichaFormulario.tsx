@@ -1,7 +1,9 @@
 'use client';
 
-import { Copy, EllipsisVertical, Lock, Pencil, TriangleAlert, CircleCheck, WifiOff } from 'lucide-react';
+import { Copy, EllipsisVertical, Lock, Pencil, Trash2, TriangleAlert, CircleCheck, WifiOff } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { eliminarReferenciaAccion } from '@/app/acciones/ficha';
 import { avisarCambioDeFicha, avisarCampoGuardado, EVENTO_FICHA_CAMBIADA } from '@/componentes/colaboracion/api';
 import { alVolverDePestana, EVENTO_PRESENCIA, sondearConBackoff } from '@/componentes/colaboracion/presencia';
 import { SONDEO } from '@/componentes/colaboracion/sondeo';
@@ -13,10 +15,13 @@ import { Aviso } from '@/componentes/ui/aviso';
 import { Avatar, nombreVisible } from '@/componentes/ui/avatar';
 import { Boton } from '@/componentes/ui/button';
 import { AnillosLente } from '@/componentes/ui/decoracion';
+import { DialogoConfirmacion } from '@/componentes/ui/dialogo';
+import { useAvisos } from '@/componentes/ui/toast';
 import { ItemMenu, MenuDesplegable } from '@/componentes/ui/menu-desplegable';
 import { Migas } from '@/componentes/ui/pagina';
 import { SeccionFicha } from '@/componentes/ui/tarjeta';
 import type { ResponsablesPorParte } from '@/server/politicas/tablero';
+import { AvisoDesignarAduana } from './AvisoDesignarAduana';
 import { PendienteDeSeccion } from './PendienteDeSeccion';
 import {
   CAMPOS,
@@ -95,6 +100,9 @@ export function FichaFormulario({
   const setAbiertas = (fn: (a: Record<Seccion, boolean>) => Record<Seccion, boolean>) => setManual(fn(abiertas));
   const [activa, setActiva] = useState<Seccion>('producto');
   const [corrigiendo, setCorrigiendo] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
+  const router = useRouter();
+  const { avisar } = useAvisos();
   const [ultimoGuardado, setUltimoGuardado] = useState<number | null>(null);
   const [anuncio, setAnuncio] = useState('');
   const versionConocida = useRef(inicial.version);
@@ -337,6 +345,8 @@ export function FichaFormulario({
     }
   }
   const rolAduana = actor.rol === 'aduana';
+  const mostrarDesignar =
+    !cerrada && !rolAduana && actor.rol !== 'lector' && comp.tresSeccionesVerdes && responsables.aduana.length === 0 && puede(actor, 'enviar_a');
   const panelSiguientePaso =
     actor.rol === 'lector' ? null : (
       <SiguientePaso
@@ -361,6 +371,8 @@ export function FichaFormulario({
   const puedeAdjuntar = puede(actor, 'adjuntar_foto', { estadoFicha: ficha.estado }) && !ficha.archivada;
   const puedeCorregir = puede(actor, 'corregir_codigo', { esCreador: actor.usuarioId === actor.creadaPorId, estadoFicha: ficha.estado }) && !ficha.archivada;
   const puedeSimilar = puede(actor, 'crear_referencia');
+  // Eliminar (administrador y supervisora general): la referencia, cerrada o pendiente, se borra con todo lo suyo.
+  const puedeEliminar = puede(actor, 'supervisar');
   const verde = ficha.color === 'verde';
   const textoSello = verde ? 'Clasificada' : 'Pendiente';
 
@@ -451,6 +463,13 @@ export function FichaFormulario({
           <span className="max-sm:hidden">
             <BotonEnviarA referenciaId={ficha.id} />
           </span>
+          {puedeEliminar ? (
+            <Boton variante="peligro" onClick={() => setEliminando(true)} data-testid="eliminar-referencia">
+              <Trash2 aria-hidden className="size-4" />
+              <span className="max-sm:sr-solo">Eliminar</span>
+              <span className="sr-solo"> referencia</span>
+            </Boton>
+          ) : null}
           {puedeSimilar || puedeCorregir ? (
             <MenuDesplegable
               etiqueta="Más acciones"
@@ -679,11 +698,14 @@ export function FichaFormulario({
         })}
       </div>
 
+      {/* Las tres secciones del area completas y nadie de la aduana la tiene: aviso grande para designar la agencia responsable. */}
+      {mostrarDesignar ? <AvisoDesignarAduana referenciaId={ficha.id} codigo={ficha.codigo} /> : null}
+
       {rolAduana ? null : panelSiguientePaso}
 
       {/* ---- Cuarto bloque: aduana (lo construye su dueno) ----------------------------------------------- */}
       {/* De quien es la parte de la aduana (o que aun no tiene agencia), igual que en las secciones del area. */}
-      {!cerrada && !rolAduana ? (
+      {!cerrada && !rolAduana && !mostrarDesignar ? (
         <PendienteDeSeccion
           referenciaId={ficha.id}
           seccion="aduana"
@@ -703,6 +725,31 @@ export function FichaFormulario({
         </p>
         <BotonEnviarA referenciaId={ficha.id} />
       </div>
+
+      {puedeEliminar ? (
+        <DialogoConfirmacion
+          abierto={eliminando}
+          onCerrar={() => setEliminando(false)}
+          titulo={`Eliminar la referencia ${ficha.codigo}`}
+          descripcion={
+            <>
+              Se borra {ficha.codigo} con todo lo suyo: lo que se escribió en cada campo, los comentarios, los pendientes y los avisos. Queda una constancia en la
+              auditoría y el código se puede volver a usar. <strong>No se puede deshacer.</strong>
+              {ficha.estado === 'CLASIFICADA' ? ' Está clasificada: se borra también su clasificación.' : ''} Si solo quieres sacarla del listado, mejor archívala.
+            </>
+          }
+          confirmar="Eliminar referencia"
+          cancelar="Todavía no"
+          peligro
+          onConfirmar={async () => {
+            const r = await eliminarReferenciaAccion({ referenciaId: ficha.id });
+            if (!r.ok) throw new Error(r.mensaje);
+            avisar({ tipo: 'exito', titulo: `Eliminamos la referencia ${r.data.codigo}` });
+            router.push('/referencias');
+            router.refresh();
+          }}
+        />
+      ) : null}
 
       {corrigiendo ? (
         <CorregirCodigo

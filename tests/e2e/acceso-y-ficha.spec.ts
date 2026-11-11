@@ -43,9 +43,9 @@ test('ficha: guarda al salir del campo, muestra autor y fecha y conserva al reca
   await page.getByRole('link', { name: /TEST-0003/ }).click();
   await expect(page.getByRole('heading', { name: 'Filtro de aire (ejemplo)' })).toBeVisible();
 
-  await abrirSeccion(page, 'producto'); // las secciones arrancan plegadas
+  await abrirSeccion(page, 'detalle'); // las secciones arrancan plegadas (el uso es de Detalle desde la reunion 2026-11-10)
   const valor = `Uso escrito por la prueba ${Date.now()}`;
-  const campo = page.getByLabel(/^Uso del producto$/);
+  const campo = page.getByLabel(/^Uso\/Función específica del producto$/);
   await campo.fill(valor);
   await expect(page.getByText('Sin guardar').first()).toBeVisible();
   await campo.blur();
@@ -53,8 +53,8 @@ test('ficha: guarda al salir del campo, muestra autor y fecha y conserva al reca
   await expect(page.locator('[data-campo="uso"]').getByText(/Tú ·/)).toBeVisible();
 
   await page.reload();
-  await abrirSeccion(page, 'producto');
-  await expect(page.getByLabel(/^Uso del producto$/)).toHaveValue(valor);
+  await abrirSeccion(page, 'detalle');
+  await expect(page.getByLabel(/^Uso\/Función específica del producto$/)).toHaveValue(valor);
 
   expect(errores, errores.join('\n')).toEqual([]);
 });
@@ -67,7 +67,7 @@ test('dos navegadores en el mismo campo: choque con las tres salidas, sin perder
       await p.goto('/referencias');
       await p.getByRole('link', { name: /TEST-0003/ }).click();
       await expect(p.getByRole('heading', { name: 'Filtro de aire (ejemplo)' })).toBeVisible();
-      await abrirSeccion(p, 'producto');
+      await abrirSeccion(p, 'detalle'); // el fabricante es de Detalle desde la reunion 2026-11-10
     }
     const etiqueta = /^Fabricante/;
     const marca = Date.now();

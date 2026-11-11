@@ -139,3 +139,17 @@ export const verification = pgTable(
   },
   (t) => [index('verification_identifier_idx').on(t.identifier)],
 );
+
+/**
+ * Clave de entrega: la contrasena que el administrador (o el sistema al crear una cuenta) le entrego a la persona, guardada
+ * CIFRADA (AES-256-GCM con una llave derivada de `BETTER_AUTH_SECRET`, ver `server/clave-entrega.ts`) para que SOLO el administrador
+ * pueda volver a verla. Es la unica copia reversible: la contrasena de verdad (`account.password`) sigue siendo un hash. Se borra
+ * en cuanto la persona cambia su contrasena (deja de ser la de entrega) y al restablecerla se reemplaza.
+ */
+export const claveEntrega = pgTable('clave_entrega', {
+  usuarioId: uuid('usuario_id')
+    .primaryKey()
+    .references(() => usuario.id, { onDelete: 'cascade' }),
+  cifrada: text('cifrada').notNull(),
+  creadaEn: timestamp('creada_en', { withTimezone: true }).notNull().defaultNow(),
+});

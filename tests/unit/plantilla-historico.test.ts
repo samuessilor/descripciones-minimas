@@ -79,7 +79,7 @@ describe('interpretarFila: el codigo y las celdas que Excel estropea', () => {
     expect(f.ok).toBe(false);
     if (!f.ok) {
       expect(f.errores.filter((e) => e.includes('fórmula sin valor calculado'))).toHaveLength(2);
-      expect(f.errores.join(' ')).toContain('Uso del producto:');
+      expect(f.errores.join(' ')).toContain('Uso/Función específica del producto:');
     }
     // Un codigo con formula sin valor da ese error y no el de «falta el codigo».
     const c = interpretarFila(2, { ...base, codigo: { invalida: 'formula' } }, ctx);
@@ -98,7 +98,7 @@ describe('interpretarFila', () => {
     expect(r.fila.fechaClasificacion).toBe('2025-03-15');
     expect(r.fila.sinFechaClasificacion).toBe(true);
     expect(r.fila.codigoNorm).toBe('IMP001');
-    expect(r.fila.faltantes).toContain('Uso del producto');
+    expect(r.fila.faltantes).toContain('Uso/Función específica del producto');
     expect(r.fila.faltantes).toContain('Partida arancelaria');
     expect(r.avisos.some((a) => a.startsWith('Le faltan'))).toBe(true);
     // Sin informacion adicional se deja constancia de donde viene la referencia.
@@ -133,6 +133,24 @@ describe('interpretarFila', () => {
     expect(valor(r, 'marca')).toEqual({ sin_marca: true });
     expect(valor(r, 'proveedor')).toEqual({ mismo_fabricante: true });
     if (r.ok) expect(r.fila.partida).toBe('8421.39.00.00');
+  });
+
+  it('arancel e IVA: «5», «5 %», «5%» o una celda de porcentaje son lo mismo; lo que no esta en la lista es error', () => {
+    expect(valor(leer({ arancel: '5%', iva: '19%' }), 'arancel')).toBe('5%');
+    expect(valor(leer({ arancel: ' 10 % ', iva: 19 }), 'arancel')).toBe('10%');
+    expect(valor(leer({ arancel: 0.15, iva: 0.19 }), 'arancel')).toBe('15%');
+    expect(valor(leer({ arancel: 0.15, iva: 0.19 }), 'iva')).toBe('19%');
+    expect(valor(leer({ iva: 0 }), 'iva')).toBe('0%');
+    expect(valor(leer({ arancel: '0,0' }), 'arancel')).toBe('0%');
+    const mala = leer({ arancel: '7%', iva: '16%' });
+    expect(mala.ok).toBe(false);
+    if (!mala.ok) {
+      expect(mala.errores.join(' ')).toContain('Arancel: «7%» no es una opción. Elige: 0%, 5%, 10%, 15%.');
+      expect(mala.errores.join(' ')).toContain('IVA: «16%» no es una opción. Elige: 0%, 19%.');
+    }
+    // Sin elegirlos la fila entra, pero queda anotado que faltan.
+    const sin = leer();
+    expect(sin.ok && sin.fila.faltantes).toEqual(expect.arrayContaining(['Arancel', 'IVA']));
   });
 
   it('«No aplica» solo en los campos que lo admiten', () => {
@@ -179,7 +197,7 @@ describe('interpretarFila', () => {
     expect(t).toContain('Falta la descripción según factura');
     expect(t).toContain('Tipo de producto «Cosa»');
     expect(t).toContain('no puede ser futura');
-    expect(t).toContain('Unidad de medida: «Cajas» no está en el catálogo');
+    expect(t).toContain('Unidad de medida según factura: «Cajas» no está en el catálogo');
     expect(t).toContain('País de origen: «Narnia»');
     expect(t).toContain('Reembolsable: «tal vez»');
     expect(t).toContain('Partida arancelaria final:');

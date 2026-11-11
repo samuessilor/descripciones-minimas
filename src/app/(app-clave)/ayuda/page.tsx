@@ -92,6 +92,11 @@ export default async function Ayuda() {
         </Paso>
         <Paso titulo="5. Cuando termino mi parte">
           <ul>
+            <li>
+              Cuando las tres secciones quedan completas y nadie de la aduana la tiene, debajo de las secciones aparece un aviso grande:{' '}
+              <b>«Designar la agencia aduanera responsable»</b>. Abre «Enviar a» con las agencias de aduana primero (las áreas de EssilorLuxottica no se
+              eligen para esta parte).
+            </li>
             <li>«Listo por mi parte» avisa a quien te la envió.</li>
             <li>O pásala a la siguiente persona con «Enviar a…», por ejemplo a la agencia de aduana.</li>
             <li>El panel «Siguiente paso», al final de la ficha, te dice qué sigue en cada caso.</li>
@@ -112,7 +117,7 @@ export default async function Ayuda() {
             <li>Solo ves las referencias que te enviaron.</li>
             <li>
               Completa el bloque «Lo llena la aduana»: <b>partida arancelaria</b> (los 10 dígitos; los puntos los pone la plataforma; si la partida tiene
-              una restricción en el catálogo, se copia sola), <b>restricciones</b> y <b>observaciones</b>. Las dos últimas admiten «No aplica».
+              una restricción en el catálogo, se copia sola), el <b>arancel</b> (0, 5, 10 o 15 %) y el <b>IVA</b> (0 o 19 %), que se eligen de una lista, <b>restricciones</b> y <b>observaciones</b>. Las dos últimas admiten «No aplica».
             </li>
             <li>
               En <b>descripciones mínimas adicionales</b> escribe lo que te falta saber del producto (por ejemplo «¿el motor es AC o DC? ¿amperaje?») o
@@ -133,21 +138,31 @@ export default async function Ayuda() {
               campana a diario.
             </li>
             <li>
-              Las cuentas se crean en Administración › Usuarios › «Crear cuenta»: nombre, usuario, organización, rol y área. Si las crea el
-              administrador, la plataforma genera una <b>contraseña temporal</b> y la muestra <b>una sola vez</b>: se copia y se entrega a quien
-              corresponda. Si las crea la supervisora general, la cuenta queda «Pendiente de entrega» (sin contraseña, no puede entrar) y a los
-              administradores les llega un aviso: el administrador genera la clave con «Restablecer contraseña» en la ficha de la cuenta, lo que
-              también sirve si se pierde y cierra sus sesiones.
+              Las cuentas se crean en Administración › Usuarios › «Crear cuenta»: nombre, usuario, organización, rol y área. La plataforma genera
+              una <b>contraseña temporal</b>. Si la cuenta la crea el administrador, se muestra al crearla. Si la crea la supervisora general, ella no
+              la ve: a los administradores les llega un aviso y el administrador abre la cuenta, ve el <b>usuario</b> y la <b>contraseña</b> («Ver
+              contraseña») y se la entrega. Esa contraseña se puede volver a ver mientras la persona no la cambie; si ya la cambió, o si se pierde,
+              se genera otra con «Restablecer contraseña» (que también cierra sus sesiones).
             </li>
             <li>
               Cada empresa de aduana es una organización de tipo agencia con una cuenta general, sin datos personales. Para una empresa nueva:
               Administración › Organizaciones › «Nueva agencia de aduana», en un solo paso (crea la empresa y su cuenta general; si la crea la
-              supervisora, la cuenta queda pendiente de entrega).
+              supervisora, el administrador ve el usuario y la contraseña en la ficha de la cuenta y se la entrega).
             </li>
             <li>
               Si cambian de proveedor de aduana: en Administración › Usuarios abre la cuenta de la agencia vieja y desactívala; antes de hacerlo te pide a
-              quién pasar sus pendientes. Después desactiva la organización: el historial conserva lo que escribió. Solo una organización sin ninguna cuenta
-              (por ejemplo, una creada por error) se puede borrar del todo, con «Borrar organización» en su ficha.
+              quién pasar sus pendientes. Después desactiva la organización: el historial conserva lo que escribió.
+            </li>
+            <li>
+              <b>Eliminar</b> es para lo que se creó por error o nunca se usó. Una cuenta se elimina con «Eliminar cuenta» en su ficha y una agencia con
+              «Borrar organización» en la suya (la agencia se va con sus cuentas, y si se elimina su única cuenta se elimina también la agencia). Solo se
+              puede si la cuenta <b>no trabajó</b>: si escribió un campo, comentó, subió una foto o creó o cerró una referencia, hay que desactivarla,
+              porque borrarla perdería quién hizo cada cambio.
+            </li>
+            <li>
+              Una <b>referencia</b>, cerrada o pendiente, la elimina el administrador o la supervisora general con el botón rojo «Eliminar» arriba a la
+              derecha de la ficha. Se borra con todo lo suyo (historial, comentarios, pendientes) y el código queda libre. Queda constancia en la auditoría.
+              Si solo quieres sacarla del listado, es mejor archivarla.
             </li>
           </ul>
         </Paso>

@@ -13,7 +13,7 @@ import { listarAuditoriaAdmin, type FiltrosAuditoria } from '../politicas/admini
 
 export { crearOrganizacion, editarOrganizacion, cambiarEstadoOrganizacion, retirarAccesoAgencia } from './organizaciones';
 export { guardarItemCatalogo, activarItemCatalogo, moverItemCatalogo, guardarRestriccion, guardarPartida } from './catalogos-admin';
-export { editarUsuario, cerrarSesionesDeUsuario } from './usuarios-admin';
+export { editarUsuario } from './usuarios-admin';
 
 export async function listarUsuarios(
   ctx: Contexto,

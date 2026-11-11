@@ -21,8 +21,8 @@ interface Creada {
 
 /**
  * «Nueva agencia»: el nombre de la empresa y, si se quiere, el usuario (se sugiere solo). Crea la organizacion y su unica
- * cuenta de una vez. Si lo hace el administrador se muestra la clave una vez; si lo hace la supervisora no hay clave: la
- * cuenta queda pendiente de entrega y el administrador la genera desde la ficha de la cuenta.
+ * cuenta de una vez. Si lo hace el administrador se muestra la clave una vez; si lo hace la supervisora no la ve: la cuenta
+ * nace con su clave y el administrador la ve y la entrega desde la ficha de la cuenta.
  */
 export function FormularioNuevaAgencia() {
   const [nombre, setNombre] = useState('');
@@ -52,9 +52,9 @@ export function FormularioNuevaAgencia() {
         {creada.secreto ? (
           <CredencialesEntrega secreto={creada.secreto} />
         ) : (
-          <Aviso tipo="info" titulo="Cuenta pendiente de entrega">
-            Creamos la cuenta <span className="font-mono font-bold">{creada.usuario}</span>, pero todavía no tiene contraseña y no puede entrar. Avisamos al
-            administrador para que genere la clave y se la entregue a la agencia.
+          <Aviso tipo="info" titulo="Cuenta lista: el administrador entrega la contraseña">
+            Creamos la cuenta <span className="font-mono font-bold">{creada.usuario}</span> con su contraseña, que solo ve el administrador. Le avisamos: abre la
+            cuenta, ve el usuario y la contraseña y se las entrega a la agencia.
           </Aviso>
         )}
         <div className="flex flex-wrap gap-3">
