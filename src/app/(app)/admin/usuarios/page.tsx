@@ -62,7 +62,7 @@ export default async function AdminUsuarios({ searchParams }: { searchParams: Pr
     <>
       <EncabezadoPagina
         titulo="Usuarios"
-        descripcion="Las cuentas que pueden entrar (una por área, una por agencia y las de cada persona), con su rol y organización. Nadie se elimina: se desactiva y lo que llenó se conserva."
+        descripcion="Las cuentas que pueden entrar (una por área, una por agencia y las de cada persona), con su rol y organización. Desactivar es lo normal y conserva lo que llenó; eliminar solo sirve para cuentas creadas por error que nunca trabajaron."
         acciones={
           <EnlaceBoton href="/admin/usuarios/nueva">
             <UserPlus aria-hidden className="size-4" />

@@ -239,7 +239,7 @@ export default async function AdminUsuario({ params }: { params: Promise<{ id: s
           <Seccion
             id="desactivar"
             titulo="Desactivar"
-            descripcion="Nunca se elimina a nadie: se desactiva. Deja de entrar al instante y lo que llenó se conserva."
+            descripcion="Lo normal es desactivar: deja de entrar al instante y lo que llenó se conserva."
           >
             {esYo ? (
               <Aviso tipo="aviso" titulo="No puedes desactivarte a ti mismo">
