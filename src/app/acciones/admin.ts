@@ -14,7 +14,7 @@ import { editarUsuario } from '@/server/acciones/usuarios-admin';
 import type { Contexto } from '@/server/politicas/actor';
 import { contextoDeAccion } from '@/server/sesion';
 
-/** Usuario y contrasena temporal que se muestran UNA vez al administrador que crea o restablece una cuenta. */
+/** Usuario y contrasena temporal que se muestran al administrador que crea o restablece una cuenta (y los vuelve a ver desde la ficha de la cuenta). */
 export interface SecretoEntrega {
   id: string;
   nombre: string;
@@ -120,7 +120,7 @@ export async function crearCuentaAccion(_previo: EstadoAdmin, datos: FormData): 
   if (r.data.claveTemporal) {
     return {
       estado: 'ok',
-      mensaje: `Creamos la cuenta de ${r.data.nombre}. Copia el usuario y la contraseña ahora: no se vuelven a mostrar.`,
+      mensaje: `Creamos la cuenta de ${r.data.nombre}. Quedan guardados: los vuelves a ver en la ficha de la cuenta (Ver contraseña).`,
       secreto: { ...cuenta, clave: r.data.claveTemporal, accion: 'creada' },
       marca: Date.now(),
     };
@@ -147,7 +147,7 @@ export async function crearAgenciaAccion(_previo: EstadoAdmin, datos: FormData):
   if (r.data.claveTemporal) {
     return {
       estado: 'ok',
-      mensaje: `Creamos la agencia ${r.data.nombre} y su cuenta. Copia el usuario y la contraseña ahora: no se vuelven a mostrar.`,
+      mensaje: `Creamos la agencia ${r.data.nombre} y su cuenta. Quedan guardados: los vuelves a ver en la ficha de la cuenta (Ver contraseña).`,
       secreto: { ...cuenta, clave: r.data.claveTemporal, accion: 'creada' },
       marca: Date.now(),
     };

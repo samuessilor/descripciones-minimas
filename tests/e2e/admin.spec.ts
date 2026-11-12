@@ -67,7 +67,7 @@ async function crearCuenta(page: Page, p: { nombre: string; usuario: string; org
   if (p.area) await page.getByLabel(/^Área/).selectOption(p.area);
   await pulsar(page.getByRole('button', { name: 'Crear la cuenta' }));
   await expect(page.getByRole('heading', { name: `Cuenta creada: ${p.nombre}` })).toBeVisible();
-  await expect(page.getByText('Cópialas ahora: no se vuelven a mostrar')).toBeVisible();
+  await expect(page.getByText('Quedan guardadas: las puedes volver a ver')).toBeVisible();
   const clave = (await page.getByTestId('credencial-contraseña').innerText()).trim();
   expect(clave).toMatch(/^[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}$/);
   return clave;
@@ -151,7 +151,7 @@ test('admin crea una cuenta, quien la recibe entra con usuario y contrasena, se 
   await expect(page.getByText('Sin ingresar')).toHaveCount(0);
   await pulsar(page.getByRole('button', { name: 'Restablecer contraseña' }));
   await pulsar(page.getByRole('dialog').getByRole('button', { name: 'Restablecer', exact: true }));
-  await expect(page.getByRole('dialog').getByText('Cópialas ahora: no se vuelven a mostrar')).toBeVisible();
+  await expect(page.getByRole('dialog').getByText('Quedan guardadas: las puedes volver a ver')).toBeVisible();
   const nueva = (await page.getByTestId('credencial-contraseña').innerText()).trim();
   expect(nueva).not.toBe(clave);
   await pulsar(page.getByRole('button', { name: 'Listo, ya la copié' }));

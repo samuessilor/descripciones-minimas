@@ -34,14 +34,15 @@ function Fila({ etiqueta, valor }: { etiqueta: string; valor: string }) {
 }
 
 /**
- * El usuario y la contrasena temporal de una cuenta recien creada o restablecida. Se muestran UNA vez: en la base solo
- * queda el hash. Quien administra se los entrega a quien corresponda (en persona o por un canal que ya use el area).
+ * El usuario y la contrasena temporal de una cuenta recien creada o restablecida. La contrasena de verdad solo queda como hash, pero
+ * se guarda ademas una copia cifrada de la vigente: el administrador la vuelve a ver en la ficha de la cuenta («Ver contraseña»),
+ * tambien si la persona la cambia. Quien administra se los entrega a quien corresponda.
  */
 export function CredencialesEntrega({ secreto }: { secreto: SecretoEntrega }) {
   return (
     <div className="space-y-4" data-testid="credenciales-entrega">
-      <Aviso tipo="aviso" titulo="Cópialas ahora: no se vuelven a mostrar">
-        Entrega estos datos a {secreto.nombre}. Si se pierde, la restableces desde la ficha de la cuenta.
+      <Aviso tipo="aviso" titulo="Quedan guardadas: las puedes volver a ver">
+        Entrega estos datos a {secreto.nombre}. Los vuelves a ver cuando quieras en la ficha de la cuenta («Ver contraseña»), también si la persona la cambia.
       </Aviso>
       <Fila etiqueta="Usuario" valor={secreto.usuario} />
       <Fila etiqueta="Contraseña" valor={secreto.clave} />

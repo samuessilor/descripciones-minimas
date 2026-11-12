@@ -8,7 +8,7 @@ import { account, session, usuario } from '@/db/esquema';
 import { CLAVE_MAX, validarClaveNueva } from '@/dominio/credenciales';
 import { auditar } from '../auditoria';
 import { hashearClave, verificarClave } from '../claves';
-import { borrarClaveEntrega } from '../clave-entrega';
+import { guardarClaveEntrega } from '../clave-entrega';
 import { limitarTasa, REGLAS_TASA } from '../limite-tasa';
 import { ahoraDe, type Contexto } from '../politicas/actor';
 import { ErrorAccion } from './resultado';
@@ -84,8 +84,8 @@ export async function cambiarMiClave(ctx: Contexto, entrada: unknown): Promise<{
       });
     }
     await tx.update(account).set({ password: nuevoHash, updatedAt: ahora }).where(eq(account.id, cred.id));
-    // La contrasena de entrega ya no es la vigente: el administrador deja de poder verla (solo restablecerla).
-    await borrarClaveEntrega(tx, ctx.actor.usuarioId);
+    // Decision del administrador (2026-11-12): tambien la que la persona elige queda guardada (cifrada) y el administrador la ve en la ficha.
+    await guardarClaveEntrega(tx, ctx.actor.usuarioId, e.nueva, ahora);
     const [antes] = await tx.select({ inicial: usuario.debeCambiarClave }).from(usuario).where(eq(usuario.id, ctx.actor.usuarioId)).limit(1);
     await tx.update(usuario).set({ debeCambiarClave: false, actualizadoEn: ahora }).where(eq(usuario.id, ctx.actor.usuarioId));
     const otras = ctx.actor.sesionId

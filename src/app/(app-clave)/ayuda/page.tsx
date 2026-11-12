@@ -141,8 +141,8 @@ export default async function Ayuda() {
               Las cuentas se crean en Administración › Usuarios › «Crear cuenta»: nombre, usuario, organización, rol y área. La plataforma genera
               una <b>contraseña temporal</b>. Si la cuenta la crea el administrador, se muestra al crearla. Si la crea la supervisora general, ella no
               la ve: a los administradores les llega un aviso y el administrador abre la cuenta, ve el <b>usuario</b> y la <b>contraseña</b> («Ver
-              contraseña») y se la entrega. Esa contraseña se puede volver a ver mientras la persona no la cambie; si ya la cambió, o si se pierde,
-              se genera otra con «Restablecer contraseña» (que también cierra sus sesiones).
+              contraseña») y se la entrega. Esa contraseña se puede volver a ver siempre (también la que la persona elija al cambiarla); si la cuenta es
+              anterior a esta función, se genera una con «Restablecer contraseña» (que también cierra sus sesiones).
             </li>
             <li>
               Cada empresa de aduana es una organización de tipo agencia con una cuenta general, sin datos personales. Para una empresa nueva:

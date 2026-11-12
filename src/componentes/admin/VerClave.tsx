@@ -37,9 +37,9 @@ export function VerClave({ usuarioId, usuario }: { usuarioId: string; usuario: s
 
       {estado.tipo === 'visible' ? (
         <div className="space-y-1">
-          <p className="text-sm font-semibold text-tinta">Contraseña de entrega</p>
+          <p className="text-sm font-semibold text-tinta">Contraseña actual</p>
           <TextoCopiable texto={estado.clave} etiqueta="contraseña" />
-          {estado.desde ? <p className="text-sm text-tinta-suave">Generada el {fechaHora(estado.desde)}. Vale mientras la persona no la cambie.</p> : null}
+          {estado.desde ? <p className="text-sm text-tinta-suave">Guardada el {fechaHora(estado.desde)}. Si la persona la cambia, aquí verás la nueva.</p> : null}
           <Boton variante="terciario" tamano="sm" onClick={() => setEstado({ tipo: 'oculta' })}>
             <EyeOff aria-hidden className="size-4" />
             Ocultar contraseña
@@ -53,8 +53,8 @@ export function VerClave({ usuarioId, usuario }: { usuarioId: string; usuario: s
       )}
 
       {estado.tipo === 'sinCopia' ? (
-        <Aviso tipo="info" titulo="No hay contraseña de entrega guardada">
-          La persona ya la cambió, o la cuenta se creó fuera de la plataforma. Para volver a entregársela, restablécela: la nueva queda guardada y la podrás ver aquí.
+        <Aviso tipo="info" titulo="No hay contraseña guardada para esta cuenta">
+          La cuenta es anterior a esta función o se creó fuera de la plataforma, y de la contraseña solo existe su huella (no se puede recuperar). Restablécela una vez: la nueva queda guardada y desde entonces la ves aquí siempre.
         </Aviso>
       ) : null}
       {estado.tipo === 'error' ? (

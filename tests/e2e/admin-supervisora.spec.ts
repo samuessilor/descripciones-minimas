@@ -125,7 +125,7 @@ test('la supervisora crea una cuenta suelta: no ve ninguna clave y la cuenta nac
   await expect(page.getByText('Cuenta lista: el administrador entrega la contraseña')).toBeVisible();
   await expect(page.getByTestId('credenciales-entrega')).toHaveCount(0);
   await expect(page.getByTestId('credencial-contraseña')).toHaveCount(0);
-  await expect(page.getByText('Cópialas ahora: no se vuelven a mostrar')).toHaveCount(0);
+  await expect(page.getByText('Quedan guardadas: las puedes volver a ver')).toHaveCount(0);
 
   // La ficha la marca «Pendiente de entrega» y no ofrece generar la clave.
   await page.getByRole('link', { name: 'Ver la cuenta' }).click();
@@ -148,7 +148,7 @@ test('la supervisora crea una agencia: no ve ninguna clave y la cuenta nace con 
   await expect(page.getByText('Cuenta lista: el administrador entrega la contraseña')).toBeVisible();
   await expect(page.getByTestId('credenciales-entrega')).toHaveCount(0);
   await expect(page.getByTestId('credencial-contraseña')).toHaveCount(0);
-  await expect(page.getByText('Cópialas ahora: no se vuelven a mostrar')).toHaveCount(0);
+  await expect(page.getByText('Quedan guardadas: las puedes volver a ver')).toHaveCount(0);
 
   await page.getByRole('link', { name: 'Ver la cuenta' }).click();
   await expect(page.getByRole('heading', { level: 1, name: AGENCIA })).toBeVisible();
@@ -176,9 +176,9 @@ for (const clave of ['cuenta', 'agencia'] as const) {
     // La ficha muestra el usuario; la contraseña se ve al pedirla (no viaja con la pagina).
     await page.goto(destino!);
     await expect(page.getByRole('heading', { level: 1, name: nombre })).toBeVisible();
-    await expect(page.getByText('Contraseña de entrega')).toHaveCount(0);
+    await expect(page.getByText('Contraseña actual')).toHaveCount(0);
     await pulsarHidratado(page.getByTestId('ver-clave-boton'));
-    await expect(page.getByText('Contraseña de entrega')).toBeVisible();
+    await expect(page.getByText('Contraseña actual')).toBeVisible();
     const claveVista = (await page.getByTestId('ver-clave').getByTestId('texto-copiable').last().innerText()).trim();
     expect(claveVista).toMatch(FORMATO_CLAVE);
 

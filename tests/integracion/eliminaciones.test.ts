@@ -4,7 +4,7 @@
  *  - una CUENTA que no dejo trabajo propio (y su agencia, si era la unica); con trabajo se rechaza y se desactiva;
  *  - una AGENCIA con sus cuentas;
  *  - el historial, los comentarios y la auditoria siguen siendo de solo escritura para todo lo demas.
- * Y la clave de entrega cifrada: el administrador la ve, la supervisora no, y deja de verse cuando la persona la cambia.
+ * Y la clave de entrega cifrada: el administrador la ve, la supervisora no, y sigue viéndose (la nueva) cuando la persona la cambia.
  */
 import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -143,7 +143,7 @@ describe('clave de entrega cifrada', () => {
     expect(JSON.stringify(auds)).not.toContain(r.claveTemporal!);
   });
 
-  it('al restablecerla la nueva reemplaza a la anterior; cuando la persona cambia la suya deja de poder verse', async () => {
+  it('al restablecerla la nueva reemplaza a la anterior; cuando la persona cambia la suya, el administrador ve la nueva', async () => {
     const r = await crearCuenta(e.ctx(e.admin), { nombre: 'Cambia Clave', usuario: 'cambia.clave', organizacionId: e.orgInterna, rol: 'solicitante', area: 'Marketing' });
     const entrega = await restablecerClave(e.ctx(e.admin), { usuarioId: r.id });
     expect(entrega.claveTemporal).not.toBe(r.claveTemporal);
@@ -151,10 +151,13 @@ describe('clave de entrega cifrada', () => {
 
     const actor = (await cargarActorPorId(e.db, r.id))!;
     await cambiarMiClave(e.ctx(actor), { actual: entrega.claveTemporal, nueva: 'mi-clave-propia-9', repetir: 'mi-clave-propia-9' });
-    expect(await e.db.select().from(claveEntrega).where(eq(claveEntrega.usuarioId, r.id))).toHaveLength(0);
-    expect(await verClaveEntrega(e.ctx(e.admin), { usuarioId: r.id })).toMatchObject({ clave: null, desde: null });
+    expect(await e.db.select().from(claveEntrega).where(eq(claveEntrega.usuarioId, r.id))).toHaveLength(1);
+    expect(await verClaveEntrega(e.ctx(e.admin), { usuarioId: r.id })).toMatchObject({ clave: 'mi-clave-propia-9' });
+    const [cred2] = await e.db.select().from(account).where(eq(account.userId, r.id));
+    expect(cred2?.password).not.toContain('mi-clave-propia-9'); // la real sigue siendo un hash
     const vistas = await e.db.select().from(auditoria).where(and(eq(auditoria.accion, 'ver_clave'), eq(auditoria.entidadId, r.id)));
-    expect(vistas.map((v) => (v.detalle as { disponible: boolean }).disponible)).toEqual([true, false]);
+    expect(vistas.map((v) => (v.detalle as { disponible: boolean }).disponible)).toEqual([true, true]);
+    expect(JSON.stringify(vistas)).not.toContain('mi-clave-propia-9');
   });
 
   it('una cuenta creada fuera de la plataforma no tiene copia: se ve como no disponible hasta restablecerla', async () => {

@@ -318,8 +318,8 @@ export interface ClaveEntregada {
 }
 
 /**
- * El administrador vuelve a ver la contrasena que se le entrego a una cuenta (usuario + contrasena). Solo la de entrega: si la
- * persona ya la cambio, o la cuenta se creo fuera de la plataforma, no hay copia y se restablece para generar una nueva. Cada vez que
+ * El administrador vuelve a ver la contrasena vigente de una cuenta (usuario + contrasena), tambien la que la persona eligio. Si la
+ * cuenta es anterior a esta funcion o se creo fuera de la plataforma, no hay copia y se restablece una vez para generar una nueva. Cada vez que
  * se mira queda una fila en la auditoria, y el aviso de «cuenta creada» de esa cuenta se da por atendido.
  */
 export async function verClaveEntrega(ctx: Contexto, entrada: unknown): Promise<ClaveEntregada> {

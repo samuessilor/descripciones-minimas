@@ -203,9 +203,9 @@ test('el administrador ve el usuario y la contraseña de una cuenta creada por l
   await expect(a.getByRole('heading', { level: 1, name: nombre })).toBeVisible();
   const usuario = (await a.getByTestId('texto-copiable').first().innerText()).trim();
   expect(usuario).toMatch(/\.aduana$/);
-  await expect(a.getByText(/Contraseña de entrega/)).toHaveCount(0);
+  await expect(a.getByText(/Contraseña actual/)).toHaveCount(0);
   await pulsarHidratado(a.getByTestId('ver-clave-boton'));
-  await expect(a.getByText('Contraseña de entrega')).toBeVisible();
+  await expect(a.getByText('Contraseña actual')).toBeVisible();
   const clave = (await a.getByTestId('ver-clave').getByTestId('texto-copiable').last().innerText()).trim();
   expect(clave).toMatch(FORMATO_CLAVE);
   await a.getByRole('button', { name: 'Ocultar contraseña' }).click();

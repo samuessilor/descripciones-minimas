@@ -3,8 +3,9 @@
  * persona (usuario + contrasena), no solo restablecerla. La contrasena de verdad sigue siendo un hash (`account.password`); aqui se
  * guarda ADEMAS una copia cifrada de la que se entrego, que:
  *   - la lee solo el administrador (`verClaveEntrega`, con una fila de auditoria cada vez),
- *   - se reemplaza al restablecerla y se BORRA en cuanto la persona cambia la suya (deja de ser la de entrega),
- *   - no existe para las cuentas creadas fuera de la plataforma (los scripts de despliegue): ahi se restablece y queda guardada.
+ *   - se reemplaza al restablecerla Y cada vez que la persona cambia la suya (decision del administrador, 2026-11-12: ve siempre la
+ *     contrasena vigente, tambien la que la persona eligio),
+ *   - no existe para las cuentas creadas fuera de la plataforma ni para las anteriores a esta funcion: ahi se restablece y queda guardada.
  *
  * Cifrado AES-256-GCM con una llave derivada (HKDF) de `BETTER_AUTH_SECRET`: sin ese secreto, que vive solo en Vercel, la base no
  * sirve para recuperar nada. Si el secreto cambia, las copias viejas ya no se descifran y se muestran como «no disponible».
@@ -45,15 +46,10 @@ export function descifrarClave(cifrada: string, usuarioId: string): string | nul
   }
 }
 
-/** Guarda (o reemplaza) la clave de entrega de una cuenta. Va dentro de la transaccion que la crea o la restablece. */
+/** Guarda (o reemplaza) la clave vigente de una cuenta. Va dentro de la transaccion que la crea, la restablece o la cambia la persona. */
 export async function guardarClaveEntrega(tx: Ejecutor, usuarioId: string, clave: string, ahora: Date): Promise<void> {
   const cifrada = cifrarClave(clave, usuarioId);
   // Borrar e insertar (no UPDATE): `creada_en` es una columna de creacion que el rol `app` no puede actualizar.
   await tx.delete(claveEntrega).where(eq(claveEntrega.usuarioId, usuarioId));
   await tx.insert(claveEntrega).values({ usuarioId, cifrada, creadaEn: ahora });
-}
-
-/** La persona cambio su contrasena: la de entrega ya no es la vigente. */
-export async function borrarClaveEntrega(tx: Ejecutor, usuarioId: string): Promise<void> {
-  await tx.delete(claveEntrega).where(eq(claveEntrega.usuarioId, usuarioId));
 }

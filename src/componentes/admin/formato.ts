@@ -105,7 +105,7 @@ export const ETIQUETA_ACCION: Record<string, string> = {
   cancelar_asignacion: 'Canceló un pendiente',
   retencion: 'Limpieza automática',
   importar_historico: 'Cargó el histórico anterior a la plataforma',
-  ver_clave: 'Vio la contraseña de entrega de una cuenta',
+  ver_clave: 'Vio la contraseña de una cuenta',
   eliminar_referencia: 'Eliminó una referencia',
   eliminar_cuenta: 'Eliminó una cuenta',
 };
